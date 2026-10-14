@@ -4,35 +4,36 @@
 
 ## Запуск проекта
 В терминале PyCharm, находясь в корне проекта:
-python -m venv .venv
+`python -m venv .venv`
 
 
 В Windows активируй окружение:
-.venv\Scripts\Activate.ps1
+`.venv\Scripts\Activate.ps1`
 
 
 Установи зависимости:
-pip install -r requirements.txt
+`pip install -r requirements.txt`
 
 
 Запусти сервер:
-uvicorn app.main:app --reload
+`uvicorn app.main:app --reload`
 
 
 Открой в браузере:
 Документация API
-http://127.0.0.1:8000/docs
+`http://127.0.0.1:8000/docs`
 
 Открыть
-Сервер должен запускаться с LLM_PROVIDER=mock, даже если Ollama не установлен.
+Сервер должен запускаться с `LLM_PROVIDER=mock`, даже если Ollama не установлен.
 
 
 ## Как проверить через интерфейс API
 
 Шаг 1. Загрузить CSV
-POST /sources/csv
-Создай файл sales.csv с содержимым:
-```order_id,customer_id,month,category,revenue
+`POST /sources/csv`
+Создай файл `sales.csv` с содержимым:
+```
+order_id,customer_id,month,category,revenue
 0001,C001,2026-01,Books,120.50
 0002,C002,2026-01,Games,89.99
 0003,C001,2026-02,Books,75.00
@@ -40,35 +41,37 @@ POST /sources/csv
 ```
 
 
-В Swagger нажми Try it out, выбери файл и отправь запрос.
+В `Swagger` нажми `Try it out`, выбери файл и отправь запрос.
 
 
 
 
 Шаг 2. Проверить каталог
-GET /sources
-В ответе появится источник с уникальным source_id. Скопируй его и проверь GET /sources/{source_id}/schema.
-Дополнительно попробуй /preview и /profile, чтобы увидеть строки и статистику.
+`GET /sources`
+В ответе появится источник с уникальным `source_id`. Скопируй его и проверь `GET /sources/{source_id}/schema`.
+Дополнительно попробуй `/preview` и `/profile`, чтобы увидеть строки и статистику.
 
 
 
 
 Шаг 3. Проверить агента
-POST /agent/ask
+`POST /agent/ask`
 Передай JSON:
+```
 {
   "question": "Что есть в данных?",
   "source_ids": []
 }
+```
 
 
 Агент вызовет list_sources, получит результат инструмента и вернёт демонстрационный ответ. Это подтверждает работу цикла, но не анализирует содержимое CSV с помощью настоящей модели.
 
 
-Компонент |	Назначение
---|--
-CSVAdapter|	Чтение файлов, определение полей, выборки и профилирование
-SchemaCatalog|	Локальное хранение схем и метаданных
-ToolRegistry|	Контролируемый вызов инструментов
-LLMProvider|	Единый интерфейс для разных моделей
-AgentRuntime|	Управление циклом «модель → инструмент → результат»
+| Компонент     | 	Назначение                                                 |
+|---------------|-------------------------------------------------------------|
+| CSVAdapter    | 	Чтение файлов, определение полей, выборки и профилирование |
+| SchemaCatalog | 	Локальное хранение схем и метаданных                       |
+| ToolRegistry  | 	Контролируемый вызов инструментов                          |
+| LLMProvider   | 	Единый интерфейс для разных моделей                        |
+| AgentRuntime  | 	Управление циклом «модель → инструмент → результат»        |

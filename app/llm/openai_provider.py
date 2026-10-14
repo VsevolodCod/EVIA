@@ -1,39 +1,85 @@
 import json
+from typing import Any
 
 import httpx
 
-from app.llm.base import LLMProvider
+from app.llm.base import AsyncModel, LLMProvider
 from app.models import LLMMessage, LLMResponse, ToolCall
 
 
-class OpenAIProvider(LLMProvider):
+class OpenAIModel(AsyncModel):
+    """
+    Модель для взаимодействия с OpenAI API
+
+    :param think: bool — включить ли режим размышления, но тут его нельзя полностью выключить на моделях, где он
+    доступен, можно только снизить его влияние или использовать модели, которые ен поддерживают этот режим
+    """
     def __init__(
         self,
         base_url: str,
         api_key: str,
-        model: str,
+        think: bool = False,
         timeout: float = 60.0,
     ) -> None:
+
         if not api_key:
             raise ValueError("OPENAI_API_KEY is required")
 
-        if not model:
+        self.url = f"{base_url.rstrip('/')}/chat/completions"
+        self.api_key = api_key
+        self.timeout = timeout
+        self.think = think
+
+    async def generate(
+        self,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+
+        if not self.think:
+            payload["reasoning_effort"] = "low"
+
+        async with httpx.AsyncClient(
+            timeout=self.timeout,
+        ) as client:
+            response = await client.post(
+                self.url,
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+            )
+            response.raise_for_status()
+            return response.json()
+
+
+class OpenAIProvider(LLMProvider):
+    """
+    Провайдер для взаимодействия с моделью OpenAI
+
+    :param model_name: str — название модели. Для OpenAI название модели задается в провайдере, а не в модели
+    """
+    def __init__(
+            self,
+            model: AsyncModel,
+            model_name: str,
+    ) -> None:
+
+        if not model_name:
             raise ValueError("LLM_MODEL is required")
 
-        self.base_url = base_url.rstrip("/")
-        self.api_key = api_key
         self.model = model
-        self.timeout = timeout
+        self.model_name = model_name
 
-    async def chat(
-        self,
-        messages: list[LLMMessage],
-        tools: list[dict] | None = None,
-    ) -> LLMResponse:
-        serialized_messages = []
+    @staticmethod
+    def _serialize_messages(
+            messages: list[LLMMessage],
+    ) -> list[dict[str, Any]]:
+
+        serialized = []
 
         for message in messages:
-            item = {
+            item: dict[str, Any] = {
                 "role": message.role,
                 "content": message.content,
             }
@@ -47,39 +93,29 @@ class OpenAIProvider(LLMProvider):
             if message.tool_calls:
                 item["tool_calls"] = message.tool_calls
 
-            serialized_messages.append(item)
+            serialized.append(item)
 
-        payload = {
-            "model": self.model,
-            "messages": serialized_messages,
-        }
+        return serialized
 
-        if tools:
-            payload["tools"] = tools
-            payload["tool_choice"] = "auto"
+    @staticmethod
+    def _parse_response(
+            data: dict[str, Any],
+    ) -> LLMResponse:
 
-        async with httpx.AsyncClient(
-            timeout=self.timeout
-        ) as client:
-            response = await client.post(
-                f"{self.base_url}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json",
-                },
-                json=payload,
+        choices = data.get("choices") or []
+
+        if not choices:
+            raise ValueError(
+                "OpenAI API returned no choices"
             )
-            response.raise_for_status()
-            data = response.json()
 
-        choice = data["choices"][0]
-        message = choice["message"]
+        message = choices[0].get("message") or {}
         raw_calls = message.get("tool_calls") or []
 
         calls = []
 
         for call in raw_calls:
-            function = call.get("function", {})
+            function = call.get("function") or {}
             raw_arguments = function.get("arguments") or "{}"
 
             try:
@@ -88,7 +124,7 @@ class OpenAIProvider(LLMProvider):
                     if isinstance(raw_arguments, str)
                     else raw_arguments
                 )
-            except json.JSONDecodeError:
+            except (json.JSONDecodeError, TypeError):
                 arguments = {}
 
             if not isinstance(arguments, dict):
@@ -107,3 +143,22 @@ class OpenAIProvider(LLMProvider):
             tool_calls=calls,
             raw_tool_calls=raw_calls,
         )
+
+    async def chat(
+            self,
+            messages: list[LLMMessage],
+            tools: list[dict[str, Any]] | None = None,
+    ) -> LLMResponse:
+
+        payload: dict[str, Any] = {
+            "model": self.model_name,
+            "messages": self._serialize_messages(messages),
+        }
+
+        if tools:
+            payload["tools"] = tools
+            payload["tool_choice"] = "auto"
+
+        data = await self.model.generate(payload)
+
+        return self._parse_response(data)

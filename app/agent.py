@@ -39,7 +39,6 @@ class AgentRuntime:
         source_ids: list[str] | None = None,
     ) -> AskResponse:
         context = ""
-
         if source_ids:
             context = (
                 "\nИсточники, указанные пользователем: "

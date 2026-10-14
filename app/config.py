@@ -4,13 +4,18 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv()
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+
+load_dotenv(dotenv_path=PROJECT_ROOT / ".env")
 
 
 class Settings:
     def __init__(self) -> None:
         self.llm_provider = os.getenv("LLM_PROVIDER", "mock").lower()
         self.llm_model = os.getenv("LLM_MODEL", "")
+        self.thinking = bool(int(os.getenv("THINKING", "0")))
+        self.timeout = float(os.getenv("TIMEOUT", "120"))
 
         self.openai_base_url = os.getenv(
             "OPENAI_BASE_URL", "https://api.openai.com/v1"
@@ -21,9 +26,9 @@ class Settings:
             "OLLAMA_BASE_URL", "http://127.0.0.1:11434"
         ).rstrip("/")
 
-        self.data_dir = Path(os.getenv("BI_DATA_DIR", "./data")).resolve()
+        self.data_dir = Path(os.getenv("BI_DATA_DIR", str(PROJECT_ROOT / "data"))).resolve()
         self.catalog_db = Path(
-            os.getenv("BI_CATALOG_DB", "./data/catalog.sqlite3")
+            os.getenv("BI_CATALOG_DB", str(PROJECT_ROOT / "data/catalog.sqlite3"))
         ).resolve()
 
         self.agent_max_steps = max(
@@ -35,8 +40,13 @@ class Settings:
         self.catalog_db.parent.mkdir(parents=True, exist_ok=True)
 
 
-@lru_cache
+# @lru_cache
 def get_settings() -> Settings:
     settings = Settings()
     settings.prepare_directories()
     return settings
+
+
+if __name__ == "__main__":
+    print(PROJECT_ROOT / ".env")
+    print(os.getenv("LLM_PROVIDER", "mock").lower())

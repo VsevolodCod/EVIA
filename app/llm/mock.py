@@ -3,7 +3,7 @@ from app.models import LLMMessage, LLMResponse, ToolCall
 
 
 class MockLLMProvider(LLMProvider):
-    """Deterministic provider for testing without a real model."""
+    """Демонстрационный провайдер для тестов без реальной модели"""
 
     def __init__(self) -> None:
         self._called_tool = False
@@ -13,6 +13,7 @@ class MockLLMProvider(LLMProvider):
         messages: list[LLMMessage],
         tools: list[dict] | None = None,
     ) -> LLMResponse:
+
         has_tool_result = any(
             message.role == "tool"
             for message in messages

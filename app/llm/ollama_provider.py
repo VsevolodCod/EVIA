@@ -1,32 +1,83 @@
+from typing import Any
+import asyncio
+
 import httpx
 
-from app.llm.base import LLMProvider
+from app.llm.base import LLMProvider, AsyncModel
 from app.models import LLMMessage, LLMResponse, ToolCall
 
 
-class OllamaProvider(LLMProvider):
+class OllamaModel(AsyncModel):
+    """
+    Модель для взаимодействия с Ollama API
+
+    :param think: bool — включить ли режим размышления
+    """
     def __init__(
         self,
-        base_url: str,
-        model: str,
+        model_name: str,
+        base_url: str = "http://localhost:11434",
+        think: bool = False,
         timeout: float = 120.0,
     ) -> None:
-        if not model:
-            raise ValueError("LLM_MODEL is required for Ollama")
 
-        self.base_url = base_url.rstrip("/")
-        self.model = model
+        if not model_name:
+            raise ValueError("Ollama model name is required")
+
+        self.model_name = model_name
+        self.url = f"{base_url.rstrip('/')}/api/chat"
         self.timeout = timeout
+        self.think = think
 
-    async def chat(
+    async def generate(
         self,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+
+        request_data = {
+            **payload,
+            "model": self.model_name,
+            "stream": False,
+            "keep_alive": "10m",
+            "options": {
+                "num_ctx": 4096,
+                "num_predict": 256,
+            },
+            "think": self.think,
+        }
+
+        async with httpx.AsyncClient(timeout=self.timeout, trust_env=False) as client:
+            response = await client.post(
+                self.url,
+                json=request_data,
+            )
+            if response.is_error:
+                print("Status:", response.status_code)
+                print("Response:", response.text)
+
+            if response.is_error:
+                print("Error:", response.text)
+
+            response.raise_for_status()
+            return response.json()
+
+
+class OllamaProvider(LLMProvider):
+    """
+    Провайдер для взаимодействия с моделью Ollama
+    """
+    def __init__(self, model: AsyncModel) -> None:
+        self.model = model
+
+    @staticmethod
+    def _serialize_messages(
         messages: list[LLMMessage],
-        tools: list[dict] | None = None,
-    ) -> LLMResponse:
-        serialized_messages = []
+    ) -> list[dict[str, Any]]:
+
+        result = []
 
         for message in messages:
-            item = {
+            item: dict[str, Any] = {
                 "role": message.role,
                 "content": message.content,
             }
@@ -37,33 +88,21 @@ class OllamaProvider(LLMProvider):
             if message.tool_calls:
                 item["tool_calls"] = message.tool_calls
 
-            serialized_messages.append(item)
+            result.append(item)
 
-        payload = {
-            "model": self.model,
-            "messages": serialized_messages,
-            "stream": False,
-        }
+        return result
 
-        if tools:
-            payload["tools"] = tools
-
-        async with httpx.AsyncClient(
-            timeout=self.timeout
-        ) as client:
-            response = await client.post(
-                f"{self.base_url}/api/chat",
-                json=payload,
-            )
-            response.raise_for_status()
-            data = response.json()
-
-        message = data.get("message", {})
+    @staticmethod
+    def _parse_response(
+        data: dict[str, Any],
+    ) -> LLMResponse:
+        message = data.get("message") or {}
         raw_calls = message.get("tool_calls") or []
+
         calls = []
 
         for call in raw_calls:
-            function = call.get("function", {})
+            function = call.get("function") or {}
             arguments = function.get("arguments") or {}
 
             if not isinstance(arguments, dict):
@@ -81,4 +120,155 @@ class OllamaProvider(LLMProvider):
             tool_calls=calls,
             raw_tool_calls=raw_calls,
         )
-    
+
+    async def chat(
+        self,
+        messages: list[LLMMessage],
+        tools: list[dict[str, Any]] | None = None,
+    ) -> LLMResponse:
+
+        payload: dict[str, Any] = {
+            "messages": self._serialize_messages(messages),
+        }
+
+        if tools:
+            payload["tools"] = tools
+
+        data = await self.model.generate(payload)
+
+        return self._parse_response(data)
+
+
+# Демонстрационный вызов модели с инструментами
+
+
+# if __name__ == "__main__":
+#     def get_weather(city: str) -> str:
+#         """Демонстрационный инструмент: возвращает условную погоду."""
+#         return f"В городе {city} сейчас +12 °C, облачно."
+#
+#
+#     def calculate(a: float, b: float, operation: str) -> float:
+#         """Выполняет простую арифметическую операцию."""
+#         if operation == "add":
+#             return a + b
+#         elif operation == "subtract":
+#             return a - b
+#         elif operation == "multiply":
+#             return a * b
+#         elif operation == "divide":
+#             if b == 0:
+#                 raise ValueError("Деление на ноль")
+#             return a / b
+#         raise ValueError(f"Неизвестная операция: {operation}")
+#
+#
+#     # Описания, которые увидит модель
+#
+#     tools = [
+#         {
+#             "type": "function",
+#             "function": {
+#                 "name": "get_weather",
+#                 "description": "Получить текущую погоду в указанном городе.",
+#                 "parameters": {
+#                     "type": "object",
+#                     "properties": {
+#                         "city": {
+#                             "type": "string",
+#                             "description": "Название города"
+#                         }
+#                     },
+#                     "required": ["city"]
+#                 }
+#             }
+#         },
+#         {
+#             "type": "function",
+#             "function": {
+#                 "name": "calculate",
+#                 "description": "Вычислить арифметическое выражение с двумя числами.",
+#                 "parameters": {
+#                     "type": "object",
+#                     "properties": {
+#                         "a": {"type": "number"},
+#                         "b": {"type": "number"},
+#                         "operation": {
+#                             "type": "string",
+#                             "enum": ["add", "subtract", "multiply", "divide"]
+#                         }
+#                     },
+#                     "required": ["a", "b", "operation"]
+#                 }
+#             }
+#         }
+#     ]
+#
+#
+#     async def main():
+#         model = OllamaModel(
+#             model_name="qwen3.5:9b",
+#             base_url="http://localhost:11434",
+#         )
+#
+#         provider = OllamaProvider(model)
+#
+#         messages = [
+#             LLMMessage(
+#                 role="system",
+#                 content=(
+#                     "Ты полезный ассистент. "
+#                     "Если пользователь просит узнать погоду, используй get_weather. "
+#                     "Если просит что-то посчитать, используй calculate."
+#                 ),
+#             ),
+#             LLMMessage(
+#                 role="user",
+#                 content=(
+#                     "Узнай погоду в Санкт-Петербурге, а затем вычисли "
+#                     "125 * 8. Используй инструменты."
+#                 ),
+#             ),
+#         ]
+#
+#         response = await provider.chat(messages, tools=tools)
+#
+#         print("Ответ модели:", response.content)
+#         print("Вызовы инструментов:")
+#
+#         for call in response.tool_calls:
+#             print(f"  Имя: {call.name}")
+#             print(f"  Аргументы: {call.arguments}")
+#             print(f"  ID: {call.call_id}")
+#
+#
+#     asyncio.run(main())
+
+
+# async def main():
+#     async with httpx.AsyncClient(
+#             trust_env=False,
+#             timeout=300.0,
+#     ) as client:
+#         # Проверяем доступность API
+#         r = await client.get("http://127.0.0.1:11434/api/tags")
+#         print("Tags:", r.status_code, r.text[:500])
+#         r.raise_for_status()
+#
+#         # Проверяем генерацию без провайдера
+#         r = await client.post(
+#             "http://127.0.0.1:11434/api/chat",
+#             json={
+#                 "model": "qwen3.5:9b",
+#                 "messages": [
+#                     {"role": "user", "content": "Ответь одним словом: привет"}
+#                 ],
+#                 "stream": False,
+#                 "think": False,
+#                 "options": {"num_predict": 32},
+#             },
+#         )
+#         print("Chat:", r.status_code, r.text[:2000])
+#
+#
+# asyncio.run(main())
