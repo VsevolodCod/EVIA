@@ -29,6 +29,7 @@ class AgentRuntime:
         tools: ToolRegistry,
         max_steps: int = 5,
     ) -> None:
+
         self.llm = llm
         self.tools = tools
         self.max_steps = max(1, max_steps)
@@ -38,6 +39,7 @@ class AgentRuntime:
         question: str,
         source_ids: list[str] | None = None,
     ) -> AskResponse:
+
         context = ""
         if source_ids:
             context = (

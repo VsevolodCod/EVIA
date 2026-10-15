@@ -3,6 +3,7 @@ import asyncio
 
 import httpx
 
+from app.config import Settings
 from app.llm.base import LLMProvider, AsyncModel
 from app.models import LLMMessage, LLMResponse, ToolCall
 
@@ -11,28 +12,33 @@ class OllamaModel(AsyncModel):
     """
     Модель для взаимодействия с Ollama API
 
-    :param think: bool — включить ли режим размышления
+    :param settings — объект настроек из конфига
     """
     def __init__(
         self,
-        model_name: str,
-        base_url: str = "http://localhost:11434",
-        think: bool = False,
-        timeout: float = 120.0,
+        settings: Settings
     ) -> None:
 
-        if not model_name:
+        if not settings.llm_model:
             raise ValueError("Ollama model name is required")
 
-        self.model_name = model_name
-        self.url = f"{base_url.rstrip('/')}/api/chat"
-        self.timeout = timeout
-        self.think = think
+        self.model_name = settings.llm_model
+        self.url = f"{settings.ollama_base_url.rstrip('/')}/api/chat"
+        self.timeout = settings.timeout
+        self.think = settings.thinking
+        self.num_predict = settings.max_tokens_generate
 
     async def generate(
         self,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
+
+        """
+        Основной метод взаимодействия с моделью
+
+        :param payload: json с информацией о сообщениях (но может быть не только о сообщениях)
+        :return: ответ модели в формате ``json``
+        """
 
         request_data = {
             **payload,
@@ -41,10 +47,11 @@ class OllamaModel(AsyncModel):
             "keep_alive": "10m",
             "options": {
                 "num_ctx": 4096,
-                "num_predict": 256,
             },
             "think": self.think,
         }
+        if self.num_predict != -1:
+            request_data["options"]["num_predict"] = self.num_predict
 
         async with httpx.AsyncClient(timeout=self.timeout, trust_env=False) as client:
             response = await client.post(
@@ -74,6 +81,10 @@ class OllamaProvider(LLMProvider):
         messages: list[LLMMessage],
     ) -> list[dict[str, Any]]:
 
+        """
+        Подготавливает данные для модели в формате списка строк
+        """
+
         result = []
 
         for message in messages:
@@ -96,7 +107,15 @@ class OllamaProvider(LLMProvider):
     def _parse_response(
         data: dict[str, Any],
     ) -> LLMResponse:
-        message = data.get("message") or {}
+
+        """
+        Парсит ответ модели в стандартный формат
+
+        :param data: — данные из модели в формате ``json`` ``dict``
+        :return: Обработанный ``LLMResponse``
+        """
+
+        message = data.get("message") or {}  # Зачем так написано, я думаю можно data.get("message", {})
         raw_calls = message.get("tool_calls") or []
 
         calls = []
@@ -126,6 +145,14 @@ class OllamaProvider(LLMProvider):
         messages: list[LLMMessage],
         tools: list[dict[str, Any]] | None = None,
     ) -> LLMResponse:
+
+        """
+        Основной метод для взаимодействия с провайдером
+
+        :param messages: список из ``LLMMessage``
+        :param tools: Описания доступных для модели инструментов
+        :return: Ответ модели в формате ``LLMResponse``
+        """
 
         payload: dict[str, Any] = {
             "messages": self._serialize_messages(messages),

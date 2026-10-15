@@ -3,6 +3,7 @@ from typing import Any
 
 import httpx
 
+from app.config import Settings
 from app.llm.base import AsyncModel, LLMProvider
 from app.models import LLMMessage, LLMResponse, ToolCall
 
@@ -11,29 +12,33 @@ class OpenAIModel(AsyncModel):
     """
     Модель для взаимодействия с OpenAI API
 
-    :param think: bool — включить ли режим размышления, но тут его нельзя полностью выключить на моделях, где он
-    доступен, можно только снизить его влияние или использовать модели, которые ен поддерживают этот режим
+    :param settings — объект настроек из конфига
     """
     def __init__(
         self,
-        base_url: str,
-        api_key: str,
-        think: bool = False,
-        timeout: float = 60.0,
+        settings: Settings,
     ) -> None:
 
-        if not api_key:
+        if not settings.openai_api_key:
             raise ValueError("OPENAI_API_KEY is required")
 
-        self.url = f"{base_url.rstrip('/')}/chat/completions"
-        self.api_key = api_key
-        self.timeout = timeout
-        self.think = think
+        self.url = f"{settings.openai_base_url.rstrip('/')}/chat/completions"
+        self.api_key = settings.openai_api_key
+        self.timeout = settings.timeout
+        self.think = settings.thinking
+        self.max_tokens = settings.max_tokens_generate  # не сделано
 
     async def generate(
         self,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
+
+        """
+        Основной метод взаимодействия с моделью
+
+        :param payload: json с информацией о сообщениях (но может быть не только о сообщениях)
+        :return: ответ модели в формате ``json``
+        """
 
         if not self.think:
             payload["reasoning_effort"] = "low"
@@ -76,6 +81,10 @@ class OpenAIProvider(LLMProvider):
             messages: list[LLMMessage],
     ) -> list[dict[str, Any]]:
 
+        """
+        Подготавливает данные для модели в формате списка строк
+        """
+
         serialized = []
 
         for message in messages:
@@ -101,6 +110,13 @@ class OpenAIProvider(LLMProvider):
     def _parse_response(
             data: dict[str, Any],
     ) -> LLMResponse:
+
+        """
+        Парсит ответ модели в стандартный формат
+
+        :param data: — данные из модели в формате ``json`` ``dict``
+        :return: Обработанный ``LLMResponse``
+        """
 
         choices = data.get("choices") or []
 
@@ -149,6 +165,14 @@ class OpenAIProvider(LLMProvider):
             messages: list[LLMMessage],
             tools: list[dict[str, Any]] | None = None,
     ) -> LLMResponse:
+
+        """
+        Основной метод для взаимодействия с провайдером
+
+        :param messages: список из ``LLMMessage``
+        :param tools: Описания доступных для модели инструментов
+        :return: Ответ модели в формате ``LLMResponse``
+        """
 
         payload: dict[str, Any] = {
             "model": self.model_name,

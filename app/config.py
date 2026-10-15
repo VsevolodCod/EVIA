@@ -16,6 +16,7 @@ class Settings:
         self.llm_model = os.getenv("LLM_MODEL", "")
         self.thinking = bool(int(os.getenv("THINKING", "0")))
         self.timeout = float(os.getenv("TIMEOUT", "120"))
+        self.max_tokens_generate = int(os.getenv("MAX_TOKENS_G", "256"))
 
         self.openai_base_url = os.getenv(
             "OPENAI_BASE_URL", "https://api.openai.com/v1"

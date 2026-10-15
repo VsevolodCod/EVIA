@@ -9,7 +9,7 @@ def create_llm_provider(settings: Settings) -> LLMProvider:
     """
     Возвращает сконструированный объект одного из подклассов ``LLMProvider``
 
-    :param settings: Объект настроек, состоящих из данных ихз ``.env``
+    :param settings: Объект настроек, состоящих из данных из ``.env``
     :return:
     """
 
@@ -17,22 +17,14 @@ def create_llm_provider(settings: Settings) -> LLMProvider:
         return MockLLMProvider()
 
     if settings.llm_provider == "openai":
-        model = OpenAIModel(settings.openai_base_url,
-                            settings.openai_api_key,
-                            settings.thinking,
-                            settings.timeout
-                            )
+        model = OpenAIModel(settings)
         return OpenAIProvider(
             model=model,
             model_name=settings.llm_model
         )
 
     if settings.llm_provider == "ollama":
-        model = OllamaModel(settings.llm_model,
-                            settings.ollama_base_url,
-                            settings.thinking,
-                            settings.timeout
-                            )
+        model = OllamaModel(settings)
         return OllamaProvider(
             model=model
         )
