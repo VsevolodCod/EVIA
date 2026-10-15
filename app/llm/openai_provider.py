@@ -10,7 +10,8 @@ from app.models import LLMMessage, LLMResponse, ToolCall
 
 class OpenAIModel(AsyncModel):
     """
-    Модель для взаимодействия с OpenAI API
+    Модель для взаимодействия с OpenAI API.
+    Пока не требуется, но возможность подключить есть.
 
     :param settings — объект настроек из конфига
     """
@@ -26,7 +27,7 @@ class OpenAIModel(AsyncModel):
         self.api_key = settings.openai_api_key
         self.timeout = settings.timeout
         self.think = settings.thinking
-        self.max_tokens = settings.max_tokens_generate  # не сделано
+        self.max_tokens = settings.max_tokens_generate
 
     async def generate(
         self,
@@ -42,6 +43,8 @@ class OpenAIModel(AsyncModel):
 
         if not self.think:
             payload["reasoning_effort"] = "low"
+        if self.max_tokens != -1:
+            payload["max_output_tokens"] = str(self.max_tokens)
 
         async with httpx.AsyncClient(
             timeout=self.timeout,

@@ -15,6 +15,7 @@ class SourceService:
         data_dir: Path,
         catalog: SchemaCatalog,
     ) -> None:
+
         self.data_dir = data_dir.resolve()
         self.data_dir.mkdir(parents=True, exist_ok=True)
 
@@ -27,6 +28,7 @@ class SourceService:
         content: bytes,
         name: str | None = None,
     ) -> DataSource:
+
         if not filename.lower().endswith(".csv"):
             raise ValueError("Only CSV files are supported")
 
@@ -94,6 +96,7 @@ class SourceService:
         source_id: str,
         limit: int = 10,
     ) -> list[dict[str, Any]]:
+
         source = self.catalog.get_source(source_id)
 
         if source is None:

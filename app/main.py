@@ -1,4 +1,5 @@
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+import logging
 
 from app.agent import AgentRuntime
 from app.config import get_settings
@@ -7,8 +8,13 @@ from app.models import AskRequest, AskResponse, DataSource
 from app.schema_catalog import SchemaCatalog
 from app.source_service import SourceService
 from app.tools import build_tool_registry
+from app.core.logging import setup_logging, request_logging_middleware
 
+# Сетап логов
+setup_logging()
+logger = logging.getLogger(__name__)
 
+# Сетап настроек, источников, схем и инструментов
 settings = get_settings()
 
 catalog = SchemaCatalog(settings.catalog_db)
@@ -23,19 +29,21 @@ tool_registry = build_tool_registry(
     source_service,
 )
 
+# Сетап модели
 llm_provider = create_llm_provider(settings)
-
 agent = AgentRuntime(
     llm=llm_provider,
     tools=tool_registry,
     max_steps=settings.agent_max_steps,
 )
 
+# Сетап сервера
 app = FastAPI(
     title="AI-Native BI Foundation",
     version="0.1.0",
     description="Local-first foundation for an AI-Native BI platform.",
 )
+# app.middleware("http")(request_logging_middleware)  # Подключить логи, но логи и так есть, поэтому забил, т.к. мешает
 
 
 @app.get("/health")

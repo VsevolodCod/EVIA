@@ -7,6 +7,10 @@ from app.models import (
     ToolResult,
 )
 from app.tools import ToolRegistry
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 
 SYSTEM_PROMPT = """
@@ -23,6 +27,12 @@ SYSTEM_PROMPT = """
 
 
 class AgentRuntime:
+
+    """
+    Основной класс агента. Некоторое количество раз запускает модель, обрабатывает вызовы инструментов.
+    Поддерживает главный цикл существования агента.
+    """
+
     def __init__(
         self,
         llm: LLMProvider,
@@ -39,6 +49,15 @@ class AgentRuntime:
         question: str,
         source_ids: list[str] | None = None,
     ) -> AskResponse:
+        """
+        Это основной метод, который запускает работу агента.
+        :param question: Запрос пользователя
+        :param source_ids: Список id прикрепленных файлов
+        :return: Объект ``AskResponse``, в котором содержится результат работы агента.
+        """
+        logger.info("Агент начал подготовку к циклу")
+
+        # Здесь идет подготовка к основному циклу агента
 
         context = ""
         if source_ids:
@@ -60,18 +79,23 @@ class AgentRuntime:
 
         results: list[ToolResult] = []
 
+        # Основный цикл агента
         for step in range(1, self.max_steps + 1):
+            logger.info(f"Агент начал выполнение шага {step}")
             response = await self.llm.chat(
                 messages,
                 self.tools.descriptions(),
             )
 
-            if not response.tool_calls:
+            if not response.tool_calls:  # Если модель готова ответить пользователю
                 answer = response.content.strip()
 
                 if not answer:
                     answer = "Модель вернула пустой ответ."
 
+                logger.info("Агент вернул итоговый ответ")
+                # Выход из цикла с итоговым ответом модели
+                # Надо сделать дополнительную проверку правильности данных?
                 return AskResponse(
                     answer=answer,
                     steps=step,
@@ -80,8 +104,7 @@ class AgentRuntime:
 
             raw_calls = response.raw_tool_calls
 
-            # Для тестового провайдера, который не возвращает
-            # сырой формат вызовов, создаём совместимое представление.
+            # Если провайдер не возвращает сырой формат вызовов, создаём совместимое представление
             if not raw_calls:
                 raw_calls = [
                     {
@@ -98,6 +121,8 @@ class AgentRuntime:
                     for index, call in enumerate(response.tool_calls)
                 ]
 
+            # Добавляем ответ модели в историю сообщений.
+            # Чтобы понимать, что она вызвала, что получила какой-то результат
             messages.append(
                 LLMMessage(
                     role="assistant",
@@ -106,7 +131,11 @@ class AgentRuntime:
                 )
             )
 
+            # Выполняем инструменты
             for index, call in enumerate(response.tool_calls):
+                logger.info(f"Начато выполнение инструмента '{call.name}'")
+                # Скорее всего надо будет добавить тут асинхронность.
+                # Надо добавить проверку на корректность и обработку ошибок
                 result = self.tools.execute(
                     call.name,
                     call.arguments,
@@ -116,6 +145,7 @@ class AgentRuntime:
                 raw_call = raw_calls[index]
                 call_id = call.call_id or raw_call.get("id")
 
+                # Добавляем сообщение модели с информацией о вызове
                 messages.append(
                     LLMMessage(
                         role="tool",
@@ -128,7 +158,7 @@ class AgentRuntime:
                         ),
                     )
                 )
-
+        logger.warning("Достигнут лимит шагов агента. Завершение")
         return AskResponse(
             answer=(
                 "Достигнут лимит шагов агента. "
