@@ -5,6 +5,7 @@ from sqlalchemy.engine import URL
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.db.catalog.models import DataSourceORM, SourceSchemaORM
+from app.db.base import CatalogBase
 from app.models import DataSource, SourceSchema
 
 
@@ -25,6 +26,7 @@ class SchemaCatalog:
                 database=str(self.db_path),
             )
             self._engine = create_engine(url)
+            CatalogBase.metadata.create_all(self._engine)
             self.session_factory = sessionmaker(
                 bind=self._engine,
                 expire_on_commit=False,

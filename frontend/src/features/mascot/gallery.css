@@ -1,0 +1,116 @@
+.mascot-gallery {
+  max-width: 1180px;
+  margin: auto;
+  padding: 40px 24px;
+  color: #163f38;
+}
+.mascot-gallery header {
+  margin-bottom: 28px;
+}
+.mascot-gallery header a {
+  color: #286d5e;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
+}
+.mascot-gallery h1 {
+  font-size: clamp(28px, 4vw, 44px);
+  margin: 18px 0;
+  letter-spacing: -0.04em;
+}
+.mascot-gallery p {
+  line-height: 1.65;
+  max-width: 62ch;
+}
+.mascot-preview {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  background: #eef7f3;
+  border: 1px solid #d6e7df;
+  border-radius: 24px;
+  margin: 24px 0;
+  overflow: hidden;
+}
+.mascot-preview-stage {
+  min-height: 320px;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(ellipse at center, #fff, #e9f5ef);
+}
+.mascot-preview-controls {
+  padding: 24px;
+  align-self: center;
+}
+.mascot-preview-controls h2 {
+  margin: 0 0 8px;
+}
+.mascot-preview-controls label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0;
+}
+.mascot-preview-controls select {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid #89b4a7;
+  background: #fff;
+  color: #163f38;
+}
+.mascot-preview-controls input {
+  accent-color: #217f63;
+}
+.mascot-preview-controls small {
+  line-height: 1.6;
+  display: block;
+}
+.mascot-state-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(156px, 1fr));
+  gap: 12px;
+}
+.mascot-state-grid button {
+  padding: 16px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  background: #fff;
+  color: #163f38;
+  border: 1px solid #dce8e1;
+  border-radius: 16px;
+  cursor: pointer;
+}
+.mascot-state-grid button:hover {
+  background: #f0faf5;
+  border-color: #7cae9c;
+}
+.mascot-state-grid button[aria-pressed="true"] {
+  background: #e5f6eb;
+  border-color: #217f63;
+  box-shadow: inset 0 0 0 1px #217f63;
+}
+.mascot-gallery code {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  color: #46685e;
+}
+.mascot-gallery footer {
+  padding: 28px 0;
+  line-height: 1.7;
+  color: #526c61;
+  font-size: 13px;
+}
+@media (max-width: 600px) {
+  .mascot-gallery {
+    padding: 24px 16px;
+  }
+  .mascot-preview {
+    grid-template-columns: 1fr;
+  }
+  .mascot-preview-stage {
+    min-height: 280px;
+  }
+  .mascot-state-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

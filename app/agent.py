@@ -67,7 +67,7 @@ class AgentRuntime:
 
         messages = (
                 [LLMMessage(role="system", content=SYSTEM_PROMPT, )] +
-                history +
+                (history or []) +
                 [LLMMessage(role="user", content=question + context, )]
         )
 

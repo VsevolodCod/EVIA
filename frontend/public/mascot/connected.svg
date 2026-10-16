@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" role="img" aria-label="EVIA — Подключено">
+<defs><linearGradient id="shell" x1=".1" y1="0" x2=".85" y2="1"><stop stop-color="#FFFFFF"/><stop offset="1" stop-color="#DCE7E9"/></linearGradient><linearGradient id="visor" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#243E46"/><stop offset="1" stop-color="#081820"/></linearGradient></defs>
+<ellipse cx="154" cy="280" rx="74" ry="12" fill="#48DE9A" opacity=".13"/>
+<!-- ears --> <path d="M83 92 L63 28 Q60 14 73 21 L120 58Z" fill="url(#shell)" stroke="#CBD8DD" stroke-width="3"/><path d="M91 81 L72 39 L105 66Z" fill="#48DE9A" opacity=".78"/>
+<path d="M201 58 L242 19 Q254 12 252 29 L237 96Z" fill="url(#shell)" stroke="#CBD8DD" stroke-width="3"/><path d="M214 70 L240 38 L233 80Z" fill="#48DE9A" opacity=".78"/>
+<!-- body + arms --> <path d="M118 210 Q112 205 94 218 L75 237 Q68 249 82 256 Q91 260 101 247 L118 236" fill="url(#shell)" stroke="#CFDDE0" stroke-width="3"/><path d="M198 211 Q214 207 230 226 L244 240 Q250 254 238 259 Q229 263 219 248 L198 236" fill="url(#shell)" stroke="#CFDDE0" stroke-width="3"/>
+<rect x="113" y="193" width="88" height="85" rx="39" fill="url(#shell)" stroke="#CFDDE0" stroke-width="3"/><ellipse cx="157" cy="271" rx="16" ry="6" fill="#B6CDD3" opacity=".5"/>
+<!-- head shell --> <rect x="55" y="56" width="205" height="161" rx="82" fill="url(#shell)" stroke="#CFDDE0" stroke-width="3"/><rect x="72" y="74" width="170" height="122" rx="60" fill="url(#visor)"/><path d="M95 93 Q139 76 201 89" fill="none" stroke="#89ADB4" opacity=".23" stroke-width="5" stroke-linecap="round"/>
+<g transform="translate(156 137)"><path d="M-35 3 Q-24 -16 -13 3 M13 3 Q24 -16 35 3" fill="none" stroke="#48DE9A" stroke-width="7" stroke-linecap="round"/><path d="M-10 23 Q0 28 10 23" fill="none" stroke="#48DE9A" stroke-width="4" stroke-linecap="round"/></g><circle cx="157" cy="237" r="20" fill="#D0E2E4"/><circle cx="157" cy="237" r="13" fill="#48DE9A" opacity=".21"/><circle cx="157" cy="237" r="9" fill="#48DE9A"/>
+<g transform="translate(252 77)"><circle r="32" fill="#FFFFFF" opacity=".97"/><circle r="27" fill="#48DE9A" opacity=".11"/><circle r="23" fill="#48DE9A" opacity=".14"/><path d="M-12 0 L-3 9 L15 -11" fill="none" stroke="#48DE9A" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></g>
+</svg>
