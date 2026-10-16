@@ -10,6 +10,8 @@ import {
 import { DataTable, ErrorNotice, Icon, ToolResults } from "../../components";
 import type { Entry, View } from "../chat/types";
 
+import { EviaMascot } from "../../components/EviaMascot";
+
 type SourceData = {
   id: string;
   schema: SourceSchema;
@@ -172,7 +174,7 @@ export function SourceInspector({
           </div>
         ) : !current ? (
           <div className="loading-panel" role="status">
-            <span className="loading-ring" />
+            <EviaMascot state="profiling" size={80} decorative />
             Изучаем структуру источника…
           </div>
         ) : view === "preview" ? (

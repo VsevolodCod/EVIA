@@ -244,3 +244,64 @@ it("keeps a failed question in history after stopping the network request", asyn
     screen.getByRole("button", { name: "Повторить вопрос" }),
   ).toBeEnabled();
 });
+it("shows thinking, cancellation, retry and the finished answer as real mascot states", async () => {
+  let finish!: (r: Response) => void;
+  let attempt = 0;
+  setup((init) =>
+    ++attempt === 1
+      ? new Promise((_, reject) =>
+          init?.signal?.addEventListener("abort", () =>
+            reject(new DOMException("Aborted", "AbortError")),
+          ),
+        )
+      : new Promise((resolve) => {
+          finish = resolve;
+        }),
+  );
+  const { container } = render(<App />);
+  await select("A");
+  await ask("Проверь данные");
+  expect(
+    container.querySelector('[data-evia-state="thinking"]'),
+  ).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Прекратить ожидание" }));
+  await waitFor(() =>
+    expect(
+      container.querySelector('[data-evia-state="cancelled"]'),
+    ).toBeInTheDocument(),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Повторить вопрос" }));
+  expect(
+    container.querySelector('[data-evia-state="retrying"]'),
+  ).toBeInTheDocument();
+  await act(async () =>
+    finish(Response.json({ answer: "Готово", steps: 1, tool_results: [] })),
+  );
+  expect(
+    container.querySelector('[data-evia-state="explaining"]'),
+  ).toBeInTheDocument();
+});
+it("shows CSV upload state until the actual response and then uploaded state", async () => {
+  setup();
+  const base = vi.mocked(fetch).getMockImplementation()!;
+  let finish!: (r: Response) => void;
+  vi.mocked(fetch).mockImplementation((url, init) =>
+    url === "/sources/csv"
+      ? new Promise((resolve) => {
+          finish = resolve;
+        })
+      : base(url, init),
+  );
+  const { container } = render(<App />);
+  await select("A");
+  fireEvent.change(screen.getByLabelText("Загрузить CSV"), {
+    target: { files: [new File(["id\n1"], "new.csv")] },
+  });
+  expect(
+    container.querySelector('[data-evia-state="uploading"]'),
+  ).toBeInTheDocument();
+  await act(async () => finish(Response.json(source("C"))));
+  expect(
+    container.querySelector('[data-evia-state="uploaded"]'),
+  ).toBeInTheDocument();
+});

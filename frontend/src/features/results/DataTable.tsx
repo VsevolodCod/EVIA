@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { Row } from "../../api";
-import { Icon } from "../../components/Icon";
+import { EviaMascot } from "../../components/EviaMascot";
 
 export function valueText(value: unknown): string {
   if (value === null || value === undefined) return "—";
@@ -32,7 +32,7 @@ export function DataTable({
   if (!rows.length)
     return (
       <div className="empty-table">
-        <Icon name="grid" size={28} />
+        <EviaMascot state="empty_table" size={80} decorative />
         <p>Нет строк для отображения</p>
         <span>
           Результат пуст. Это не означает нулевое значение показателя.

@@ -1,9 +1,15 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { api, errorMessage, type Health, type Source } from "./api";
-import { ErrorNotice, Evia, Icon, SafeMarkdown, type Mood } from "./components";
+import { ErrorNotice, Evia, Icon, SafeMarkdown } from "./components";
 import { SourceInspector } from "./features/sources/SourceInspector";
 import type { Entry, View } from "./features/chat/types";
 import "./styles.css";
+import {
+  resolveEviaState,
+  errorEviaState,
+  eviaStatus,
+} from "./features/mascot/resolveEviaState";
+import type { EviaState } from "./features/mascot/states";
 
 export default function App() {
   const [sources, setSources] = useState<Source[]>([]);
@@ -25,6 +31,8 @@ export default function App() {
       return false;
     }
   });
+  const [uploadedId, setUploadedId] = useState<string | null>(null);
+  const [uploadFailure, setUploadFailure] = useState<EviaState | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const [failedFile, setFailedFile] = useState<File | null>(null);
@@ -44,14 +52,16 @@ export default function App() {
   );
   const pending = history.find((entry) => entry.state === "pending");
   const draft = selectedId ? (drafts[selectedId] ?? "") : "";
-  const mood: Mood =
-    pending || uploading
-      ? "busy"
-      : activeEntry?.state === "error" || uploadError
-        ? "error"
-        : activeEntry?.state === "success"
-          ? "success"
-          : "waiting";
+  const mascotState = resolveEviaState({
+    uploading,
+    uploadFailure,
+    request: pending ? (pending.mascotState ?? "thinking") : undefined,
+    connectionFailure: Boolean(healthError || sourcesError),
+    selectedId,
+    uploadedId,
+    draft,
+    entry: activeEntry,
+  });
   const isMock = health?.llm_provider === "mock";
 
   async function loadSources() {
@@ -104,6 +114,8 @@ export default function App() {
 
   function selectSource(id: string) {
     setSelectedId(id);
+    setUploadFailure(null);
+    setUploadError("");
     setView("preview");
   }
   function changeDraft(value: string) {
@@ -117,6 +129,9 @@ export default function App() {
     }
     setActiveIds((previous) => ({ ...previous, [selectedId]: undefined }));
     changeDraft("");
+    setUploadedId(null);
+    setUploadFailure(null);
+    setUploadError("");
     setView("preview");
     composer.current?.focus();
   }
@@ -132,12 +147,15 @@ export default function App() {
   async function upload(file: File) {
     if (uploading) return;
     setUploadError("");
+    setUploadFailure(null);
     setFailedFile(null);
     if (!file.name.toLowerCase().endsWith(".csv")) {
+      setUploadFailure("invalid_csv");
       setUploadError("Поддерживаются только файлы .csv.");
       return;
     }
     if (file.size === 0) {
+      setUploadFailure("invalid_csv");
       setUploadError("Файл пуст. Выберите CSV с заголовком и данными.");
       return;
     }
@@ -155,9 +173,11 @@ export default function App() {
         ...previous.filter((item) => item.source_id !== created.source_id),
       ]);
       selectSource(created.source_id);
+      setUploadedId(created.source_id);
     } catch (error) {
       if (!controller.signal.aborted) {
         setUploadError(errorMessage(error));
+        setUploadFailure(errorEviaState(error, true));
         setFailedFile(file);
       }
     } finally {
@@ -172,9 +192,16 @@ export default function App() {
       askControllers.current.has(selectedId)
     )
       return;
+    setUploadFailure(null);
+    setUploadError("");
     const sourceId = selectedId;
     const id = retryId ?? `question-${++sequence.current}`;
-    const entry: Entry = { id, question: question.trim(), state: "pending" };
+    const entry: Entry = {
+      id,
+      question: question.trim(),
+      state: "pending",
+      mascotState: retryId ? "retrying" : "thinking",
+    };
     const controller = new AbortController();
     askControllers.current.set(sourceId, controller);
     setHistories((previous) => ({
@@ -201,12 +228,16 @@ export default function App() {
       if (controller.signal.aborted)
         finish({
           state: "error",
+          mascotState: "cancelled",
           error: "Ожидание остановлено. Сервер может продолжать обработку.",
         });
       else finish({ state: "success", answer });
     } catch (error) {
       finish({
         state: "error",
+        mascotState: controller.signal.aborted
+          ? "cancelled"
+          : errorEviaState(error),
         error: controller.signal.aborted
           ? "Ожидание остановлено. Сервер может продолжать обработку."
           : errorMessage(error),
@@ -591,7 +622,10 @@ export default function App() {
               </>
             ) : (
               <div className="chat-welcome">
-                <Evia large mood={mood} />
+                <Evia large state={mascotState} quiet={quiet} />
+                <p className="evia-live-status" role="status">
+                  {eviaStatus(mascotState)}
+                </p>
                 <span className="hello-tag">На вашей стороне данных</span>
                 <h3>Привет, я Эвия.</h3>
                 <p>
@@ -626,22 +660,9 @@ export default function App() {
           <div className="chat-bottom">
             {activeEntry && (
               <div className="helper">
-                <Evia mood={mood} />
-                <div aria-live="polite">
-                  <strong>
-                    {mood === "busy"
-                      ? "Разбираюсь в вопросе"
-                      : mood === "error"
-                        ? "Попробуем ещё раз"
-                        : "Готова к новому вопросу"}
-                  </strong>
-                  <span>
-                    {mood === "busy"
-                      ? "Ответ появится после завершения."
-                      : mood === "error"
-                        ? "Вопрос остался в истории."
-                        : "Что исследуем дальше?"}
-                  </span>
+                <Evia state={mascotState} quiet={quiet} />
+                <div role="status">
+                  <strong>{eviaStatus(mascotState)}</strong>
                 </div>
               </div>
             )}

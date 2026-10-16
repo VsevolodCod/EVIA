@@ -1,0 +1,56 @@
+.evia-mascot {
+  display: inline-block;
+  flex: none;
+  max-width: 100%;
+  vertical-align: middle;
+}
+.evia-mascot img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  animation:
+    evia-arrive 0.3s ease-out,
+    evia-float 5s ease-in-out 0.3s infinite;
+}
+.evia-mascot[data-evia-state="error"] img,
+.evia-mascot[data-evia-state="cancelled"] img,
+.evia-mascot[data-evia-state="connection_lost"] img {
+  animation: evia-arrive 0.3s ease-out;
+}
+@keyframes evia-float {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-1deg);
+  }
+  50% {
+    transform: translateY(-4px) rotate(1deg);
+  }
+}
+@keyframes evia-arrive {
+  from {
+    opacity: 0.3;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.evia-mascot[data-motion="off"] img,
+.quiet .evia-mascot img {
+  animation: none;
+  transform: none;
+}
+.evia-live-status {
+  color: var(--muted, #49615d);
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 12px 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .evia-mascot img {
+    animation: none !important;
+    transform: none;
+  }
+}

@@ -67,6 +67,16 @@ export type Health = z.infer<typeof healthSchema>;
 export type ToolResult = Answer["tool_results"][number];
 export type Row = Record<string, unknown>;
 
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 const knownErrors: Record<string, string> = {
   "Only CSV files are supported": "Поддерживаются только файлы .csv.",
   "Uploaded CSV is empty": "Файл пуст. Выберите CSV с заголовком и данными.",
@@ -88,8 +98,9 @@ async function request<T>(
     });
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") throw error;
-    throw new Error(
+    throw new ApiError(
       "Нет связи с сервером. Проверьте, запущен ли сервис, и повторите запрос.",
+      0,
     );
   }
   if (!response.ok) {
@@ -97,7 +108,7 @@ async function request<T>(
     const detail =
       body && typeof body === "object" && "detail" in body ? body.detail : null;
     if (typeof detail === "string" && knownErrors[detail])
-      throw new Error(knownErrors[detail]);
+      throw new ApiError(knownErrors[detail], response.status);
     const errors: Record<number, string> = {
       400: "Не удалось прочитать данные. Проверьте формат файла и повторите запрос.",
       404: "Источник больше не доступен. Обновите список источников.",
@@ -106,9 +117,10 @@ async function request<T>(
       502: "Не удалось получить ответ модели. Проверьте подключение к модели и повторите вопрос.",
       503: "Сервис временно недоступен. Повторите запрос немного позже.",
     };
-    throw new Error(
+    throw new ApiError(
       errors[response.status] ||
         `Сервер не смог выполнить запрос (HTTP ${response.status}). Повторите попытку.`,
+      response.status,
     );
   }
   const body: unknown = await response.json().catch(() => {
