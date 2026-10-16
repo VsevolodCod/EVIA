@@ -82,7 +82,7 @@ def port_number(value: str) -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description='Локальный запуск Линза BI')
+    parser = argparse.ArgumentParser(description='Локальный запуск EVIA')
     parser.add_argument('--dev', action='store_true', help='FastAPI + Vite с обновлением интерфейса')
     parser.add_argument('--host', default='127.0.0.1')
     parser.add_argument('--port', type=port_number, default=8000, help='Порт API / готового приложения')
@@ -101,7 +101,7 @@ def main() -> int:
     connect_host = '127.0.0.1' if args.host == '0.0.0.0' else ('::1' if args.host == '::' else args.host)
     url_host = f'[{connect_host}]' if ':' in connect_host else connect_host
     environment = {**os.environ, 'BI_API_TARGET': f'http://{url_host}:{args.port}'}
-    print(f'Линза BI: http://{url_host}:{args.ui_port if args.dev else args.port}', flush=True)
+    print(f'EVIA: http://{url_host}:{args.ui_port if args.dev else args.port}', flush=True)
     print('Ctrl+C останавливает все процессы этого запуска.', flush=True)
     processes: list[subprocess.Popen] = []
     stopping = False

@@ -31,7 +31,7 @@ export function EviaMascot({
         src={`${import.meta.env.BASE_URL}mascot/${state}.svg`}
         width={size}
         height={size}
-        alt={decorative ? "" : `Эвия — ${eviaLabel(state)}`}
+        alt={decorative ? "" : `EVIA — ${eviaLabel(state)}`}
         draggable={false}
       />
     </span>

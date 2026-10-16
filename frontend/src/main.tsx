@@ -11,7 +11,7 @@ createRoot(document.getElementById("root")!).render(
       fallback={
         <p role="status">
           {gallery
-            ? "Загружаем галерею Эвии…"
+            ? "Загружаем галерею EVIA…"
             : "Загружаем рабочее пространство…"}
         </p>
       }

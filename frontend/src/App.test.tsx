@@ -146,7 +146,7 @@ it("retries a failed question with its original source and displays the response
 it("shows mock mode honestly and only persists the quiet setting", async () => {
   setup();
   render(<App />);
-  expect(await screen.findByText(/Демо-режим/)).toBeInTheDocument();
+  expect(await screen.findByText(/Тестовая модель/)).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Тихий режим" }));
   expect(localStorage.getItem("linza.quiet")).toBe("true");
   expect(localStorage.length).toBe(1);
@@ -175,7 +175,7 @@ it("uploads a CSV, selects the returned source and loads its real preview", asyn
   });
   vi.stubGlobal("fetch", fetcher);
   render(<App />);
-  await screen.findByText("Ваши данные начнутся здесь.");
+  await screen.findByText("Нет источников");
   fireEvent.change(screen.getByLabelText("Загрузить CSV"), {
     target: {
       files: [

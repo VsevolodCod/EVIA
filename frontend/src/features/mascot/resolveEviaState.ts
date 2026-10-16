@@ -59,5 +59,5 @@ export function eviaStatus(state: EviaState): string {
     timeout: "Сервис сообщил о превышении времени ожидания.",
     error: "Не удалось завершить запрос. Можно повторить.",
   };
-  return statuses[state] ?? "Эвия рядом.";
+  return statuses[state] ?? "EVIA рядом.";
 }

@@ -263,22 +263,22 @@ export default function App() {
         <a
           className="brand"
           href="#analysis"
-          aria-label="Линза BI, рабочее пространство"
+          aria-label="EVIA, рабочее пространство"
         >
-          <span className="brand-mark">
-            <span />
-          </span>
-          линза<span className="brand-bi">BI</span>
+          EVIA
         </a>
-        <span className="topbar-divider" />
-        <span className="workspace-label">Рабочее пространство</span>
-        <div className="connection">
+        <div
+          className="connection"
+          title={
+            isMock
+              ? "Ответы тестовые: аналитическая модель не подключена"
+              : undefined
+          }
+        >
           {health ? (
             <>
               <span className="status-dot" />
-              {isMock
-                ? "Демонстрационная модель"
-                : `Модель: ${health.llm_provider}`}
+              {isMock ? "Тестовая модель" : `Модель: ${health.llm_provider}`}
             </>
           ) : healthError ? (
             <button
@@ -323,7 +323,7 @@ export default function App() {
               />
             )}
             {!sourcesLoading && !sourcesError && !sources.length && (
-              <p className="sidebar-note">Ваши данные начнутся здесь.</p>
+              <p className="sidebar-note">Нет источников</p>
             )}
             <div className="source-list">
               {sources.map((item) => (
@@ -350,6 +350,7 @@ export default function App() {
             <button
               className="upload-nav"
               onClick={chooseFile}
+              title="CSV · UTF-8 · разделитель — запятая"
               disabled={uploading}
             >
               <Icon name="plus" size={16} />
@@ -368,7 +369,6 @@ export default function App() {
                 event.target.value = "";
               }}
             />
-            <p className="format-note">UTF-8 · разделитель — запятая</p>
             {uploadError && (
               <ErrorNotice
                 message={uploadError}
@@ -412,17 +412,8 @@ export default function App() {
                 ))}
               </div>
             ) : (
-              <p className="sidebar-note">
-                {source
-                  ? "Заданные вопросы появятся здесь."
-                  : "Выберите источник, чтобы увидеть его вопросы."}
-              </p>
+              <p className="sidebar-note">Нет вопросов</p>
             )}
-            <p className="history-caption">
-              Для выбранного источника.
-              <br />
-              До обновления страницы.
-            </p>
           </section>
           <div className="sidebar-bottom">
             <button
@@ -436,25 +427,19 @@ export default function App() {
                 <span />
               </span>
             </button>
-            <p>Эвия · ваш помощник по данным</p>
           </div>
         </aside>
-        <main className="analysis" id="analysis" tabIndex={-1}>
+        <main
+          className={`analysis ${source ? "" : "analysis-empty"}`}
+          id="analysis"
+          tabIndex={-1}
+        >
           {healthError && (
             <ErrorNotice
               message={healthError}
               onRetry={() => void loadHealth()}
               label="Проверить сервис"
             />
-          )}
-          {isMock && (
-            <div className="demo-banner">
-              <span className="demo-symbol">◌</span>
-              <p>
-                <strong>Демо-режим.</strong> Данные настоящие, ответы модели —
-                тестовые. Для анализа подключите LLM.
-              </p>
-            </div>
           )}
           {source ? (
             <SourceInspector
@@ -465,20 +450,6 @@ export default function App() {
             />
           ) : (
             <>
-              <div className="welcome-heading">
-                <div className="eyebrow">
-                  Ваше пространство для исследования
-                </div>
-                <h1>
-                  Вся картина.
-                  <br />
-                  <span>В ваших данных.</span>
-                </h1>
-                <p>
-                  Добавьте источник, изучите его структуру
-                  <br className="desktop-break" /> и задайте первый вопрос Эвии.
-                </p>
-              </div>
               <section
                 className={`upload-card ${dragOver ? "drag-over" : ""}`}
                 onDragOver={(event) => {
@@ -512,16 +483,8 @@ export default function App() {
                   </div>
                   <span className="paper-plus">+</span>
                 </div>
-                <h2>
-                  {uploading
-                    ? "Добавляем ваш источник…"
-                    : "Начнём с ваших данных"}
-                </h2>
-                <p>
-                  Перетащите CSV сюда или выберите файл.
-                  <br />
-                  Первая строка — названия столбцов.
-                </p>
+                <h1>{uploading ? "Загрузка CSV…" : "Добавьте CSV"}</h1>
+                <p>Перетащите файл сюда</p>
                 <button
                   className="primary"
                   onClick={chooseFile}
@@ -530,45 +493,14 @@ export default function App() {
                   <Icon name="upload" />
                   {uploading ? "Загружаем…" : "Выбрать CSV"}
                 </button>
-                <small>Кодировка UTF-8 · разделитель — запятая</small>
-                {sources.length > 0 && (
-                  <p className="existing-hint">
-                    Или выберите существующий источник слева.
-                  </p>
-                )}
+                <small>UTF-8 · запятая · первая строка — заголовки</small>
               </section>
-              <div className="getting-started">
-                <div>
-                  <span>01</span>
-                  <strong>Добавьте источник</strong>
-                  <p>Ваш CSV станет основой исследования.</p>
-                </div>
-                <div>
-                  <span>02</span>
-                  <strong>Посмотрите данные</strong>
-                  <p>Строки, типы полей и профиль выборки.</p>
-                </div>
-                <div>
-                  <span>03</span>
-                  <strong>Задайте вопрос</strong>
-                  <p>Эвия поможет разобраться в деталях.</p>
-                </div>
-              </div>
             </>
           )}
-          <footer className="analysis-footer">
-            <span className="footer-mark">л.</span>
-            <span>Линза BI</span>
-            <span>От данных к пониманию</span>
-          </footer>
         </main>
-        <aside className="chat-panel" aria-label="Чат с Эвией">
+        <aside className="chat-panel" aria-label="Чат с EVIA">
           <header className="chat-header">
-            <span className="avatar-mini">э</span>
-            <div>
-              <h2>Спросить Эвию</h2>
-              <p>Помощник по данным</p>
-            </div>
+            <h2>Чат</h2>
             <span
               className="chat-status"
               aria-label={pending ? "Обрабатывает вопрос" : "Ожидает вопроса"}
@@ -578,13 +510,8 @@ export default function App() {
             {activeEntry ? (
               <>
                 <div className="user-message">{activeEntry.question}</div>
-                <section className="assistant-message" aria-label="Ответ Эвии">
-                  <div className="reply-label">
-                    <span className="avatar-tiny">э</span>Эвия
-                    {activeEntry.answer && (
-                      <small>{activeEntry.answer.steps} шагов</small>
-                    )}
-                  </div>
+                <section className="assistant-message" aria-label="Ответ EVIA">
+                  <div className="reply-label">EVIA</div>
                   {activeEntry.state === "pending" ? (
                     <div className="thinking" role="status">
                       <span />
@@ -623,23 +550,18 @@ export default function App() {
             ) : (
               <div className="chat-welcome">
                 <Evia large state={mascotState} quiet={quiet} />
-                <p className="evia-live-status" role="status">
+                <p
+                  className={`evia-live-status ${["welcome", "waiting", "listening", "explaining"].includes(mascotState) ? "visually-hidden" : ""}`}
+                  role="status"
+                >
                   {eviaStatus(mascotState)}
-                </p>
-                <span className="hello-tag">На вашей стороне данных</span>
-                <h3>Привет, я Эвия.</h3>
-                <p>
-                  {source
-                    ? "Источник готов. Давайте посмотрим, что в нём интересного."
-                    : "Помогу исследовать данные и найти в них главное. Начнём с CSV?"}
                 </p>
                 {source && (
                   <div className="suggestions">
-                    <span>Можно начать так</span>
                     {[
-                      "Какие столбцы есть в источнике?",
-                      "Покажи первые строки данных",
-                      "Есть ли пропуски в данных?",
+                      "Какие есть столбцы?",
+                      "Покажи первые строки",
+                      "Есть ли пропуски?",
                     ].map((question) => (
                       <button
                         key={question}
@@ -734,11 +656,13 @@ export default function App() {
               <span>Ctrl / ⌘ + Enter — отправить</span>
               {draft.length > 3500 && <span>{draft.length}/4000</span>}
             </div>
-            <p className="memory-note">
-              Каждый вопрос — отдельный запрос.
-              <br />
-              Модель не помнит предыдущий диалог.
-            </p>
+            <details className="chat-help">
+              <summary>О чате</summary>
+              <p>
+                Каждый вопрос — отдельный запрос без памяти предыдущих
+                сообщений. История источника хранится до обновления страницы.
+              </p>
+            </details>
           </div>
         </aside>
       </div>

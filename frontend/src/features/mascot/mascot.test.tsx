@@ -25,7 +25,7 @@ it("uses Russian accessible names and can be decorative and quiet", () => {
     <EviaMascot state="uploading" size={96} />,
   );
   expect(
-    screen.getByRole("img", { name: "Эвия — Загрузка CSV" }),
+    screen.getByRole("img", { name: "EVIA — Загрузка CSV" }),
   ).toHaveAttribute("src", "/mascot/uploading.svg");
   rerender(<EviaMascot state="success" decorative quiet />);
   expect(screen.queryByRole("img")).not.toBeInTheDocument();

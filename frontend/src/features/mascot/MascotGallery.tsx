@@ -12,7 +12,7 @@ export default function MascotGallery() {
       <header>
         <a href={import.meta.env.BASE_URL}>← В рабочее пространство</a>
         <p className="eyebrow">EVIA · библиотека персонажа</p>
-        <h1>Одна Эвия. 40 состояний.</h1>
+        <h1>EVIA · 40 состояний</h1>
         <p>Ваш набор SVG — эмоции, работа с данными и системные события.</p>
       </header>
       <section className="mascot-preview" aria-label="Выбранное состояние">
@@ -53,7 +53,7 @@ export default function MascotGallery() {
           </small>
         </div>
       </section>
-      <div className="mascot-state-grid" aria-label="Все состояния Эвии">
+      <div className="mascot-state-grid" aria-label="Все состояния EVIA">
         {EVIA_STATES.map((item) => (
           <button
             key={item.id}

@@ -83,12 +83,10 @@ export function SourceInspector({
     <>
       <div className="analysis-heading">
         <div>
-          <div className="eyebrow">Обзор источника</div>
           <h1>{source.name}</h1>
           <p className="source-line">
             <span className="status-dot" />
-            CSV · {source.status === "available" ? "Доступен" : source.status} ·
-            Схема v{source.schema_version}
+            CSV · {source.status === "available" ? "Доступен" : source.status}
           </p>
         </div>
         <button
@@ -103,12 +101,10 @@ export function SourceInspector({
         <div>
           <span>Строк в источнике</span>
           <strong>{totalRows === null ? "—" : formatNumber(totalRows)}</strong>
-          <small>Точное количество</small>
         </div>
         <div>
           <span>Столбцов</span>
           <strong>{current ? formatNumber(fields.length) : "—"}</strong>
-          <small>Обнаружено в схеме</small>
         </div>
         <div>
           <span>Строк в выборке</span>
@@ -140,7 +136,6 @@ export function SourceInspector({
             <div className="pane-heading">
               <div>
                 <h2>Результаты инструментов</h2>
-                <p>Данные, которые вернул агент для выбранного вопроса.</p>
               </div>
             </div>
             {entry?.answer ? (
@@ -153,7 +148,7 @@ export function SourceInspector({
                 <Icon name="chat" size={30} />
                 <p>
                   {entry?.state === "pending"
-                    ? "Эвия работает над вопросом"
+                    ? "EVIA работает над вопросом"
                     : "Здесь появится результат"}
                 </p>
                 <span>
@@ -196,10 +191,6 @@ export function SourceInspector({
               )}
               label="Предпросмотр источника"
             />
-            <div className="table-footnote">
-              Исходные значения CSV. Это предпросмотр, а не результат
-              аналитического запроса.
-            </div>
           </>
         ) : view === "schema" ? (
           <div className="pane-padding">
@@ -305,13 +296,6 @@ export function SourceInspector({
           </div>
         )}
       </section>
-      <div className="analysis-note">
-        <span className="note-symbol">i</span>
-        <p>
-          Начните с данных. Затем спросите Эвию о структуре, пропусках или
-          значениях в выбранном источнике.
-        </p>
-      </div>
     </>
   );
 }
