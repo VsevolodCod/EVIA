@@ -29,7 +29,7 @@
 ## 4. Review and delivery
 - [x] Review against issue #1 and code-quality inspection; backend received independent review. Fixed the reported launcher process-group shutdown defect and added its regression test. Final independent full-stack re-review was unavailable; remaining review was performed by the primary implementer.
 - [x] Verify no secrets, runtime data or source PDF in staged files; compare diff against origin/tes/pipeline_1.
-- [ ] Commit, push issue branch and create PR targeting tes/pipeline_1 with Closes #1, checks and limitations. Do not merge or close issue.
+- [x] Commit, push issue branch and create PR targeting tes/pipeline_1 with Closes #1, checks and limitations. Do not merge or close issue.
 
 ## Final verification — 2026-10-16
 
@@ -40,3 +40,5 @@
 - `git fetch origin`: backend base remains current; no new commits on `origin/tes/pipeline_1` relative to the issue branch baseline.
 - Native browser interaction was attempted but repeatedly interrupted by the computer-use safeguard for concurrent user changes. No visual desktop/mobile or keyboard browser acceptance is claimed. Responsive CSS, reduced-motion rules and accessible control labels were inspected in code; these do not replace visual QA.
 - Windows launcher and real Ollama inference were not exercised. Full SQL execution is outside issue #1 and remains an A/B dependency.
+
+Delivery: https://github.com/VsevolodCod/Linza-BI/pull/2 — open against `tes/pipeline_1`; no merge or issue closure performed. Worktree preserved for local use and review.
