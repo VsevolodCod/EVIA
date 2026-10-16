@@ -2,12 +2,13 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 import logging
 
 from app.agent import AgentRuntime
-from app.config import get_settings
+from app.config import PROJECT_ROOT, get_settings
 from app.llm.factory import create_llm_provider
 from app.models import AskRequest, AskResponse, DataSource
 from app.schema_catalog import SchemaCatalog
 from app.source_service import SourceService
 from app.tools import build_tool_registry
+from app.web import mount_frontend
 from app.core.logging import setup_logging, request_logging_middleware
 
 # Сетап логов
@@ -141,3 +142,7 @@ async def ask_agent(request: AskRequest):
             status_code=502,
             detail=f"Agent execution failed: {type(exc).__name__}",
         ) from exc
+
+
+# Register last: the UI must never shadow the API or its documentation.
+mount_frontend(app, PROJECT_ROOT / "frontend" / "dist")
