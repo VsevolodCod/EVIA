@@ -4,14 +4,12 @@ from app.llm.base import LLMProvider
 from app.models import (
     AskResponse,
     LLMMessage,
-    ToolResult,
+    ToolResult, ChatMessage,
 )
 from app.tools import ToolRegistry
 import logging
 
-
 logger = logging.getLogger(__name__)
-
 
 SYSTEM_PROMPT = """
 Ты — помощник аналитика в локальной BI-платформе.
@@ -27,17 +25,16 @@ SYSTEM_PROMPT = """
 
 
 class AgentRuntime:
-
     """
     Основной класс агента. Некоторое количество раз запускает модель, обрабатывает вызовы инструментов.
     Поддерживает главный цикл существования агента.
     """
 
     def __init__(
-        self,
-        llm: LLMProvider,
-        tools: ToolRegistry,
-        max_steps: int = 5,
+            self,
+            llm: LLMProvider,
+            tools: ToolRegistry,
+            max_steps: int = 5,
     ) -> None:
 
         self.llm = llm
@@ -45,14 +42,16 @@ class AgentRuntime:
         self.max_steps = max(1, max_steps)
 
     async def ask(
-        self,
-        question: str,
-        source_ids: list[str] | None = None,
+            self,
+            question: str,
+            source_ids: list[str] | None = None,
+            history: list[ChatMessage] | None = None,
     ) -> AskResponse:
         """
         Это основной метод, который запускает работу агента.
         :param question: Запрос пользователя
         :param source_ids: Список id прикрепленных файлов
+        :param history: список из ``ChatMessage`` для вставки как история сообщений
         :return: Объект ``AskResponse``, в котором содержится результат работы агента.
         """
         logger.info("Агент начал подготовку к циклу")
@@ -62,20 +61,15 @@ class AgentRuntime:
         context = ""
         if source_ids:
             context = (
-                "\nИсточники, указанные пользователем: "
-                + ", ".join(source_ids)
+                    "\nИсточники, указанные пользователем: "
+                    + ", ".join(source_ids)
             )
 
-        messages = [
-            LLMMessage(
-                role="system",
-                content=SYSTEM_PROMPT,
-            ),
-            LLMMessage(
-                role="user",
-                content=question + context,
-            ),
-        ]
+        messages = (
+                [LLMMessage(role="system", content=SYSTEM_PROMPT, )] +
+                history +
+                [LLMMessage(role="user", content=question + context, )]
+        )
 
         results: list[ToolResult] = []
 

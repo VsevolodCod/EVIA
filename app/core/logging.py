@@ -6,6 +6,9 @@ import uuid
 from fastapi import Request
 
 
+__all__ = ["setup_logging", "request_logging_middleware"]
+
+
 def setup_logging() -> None:
     """
     Настраивает логгер

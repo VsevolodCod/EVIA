@@ -5,7 +5,9 @@ from app.models import DataSource, SourceSchema
 
 
 class DataSourceAdapter(ABC):
-    """Общий контракт для CSV, PostgreSQL, ClickHouse и других источников."""
+    """
+    Общий контракт для CSV, PostgreSQL, ClickHouse и других источников.
+    """
 
     @abstractmethod
     def test_connection(self, source: DataSource) -> tuple[bool, str]:

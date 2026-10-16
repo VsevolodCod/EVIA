@@ -1,8 +1,8 @@
-from .base import *
-from .factory import create_llm_provider
-from .mock import MockLLMProvider
-from .ollama_provider import OllamaModel, OllamaProvider
-from .openai_provider import OpenAIModel, OpenAIProvider
+from app.llm.base import *
+from app.llm.factory import create_llm_provider
+from app.llm.mock import MockLLMProvider
+from app.llm.ollama_provider import OllamaModel, OllamaProvider
+from app.llm.openai_provider import OpenAIModel, OpenAIProvider
 
 
 __all__ = [

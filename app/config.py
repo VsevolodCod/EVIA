@@ -28,8 +28,11 @@ class Settings:
         ).rstrip("/")
 
         self.data_dir = Path(os.getenv("BI_DATA_DIR", str(PROJECT_ROOT / "data"))).resolve()
-        self.catalog_db = Path(
-            os.getenv("BI_CATALOG_DB", str(PROJECT_ROOT / "data/catalog.sqlite3"))
+        self.chat_db_path = Path(
+            os.getenv("CHAT_DB_PATH", "data/chats.db")
+        ).resolve()
+        self.catalog_db_path = Path(
+            os.getenv("CATALOG_DB_PATH", "data/catalog.db")
         ).resolve()
 
         self.agent_max_steps = max(
@@ -38,7 +41,8 @@ class Settings:
 
     def prepare_directories(self) -> None:
         self.data_dir.mkdir(parents=True, exist_ok=True)
-        self.catalog_db.parent.mkdir(parents=True, exist_ok=True)
+        self.catalog_db_path.parent.mkdir(parents=True, exist_ok=True)
+        self.chat_db_path.parent.mkdir(parents=True, exist_ok=True)
 
 
 # @lru_cache

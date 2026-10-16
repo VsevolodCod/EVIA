@@ -7,14 +7,20 @@ from app.source_service import SourceService
 
 
 class ToolDefinition:
+    """
+    Класс инструмента для хранения внутри ``ToolRegistry``.
+    Без имплементации самого метода.
+    """
+
     def __init__(
         self,
         name: str,
         description: str,
-        parameters: dict[str, Any],
-        handler: Callable[..., Any],
+        parameters: dict[str, Any],  # Описание параметров для использования инструмента
+        handler: Callable[..., Any],  # Какие из них обязательны для вызова
         required: list[str] | None = None,
     ) -> None:
+
         self.name = name
         self.description = description
         self.parameters = parameters
@@ -38,6 +44,10 @@ class ToolDefinition:
 
 
 class ToolRegistry:
+    """
+    Хранит в себе набор доступных инструментов в формате ``ToolDefinition``
+    """
+
     def __init__(self) -> None:
         self._tools: dict[str, ToolDefinition] = {}
 
@@ -58,6 +68,14 @@ class ToolRegistry:
         name: str,
         arguments: dict[str, Any],
     ) -> ToolResult:
+
+        """
+        Метод, который вызывает сами инструменты, опираясь на распаршенную ранее информацию из json
+        :param name: Название инструмента
+        :param arguments: Переданные аргументы
+        :return:
+        """
+
         tool = self._tools.get(name)
 
         if tool is None:
@@ -110,6 +128,17 @@ def build_tool_registry(
     catalog: SchemaCatalog,
     sources: SourceService,
 ) -> ToolRegistry:
+
+    """
+    Создает объект ``ToolRegistry`` и подключает к нему все инструменты
+
+    Принимает различные подключения для использования
+
+    :param catalog: Каталог схем
+    :param sources: Источники
+    :return:
+    """
+
     registry = ToolRegistry()
 
     registry.register(

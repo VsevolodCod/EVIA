@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from typing import Any, Literal
+from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
@@ -89,3 +90,42 @@ class AskResponse(BaseModel):
     answer: str
     steps: int
     tool_results: list[ToolResult] = Field(default_factory=list)
+    chat_id: str | None = None
+
+
+class ChatMessage(LLMMessage):
+    message_id: str = Field(default_factory=lambda: str(uuid4()))
+    created_at: datetime = Field(default_factory=utc_now)
+
+
+class Chat(BaseModel):
+    chat_id: str = Field(default_factory=lambda: str(uuid4()))
+    title: str = "Новый чат"
+    temporary: bool = True
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
+    messages: list[ChatMessage] = Field(default_factory=list)
+
+
+class ChatCreateRequest(BaseModel):
+    title: str = Field(
+        default="Новый чат",
+        min_length=1,
+        max_length=200,
+    )
+
+
+class ChatSummary(BaseModel):
+    chat_id: str
+    title: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class ChatHistoryResponse(BaseModel):
+    chat_id: str
+    title: str
+    messages: list[ChatMessage]
+    total_messages: int
+    next_offset: int | None
+    has_more: bool

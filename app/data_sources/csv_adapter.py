@@ -40,11 +40,15 @@ def infer_type(values: list[str]) -> str:
 
 
 class CSVAdapter(DataSourceAdapter):
+    """
+    Контракт для взаимодействия с CSV
+    """
     def __init__(
         self,
         storage_dir: Path,
         sample_size: int = 500,
     ) -> None:
+
         self.storage_dir = storage_dir.resolve()
         self.sample_size = sample_size
 
@@ -66,6 +70,7 @@ class CSVAdapter(DataSourceAdapter):
         self,
         source: DataSource,
     ) -> tuple[list[str], list[dict[str, str]]]:
+
         path = self._path(source)
 
         if not path.is_file():
@@ -73,11 +78,7 @@ class CSVAdapter(DataSourceAdapter):
                 f"Source file not found: {source.source_id}"
             )
 
-        with path.open(
-            "r",
-            encoding="utf-8-sig",
-            newline="",
-        ) as file:
+        with path.open("r", encoding="utf-8-sig", newline="") as file:
             reader = csv.DictReader(file)
             headers = reader.fieldnames or []
 

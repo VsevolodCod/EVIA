@@ -1,100 +1,102 @@
-import sqlite3
 from pathlib import Path
 
+from sqlalchemy import create_engine, select
+from sqlalchemy.engine import URL
+from sqlalchemy.orm import Session, sessionmaker
+
+from app.db.catalog.models import DataSourceORM, SourceSchemaORM
 from app.models import DataSource, SourceSchema
 
 
 class SchemaCatalog:
-    def __init__(self, db_path: Path) -> None:
-        self.db_path = db_path
+    def __init__(
+        self,
+        db_path: Path,
+        session_factory: sessionmaker[Session] | None = None,
+    ) -> None:
+        self.db_path = Path(db_path).expanduser().resolve()
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._initialize()
 
-    def _connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self.db_path)
-        connection.row_factory = sqlite3.Row
-        return connection
+        self._engine = None
 
-    def _initialize(self) -> None:
-        with self._connect() as db:
-            db.execute("""
-                CREATE TABLE IF NOT EXISTS sources (
-                    source_id TEXT PRIMARY KEY,
-                    payload TEXT NOT NULL
-                )
-            """)
-
-            db.execute("""
-                CREATE TABLE IF NOT EXISTS schemas (
-                    source_id TEXT PRIMARY KEY,
-                    version INTEGER NOT NULL,
-                    payload TEXT NOT NULL,
-                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
+        if session_factory is None:
+            url = URL.create(
+                "sqlite+pysqlite",
+                database=str(self.db_path),
+            )
+            self._engine = create_engine(url)
+            self.session_factory = sessionmaker(
+                bind=self._engine,
+                expire_on_commit=False,
+            )
+        else:
+            self.session_factory = session_factory
 
     def upsert_source(self, source: DataSource) -> None:
-        with self._connect() as db:
-            db.execute(
-                """
-                INSERT INTO sources(source_id, payload)
-                VALUES (?, ?)
-                ON CONFLICT(source_id)
-                DO UPDATE SET payload = excluded.payload
-                """,
-                (source.source_id, source.model_dump_json()),
-            )
+        with self.session_factory.begin() as session:
+            record = session.get(DataSourceORM, source.source_id)
+
+            if record is None:
+                record = DataSourceORM(
+                    source_id=source.source_id,
+                    payload=source.model_dump_json(),
+                )
+                session.add(record)
+            else:
+                record.payload = source.model_dump_json()
 
     def get_source(self, source_id: str) -> DataSource | None:
-        with self._connect() as db:
-            row = db.execute(
-                "SELECT payload FROM sources WHERE source_id = ?",
-                (source_id,),
-            ).fetchone()
+        with self.session_factory() as session:
+            record = session.get(DataSourceORM, source_id)
 
-        if row is None:
-            return None
+            if record is None:
+                return None
 
-        return DataSource.model_validate_json(row["payload"])
+            payload = record.payload
+
+        return DataSource.model_validate_json(payload)
 
     def list_sources(self) -> list[DataSource]:
-        with self._connect() as db:
-            rows = db.execute(
-                "SELECT payload FROM sources ORDER BY rowid"
-            ).fetchall()
+        with self.session_factory() as session:
+            records = session.scalars(
+                select(DataSourceORM).order_by(DataSourceORM.source_id)
+            ).all()
+
+            payloads = [record.payload for record in records]
 
         return [
-            DataSource.model_validate_json(row["payload"])
-            for row in rows
+            DataSource.model_validate_json(payload)
+            for payload in payloads
         ]
 
     def save_schema(self, schema: SourceSchema) -> None:
-        with self._connect() as db:
-            db.execute(
-                """
-                INSERT INTO schemas(source_id, version, payload)
-                VALUES (?, ?, ?)
-                ON CONFLICT(source_id)
-                DO UPDATE SET
-                    version = excluded.version,
-                    payload = excluded.payload,
-                    updated_at = CURRENT_TIMESTAMP
-                """,
-                (
-                    schema.source_id,
-                    schema.version,
-                    schema.model_dump_json(),
-                ),
-            )
+        with self.session_factory.begin() as session:
+            record = session.get(SourceSchemaORM, schema.source_id)
+
+            if record is None:
+                record = SourceSchemaORM(
+                    source_id=schema.source_id,
+                    version=schema.version,
+                    payload=schema.model_dump_json(),
+                )
+                session.add(record)
+            else:
+                record.version = schema.version
+                record.payload = schema.model_dump_json()
 
     def get_schema(self, source_id: str) -> SourceSchema | None:
-        with self._connect() as db:
-            row = db.execute(
-                "SELECT payload FROM schemas WHERE source_id = ?",
-                (source_id,),
-            ).fetchone()
+        with self.session_factory() as session:
+            record = session.get(SourceSchemaORM, source_id)
 
-        if row is None:
-            return None
+            if record is None:
+                return None
 
-        return SourceSchema.model_validate_json(row["payload"])
+            payload = record.payload
+
+        return SourceSchema.model_validate_json(payload)
+
+    def close(self) -> None:
+        """Освободить ресурсы движка, если он создан этим объектом."""
+        if self._engine is not None:
+            self._engine.dispose()
+            self._engine = None
