@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from app.data_sources.csv_adapter import CSVAdapter
+from app.data_sources.csv_format import PARSER_VERSION, csv_reader, read_header
 from app.models import DataSource, SourceSchema
 from app.schema_catalog import SchemaCatalog
 
@@ -37,13 +38,10 @@ class SourceService:
 
         try:
             text = content.decode("utf-8-sig")
-            reader = csv.reader(io.StringIO(text))
-            header = next(reader, None)
+            reader = csv_reader(io.StringIO(text, newline=''))
+            read_header(reader)
         except (UnicodeDecodeError, csv.Error) as exc:
             raise ValueError("CSV must be valid UTF-8") from exc
-
-        if not header or not any(column.strip() for column in header):
-            raise ValueError("CSV must contain a header row")
 
         source_id = uuid.uuid4().hex
         source_name = (
@@ -71,6 +69,9 @@ class SourceService:
             self.catalog.upsert_source(source)
             self.catalog.save_schema(schema)
 
+        except (csv.Error, UnicodeDecodeError) as exc:
+            target.unlink(missing_ok=True)
+            raise ValueError('CSV contains invalid encoding or quoting') from exc
         except Exception:
             target.unlink(missing_ok=True)
             raise
@@ -85,9 +86,12 @@ class SourceService:
 
         schema = self.catalog.get_schema(source_id)
 
-        if schema is None:
+        if schema is None or schema.parser_version < PARSER_VERSION:
+            if schema is not None:
+                source.schema_version = max(source.schema_version, schema.version) + 1
             schema = self.csv_adapter.introspect_schema(source)
             self.catalog.save_schema(schema)
+            self.catalog.upsert_source(source)
 
         return schema
 
@@ -111,4 +115,3 @@ class SourceService:
             raise KeyError(f"Unknown source: {source_id}")
 
         return self.csv_adapter.profile(source, source.name)
-    

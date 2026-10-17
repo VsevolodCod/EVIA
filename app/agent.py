@@ -1,10 +1,11 @@
 import json
+from time import perf_counter
 
 from app.llm.base import LLMProvider
 from app.models import (
     AskResponse,
     LLMMessage,
-    ToolResult, ChatMessage,
+    ToolResult, ChatMessage, AgentTiming, ModelTiming,
 )
 from app.tools import ToolRegistry
 import logging
@@ -47,6 +48,27 @@ class AgentRuntime:
             source_ids: list[str] | None = None,
             history: list[ChatMessage] | None = None,
     ) -> AskResponse:
+        started = perf_counter()
+        timing = AgentTiming()
+        outcome = 'error'
+        try:
+            result = await self._ask(question, source_ids, history, timing)
+            outcome = 'completed'
+            result.timing = timing
+            return result
+        finally:
+            timing.elapsed_ms = (perf_counter() - started) * 1000
+            # No question, source contents or answer text in performance logs.
+            logger.info('agent_timing outcome=%s elapsed_ms=%.1f llm_ms=%.1f tools_ms=%.1f calls=%d',
+                        outcome, timing.elapsed_ms, timing.llm_ms, timing.tools_ms, len(timing.calls))
+
+    async def _ask(
+            self,
+            question: str,
+            source_ids: list[str] | None,
+            history: list[ChatMessage] | None,
+            timing: AgentTiming,
+    ) -> AskResponse:
         """
         Это основной метод, который запускает работу агента.
         :param question: Запрос пользователя
@@ -67,7 +89,7 @@ class AgentRuntime:
 
         messages = (
                 [LLMMessage(role="system", content=SYSTEM_PROMPT, )] +
-                history +
+                (history or []) +
                 [LLMMessage(role="user", content=question + context, )]
         )
 
@@ -76,10 +98,15 @@ class AgentRuntime:
         # Основный цикл агента
         for step in range(1, self.max_steps + 1):
             logger.info(f"Агент начал выполнение шага {step}")
-            response = await self.llm.chat(
-                messages,
-                self.tools.descriptions(),
-            )
+            call_started = perf_counter()
+            try:
+                response = await self.llm.chat(messages, self.tools.descriptions())
+            finally:
+                elapsed = (perf_counter() - call_started) * 1000
+                timing.llm_ms += elapsed
+            call_timing = response.timing.model_copy() if response.timing else ModelTiming()
+            call_timing.elapsed_ms = elapsed
+            timing.calls.append(call_timing)
 
             if not response.tool_calls:  # Если модель готова ответить пользователю
                 answer = response.content.strip()
@@ -130,10 +157,11 @@ class AgentRuntime:
                 logger.info(f"Начато выполнение инструмента '{call.name}'")
                 # Скорее всего надо будет добавить тут асинхронность.
                 # Надо добавить проверку на корректность и обработку ошибок
-                result = self.tools.execute(
-                    call.name,
-                    call.arguments,
-                )
+                tool_started = perf_counter()
+                try:
+                    result = self.tools.execute(call.name, call.arguments)
+                finally:
+                    timing.tools_ms += (perf_counter() - tool_started) * 1000
                 results.append(result)
 
                 raw_call = raw_calls[index]

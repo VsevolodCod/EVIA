@@ -12,7 +12,7 @@ from fastapi import (
 )
 
 from app.agent import AgentRuntime
-from app.config import get_settings
+from app.config import PROJECT_ROOT, get_settings
 from app.db import create_chat_database, initialize_chat_database
 from app.llm.factory import create_llm_provider
 from app.models import AskRequest, AskResponse, ChatMessage, DataSource, Chat, ChatCreateRequest, ChatSummary, \
@@ -22,6 +22,7 @@ from app.source_service import SourceService
 from app.tools import build_tool_registry
 from app.core.logging import setup_logging
 from app.chat_manager import ChatManager, ChatNotFoundError
+from app.web import mount_frontend
 
 
 # Логирование и настройки
@@ -277,6 +278,7 @@ async def get_chat(
     request: Request,
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
+    before: int | None = Query(default=None, ge=0),
 ):
     """
     Загружает последние ``limit`` сообщений, заканчивая сообщением номер ``offset`` по айди чата
@@ -288,10 +290,14 @@ async def get_chat(
     """
     chat_manager: ChatManager = request.app.state.chat_manager
 
+    if before is not None and offset:
+        raise HTTPException(status_code=400, detail='Use before or offset, not both')
+
     chat = await chat_manager.get_persistent_chat(
         chat_id=chat_id,
         limit=limit,
         offset=offset,
+        before=before,
     )
 
     if chat is None:
@@ -346,3 +352,5 @@ async def delete_chat(
     return None
 
 
+# Register last: the UI must never shadow the API or its documentation.
+mount_frontend(app, PROJECT_ROOT / "frontend" / "dist")

@@ -1,0 +1,26 @@
+{
+  "contract": "Profile",
+  "data": {
+    "columns": {
+      "id": {
+        "distinct_sample_values": 2,
+        "sample_non_null_count": 2,
+        "sample_null_count": 0,
+        "top_values": [
+          {
+            "count": 1,
+            "value": "0001"
+          },
+          {
+            "count": 1,
+            "value": "0002"
+          }
+        ]
+      }
+    },
+    "note": "Bounded sample",
+    "sample_limit": 500,
+    "sample_size": 2,
+    "snapshot": null
+  }
+}

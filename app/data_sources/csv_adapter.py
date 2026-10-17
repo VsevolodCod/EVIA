@@ -1,8 +1,10 @@
 import csv
+from itertools import islice
 from pathlib import Path
 from typing import Any
 
 from app.data_sources.base import DataSourceAdapter
+from app.data_sources.csv_format import PARSER_VERSION, csv_reader, read_header, checked_rows
 from app.models import (
     DataSource,
     SchemaField,
@@ -33,7 +35,7 @@ def infer_type(values: list[str]) -> str:
 
     try:
         for value in values:
-            float(value)
+            float(value.replace(',', '.'))
         return "number"
     except ValueError:
         return "string"
@@ -79,14 +81,9 @@ class CSVAdapter(DataSourceAdapter):
             )
 
         with path.open("r", encoding="utf-8-sig", newline="") as file:
-            reader = csv.DictReader(file)
-            headers = reader.fieldnames or []
-
-            rows = []
-            for index, row in enumerate(reader):
-                if index >= self.sample_size:
-                    break
-                rows.append(dict(row))
+            reader = csv_reader(file)
+            headers = read_header(reader)
+            rows = list(islice(checked_rows(reader, headers), self.sample_size))
 
         return headers, rows
 
@@ -96,10 +93,9 @@ class CSVAdapter(DataSourceAdapter):
             encoding="utf-8-sig",
             newline="",
         ) as file:
-            reader = csv.reader(file)
-            next(reader, None)  # Заголовок
-
-            return sum(1 for _ in reader)
+            reader = csv_reader(file)
+            header = read_header(reader)
+            return sum(1 for _ in checked_rows(reader, header))
 
     def introspect_schema(self, source: DataSource) -> SourceSchema:
         headers, rows = self._read_sample(source)
@@ -132,6 +128,7 @@ class CSVAdapter(DataSourceAdapter):
 
         return SourceSchema(
             source_id=source.source_id,
+            parser_version=PARSER_VERSION,
             version=source.schema_version,
             objects=[
                 SchemaObject(

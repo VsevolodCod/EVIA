@@ -4,3 +4,14 @@ __pycache__/
 .env
 data/
 *.py[cod]
+# Local UI build, dependencies, verification output and isolated checkouts
+.worktrees/
+frontend/node_modules/
+frontend/dist/
+frontend/coverage/
+frontend/test-results/
+frontend/playwright-report/
+.vite/
+*.tsbuildinfo
+logs/
+.DS_Store

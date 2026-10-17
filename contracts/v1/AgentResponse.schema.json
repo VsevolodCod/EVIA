@@ -1,0 +1,494 @@
+{
+  "$defs": {
+    "AgentTiming": {
+      "properties": {
+        "calls": {
+          "items": {
+            "$ref": "#/$defs/ModelTiming"
+          },
+          "title": "Calls",
+          "type": "array"
+        },
+        "elapsed_ms": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Elapsed Ms",
+          "type": "number"
+        },
+        "llm_ms": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Llm Ms",
+          "type": "number"
+        },
+        "tools_ms": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Tools Ms",
+          "type": "number"
+        }
+      },
+      "title": "AgentTiming",
+      "type": "object"
+    },
+    "AnalysisPlan": {
+      "properties": {
+        "explanation": {
+          "title": "Explanation",
+          "type": "string"
+        },
+        "intent": {
+          "title": "Intent",
+          "type": "string"
+        },
+        "sql": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sql"
+        }
+      },
+      "required": [
+        "intent",
+        "explanation"
+      ],
+      "title": "AnalysisPlan",
+      "type": "object"
+    },
+    "Error": {
+      "properties": {
+        "code": {
+          "enum": [
+            "VALIDATION_ERROR",
+            "SOURCE_NOT_FOUND",
+            "IMPORT_FAILED",
+            "QUERY_REJECTED",
+            "QUERY_TIMEOUT",
+            "MODEL_UNAVAILABLE",
+            "INTERNAL_ERROR"
+          ],
+          "title": "Code",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "request_id": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Request Id",
+          "type": "string"
+        },
+        "retryable": {
+          "default": false,
+          "title": "Retryable",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "request_id"
+      ],
+      "title": "Error",
+      "type": "object"
+    },
+    "JsonValue": {},
+    "ModelTiming": {
+      "properties": {
+        "elapsed_ms": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Elapsed Ms",
+          "type": "number"
+        },
+        "generated_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Generated Tokens"
+        },
+        "generation_ms": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Generation Ms"
+        },
+        "load_ms": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Load Ms"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        },
+        "prompt_ms": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prompt Ms"
+        },
+        "prompt_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prompt Tokens"
+        }
+      },
+      "title": "ModelTiming",
+      "type": "object"
+    },
+    "Provenance": {
+      "properties": {
+        "executed_at": {
+          "format": "date-time",
+          "title": "Executed At",
+          "type": "string"
+        },
+        "schema_version": {
+          "minimum": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "snapshot_id": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Snapshot Id",
+          "type": "string"
+        },
+        "source_id": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Source Id",
+          "type": "string"
+        },
+        "tool_name": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Tool Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_id",
+        "snapshot_id",
+        "schema_version",
+        "tool_name",
+        "executed_at"
+      ],
+      "title": "Provenance",
+      "type": "object"
+    },
+    "QueryResult": {
+      "properties": {
+        "columns": {
+          "items": {
+            "$ref": "#/$defs/ResultColumn"
+          },
+          "title": "Columns",
+          "type": "array"
+        },
+        "elapsed_ms": {
+          "minimum": 0,
+          "title": "Elapsed Ms",
+          "type": "number"
+        },
+        "provenance": {
+          "items": {
+            "$ref": "#/$defs/Provenance"
+          },
+          "minItems": 1,
+          "title": "Provenance",
+          "type": "array"
+        },
+        "result_id": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Result Id",
+          "type": "string"
+        },
+        "returned_rows": {
+          "minimum": 0,
+          "title": "Returned Rows",
+          "type": "integer"
+        },
+        "row_limit": {
+          "maximum": 10000,
+          "minimum": 1,
+          "title": "Row Limit",
+          "type": "integer"
+        },
+        "rows": {
+          "items": {
+            "items": {
+              "$ref": "#/$defs/JsonValue"
+            },
+            "type": "array"
+          },
+          "title": "Rows",
+          "type": "array"
+        },
+        "truncated": {
+          "title": "Truncated",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "result_id",
+        "columns",
+        "rows",
+        "returned_rows",
+        "row_limit",
+        "truncated",
+        "elapsed_ms",
+        "provenance"
+      ],
+      "title": "QueryResult",
+      "type": "object"
+    },
+    "ResultColumn": {
+      "properties": {
+        "data_type": {
+          "enum": [
+            "string",
+            "integer",
+            "number",
+            "decimal",
+            "boolean",
+            "date",
+            "datetime",
+            "unknown"
+          ],
+          "title": "Data Type",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "nullable": {
+          "default": true,
+          "title": "Nullable",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "data_type"
+      ],
+      "title": "ResultColumn",
+      "type": "object"
+    },
+    "ToolResult": {
+      "properties": {
+        "data": {
+          "default": null,
+          "title": "Data"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error"
+        },
+        "ok": {
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "tool_name": {
+          "title": "Tool Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tool_name",
+        "ok"
+      ],
+      "title": "ToolResult",
+      "type": "object"
+    }
+  },
+  "$id": "urn:evia:contracts:1.0:AgentResponse",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "analysis": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AnalysisPlan"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "answer": {
+      "title": "Answer",
+      "type": "string"
+    },
+    "artifact_ids": {
+      "items": {
+        "maxLength": 200,
+        "minLength": 1,
+        "type": "string"
+      },
+      "title": "Artifact Ids",
+      "type": "array"
+    },
+    "chat_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Chat Id"
+    },
+    "contract_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "error": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Error"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "job_id": {
+      "anyOf": [
+        {
+          "maxLength": 200,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Job Id"
+    },
+    "request_id": {
+      "maxLength": 200,
+      "minLength": 1,
+      "title": "Request Id",
+      "type": "string"
+    },
+    "results": {
+      "items": {
+        "$ref": "#/$defs/QueryResult"
+      },
+      "title": "Results",
+      "type": "array"
+    },
+    "status": {
+      "enum": [
+        "answered",
+        "clarification",
+        "error"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "steps": {
+      "title": "Steps",
+      "type": "integer"
+    },
+    "timing": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AgentTiming"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "tool_results": {
+      "items": {
+        "$ref": "#/$defs/ToolResult"
+      },
+      "title": "Tool Results",
+      "type": "array"
+    }
+  },
+  "required": [
+    "answer",
+    "steps",
+    "request_id",
+    "status"
+  ],
+  "title": "AgentResponse",
+  "type": "object"
+}

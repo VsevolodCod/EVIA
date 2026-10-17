@@ -26,13 +26,16 @@ class Settings:
         self.ollama_base_url = os.getenv(
             "OLLAMA_BASE_URL", "http://127.0.0.1:11434"
         ).rstrip("/")
+        self.ollama_keep_alive = os.getenv("OLLAMA_KEEP_ALIVE", "10m")
 
         self.data_dir = Path(os.getenv("BI_DATA_DIR", str(PROJECT_ROOT / "data"))).resolve()
         self.chat_db_path = Path(
-            os.getenv("CHAT_DB_PATH", "data/chats.db")
+            os.getenv("CHAT_DB_PATH", str(self.data_dir / "chats.db"))
         ).resolve()
         self.catalog_db_path = Path(
-            os.getenv("CATALOG_DB_PATH", "data/catalog.db")
+            os.getenv("CATALOG_DB_PATH")
+            or os.getenv("BI_CATALOG_DB")
+            or str(self.data_dir / "catalog.db")
         ).resolve()
 
         self.agent_max_steps = max(

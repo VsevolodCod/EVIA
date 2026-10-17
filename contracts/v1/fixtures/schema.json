@@ -1,0 +1,11 @@
+{
+  "contract": "SourceSchema",
+  "data": {
+    "discovered_at": "2026-10-17T00:00:00Z",
+    "objects": [],
+    "parser_version": 2,
+    "relations": [],
+    "source_id": "synthetic-sales",
+    "version": 1
+  }
+}
