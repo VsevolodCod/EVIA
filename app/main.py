@@ -57,7 +57,7 @@ async def lifespan(app: FastAPI):
             session_factory=catalog_sessions,
         )
         connection_manager = ConnectionManager(catalog_sessions)
-        source_service = SourceService(settings.data_dir, catalog)
+        source_service = SourceService(settings.data_dir, catalog, connection_manager)
         chat_manager = ChatManager(chat_sessions)
 
         # 4. Создаём инструменты и агента после зависимостей.
@@ -180,11 +180,13 @@ def upload_postgresql(
 ):
     try:
         objects = inspect_postgresql_connection(connection_properties)
+        logger.info(f"Successful connection to PostgreSQL DB: '{name}'")
         connection_id = connection_manager.create_connection(
             name=name,
             connection_type="postgresql",
             properties=connection_properties
         )
+        logger.info(f"Connected to connection with id: '{connection_id}'")
         return source_service.register_postgresql(
             connection_id=connection_id,
             name_db=name,

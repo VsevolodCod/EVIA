@@ -22,7 +22,12 @@ class DataSource(BaseModel):
     source_id: str
     name: str
     source_type: str
-    connection_id: str
+    connection_id: str | None = None
+
+    # Физический объект PostgreSQL
+    schema_name: str | None = None
+    table_name: str | None = None
+
     status: str = "registered"
     created_at: datetime = Field(default_factory=utc_now)
     schema_version: int = 1

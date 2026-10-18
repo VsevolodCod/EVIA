@@ -1,5 +1,6 @@
 import csv
 import io
+import logging
 import uuid
 from pathlib import Path
 from typing import Any
@@ -9,6 +10,9 @@ from app.data_sources import CSVAdapter, PostgreSQLAdapter
 from app.data_sources.csv_format import PARSER_VERSION, csv_reader, read_header
 from app.models import DataSource, SourceSchema
 from app.schema_catalog import SchemaCatalog
+
+
+logger = logging.getLogger(__name__)
 
 
 class SourceService:
@@ -39,6 +43,7 @@ class SourceService:
         content: bytes,
         name: str | None = None,
     ) -> DataSource:
+        logger.info("Started csv registration")
 
         if not filename.lower().endswith(".csv"):
             raise ValueError("Only CSV files are supported")
@@ -79,6 +84,8 @@ class SourceService:
             self.catalog.upsert_source(source)
             self.catalog.save_schema(schema)
 
+            logger.info("Successful csv registration")
+
         except (csv.Error, UnicodeDecodeError) as exc:
             target.unlink(missing_ok=True)
             raise ValueError('CSV contains invalid encoding or quoting') from exc
@@ -89,13 +96,17 @@ class SourceService:
         return source
 
     def register_postgresql(self, connection_id: str, name_db: str, objects: list[tuple[str, str]]) -> list[DataSource]:
+        logger.info("Started PostgreSQL registration")
         all_sources = []
         for i in objects:
             source_id = uuid.uuid4().hex
             source_name = ".".join([name_db, *i])
+            logger.info(f"Started table '{source_name}' registration")
             source = DataSource(
                 source_id=source_id,
                 name=source_name,
+                schema_name=i[0],
+                table_name=i[1],
                 connection_id=connection_id,
                 source_type="postgresql",
                 status="available"

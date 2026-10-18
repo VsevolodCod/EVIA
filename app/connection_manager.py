@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.db.catalog import ConnectionORM
-from app.models import DBConnection
+from app.models import DBConnection, PostgreSQLConnection, ClickHouseConnection, SQLiteConnection
 
 
 def _serialize_secrets(value: Any) -> Any:
@@ -62,25 +62,45 @@ class ConnectionManager:
 
         return connection_id
 
-    def get_connection(self, connection_id: str) -> DBConnection | None:
-        """
-        Возвращает подключение вместе с его конфигурацией.
-        """
+    def get_connection(
+            self,
+            connection_id: str,
+    ) -> PostgreSQLConnection | ClickHouseConnection | SQLiteConnection | None:
         with self.session_factory() as session:
             connection = session.get(ConnectionORM, connection_id)
 
             if connection is None:
                 return None
 
-            connection_info = DBConnection(
-                connection_id=connection.connection_id,
-                name=connection.name,
-                connection_type=connection.connection_type,
-                properties=json.loads(connection.payload),
-                created_at=connection.created_at,
-            )
+            connection_type = connection.connection_type
+            properties = json.loads(connection.payload)
 
-            return connection_info
+            common = {
+                "connection_id": connection.connection_id,
+                "name": connection.name,
+                "connection_type": connection_type,
+                "created_at": connection.created_at,
+            }
+
+            if connection_type == "postgresql":
+                return PostgreSQLConnection(
+                    **common,
+                    properties=properties,
+                )
+
+            if connection_type == "clickhouse":
+                return ClickHouseConnection(
+                    **common,
+                    properties=properties,
+                )
+
+            if connection_type == "sqlite":
+                return SQLiteConnection(
+                    **common,
+                    **properties,
+                )
+
+            raise ValueError(f"Unsupported connection type: {connection_type}")
 
     def list_connections(self) -> list[dict]:
         """

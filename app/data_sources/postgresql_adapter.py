@@ -1,6 +1,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from typing import Any
 
@@ -11,7 +12,7 @@ from sqlalchemy import (
     create_engine,
     func,
     inspect,
-    select,
+    select, text,
 )
 from sqlalchemy.engine import Engine, URL, make_url
 from sqlalchemy.exc import SQLAlchemyError
@@ -24,8 +25,10 @@ from app.models import (
     SchemaObject,
     SchemaRelation,
     SourceSchema,
-    PostgreSQLProperties
+    PostgreSQLProperties, PostgreSQLConnection
 )
+
+logger = logging.getLogger(__name__)
 
 
 def inspect_postgresql_connection(
@@ -38,36 +41,67 @@ def inspect_postgresql_connection(
         host=properties.host,
         port=properties.port,
         database=properties.database,
-        query={"sslmode": properties.sslmode},
+        query={"sslmode": properties.sslmode, "channel_binding": "require"},
     )
+    logger.info(f"Connection url: '{url}'")
 
     engine = create_engine(
         url,
         pool_pre_ping=True,
-        connect_args={"connect_timeout": 5},
+        connect_args={"connect_timeout": 5, "prepare_threshold": None,},
     )
 
     try:
         with engine.connect() as connection:
             connection.exec_driver_sql("SELECT 1")
 
-        inspector = inspect(engine)
-        objects: list[tuple[str, str]] = []
+            inspector = inspect(connection)
+            objects: list[tuple[str, str]] = []
 
-        excluded_schemas = {
-            "information_schema",
-            "pg_catalog",
-        }
+            excluded_schemas = {
+                "information_schema",
+                "pg_catalog",
+            }
+            for schema in inspector.get_schema_names():
+                if schema in excluded_schemas or schema.startswith("pg_toast"):
+                    continue
 
-        for schema in inspector.get_schema_names():
-            if schema in excluded_schemas or schema.startswith("pg_toast"):
-                continue
+                logger.info("Inspecting schema: %s", schema)
 
-            for table in inspector.get_table_names(schema=schema):
-                objects.append((schema, table))
+                try:
+                    tables = inspector.get_table_names(schema=schema)
+                    logger.info(
+                        "Found %d tables in schema %s",
+                        len(tables),
+                        schema,
+                    )
 
-            for view in inspector.get_view_names(schema=schema):
-                objects.append((schema, view))
+                    views = inspector.get_view_names(schema=schema)
+                    logger.info(
+                        "Found %d views in schema %s",
+                        len(views),
+                        schema,
+                    )
+
+                except Exception:
+                    logger.exception(
+                        "Failed to inspect schema: %s",
+                        schema,
+                    )
+                    raise
+
+                objects.extend((schema, table) for table in tables)
+                objects.extend((schema, view) for view in views)
+
+        # for schema in inspector.get_schema_names():
+        #     if schema in excluded_schemas or schema.startswith("pg_toast"):
+        #         continue
+        #
+        #     for table in inspector.get_table_names(schema=schema):
+        #         objects.append((schema, table))
+        #
+        #     for view in inspector.get_view_names(schema=schema):
+        #         objects.append((schema, view))
 
         if not objects:
             raise ValueError(
@@ -101,7 +135,12 @@ class PostgreSQLAdapter(DataSourceAdapter):
         """
         Создаёт SQLAlchemy Engine для нужной базы.
         """
-        properties = self.connection_manger.get_connection(source.connection_id).properties
+        connection = self.connection_manger.get_connection(source.connection_id)
+
+        if not isinstance(connection, PostgreSQLConnection):
+            raise ValueError("Connection is not PostgreSQL")
+
+        properties = connection.properties
 
         # Превращаем информацию о подключении в структурированный URL.
         url = URL.create(
@@ -111,7 +150,7 @@ class PostgreSQLAdapter(DataSourceAdapter):
             host=properties.host,
             port=properties.port,
             database=properties.database,
-            query={"sslmode": properties.sslmode},
+            query={"sslmode": properties.sslmode, "channel_binding": "require"},
         )
 
         # Не позволяем случайно использовать этот адаптер для SQLite или другой СУБД.
@@ -131,7 +170,7 @@ class PostgreSQLAdapter(DataSourceAdapter):
             # Не ждать свободное соединение из пула бесконечно.
             pool_timeout=10,
             # Ограничить ожидание установки подключения.
-            connect_args={"connect_timeout": 5},
+            connect_args={"connect_timeout": 5, "prepare_threshold": None,},
         )
 
     def test_connection(
@@ -187,170 +226,231 @@ class PostgreSQLAdapter(DataSourceAdapter):
         self,
         source: DataSource,
     ) -> SourceSchema:
-        """
-        Читает структуру БД и преобразует её в наши модели.
+        if not source.table_name:
+            raise ValueError("У источника не указано имя таблицы")
 
-        В PostgreSQL:\n
-        - schema — пространство имён, например public;\n
-        - table — таблица внутри схемы;\n
-        - column — колонка таблицы;\n
-        - foreign key — объявленная связь между таблицами.
-        """
         engine = self._create_engine(source)
 
         try:
-            # Inspector умеет запрашивать системные метаданные БД.
-            inspector = inspect(engine)
+            # Все операции introspection выполняются
+            # через одно явно открытое соединение.
+            with engine.connect() as connection:
+                inspector = inspect(connection)
 
-            # Эти списки в итоге попадут в SourceSchema.
-            objects: list[SchemaObject] = []
-            relations: list[SchemaRelation] = []
+                if source.schema_name:
+                    schema_name = source.schema_name
+                    table_name = source.table_name
+                elif "." in source.table_name:
+                    schema_name, table_name = source.table_name.split(".", 1)
+                else:
+                    schema_name = inspector.default_schema_name
+                    table_name = source.table_name
 
-            # Например, обычно это public.
-            default_schema = inspector.default_schema_name
+                if not schema_name or not table_name:
+                    raise ValueError(
+                        "Не удалось определить схему и имя объекта"
+                    )
 
-            # PostgreSQL может содержать несколько схем.
-            for schema_name in inspector.get_schema_names():
-
-                # Это системные схемы PostgreSQL, а не пользовательские таблицы, которые мы хотим показывать аналитику.
-                if schema_name in {
-                    "information_schema",
-                    "pg_catalog",
-                    "pg_toast",
-                }:
-                    continue
-
-                # Таблицы и представления — разные объекты.
-                table_names = inspector.get_table_names(
-                    schema=schema_name
-                )
-                view_names = inspector.get_view_names(
-                    schema=schema_name
-                )
-
-                # Обрабатываем и таблицы, и представления.
-                # set убирает дубликаты, если они есть.
-                for table_name in sorted(
-                    set(table_names) | set(view_names)
+                if not inspector.has_table(
+                    table_name,
+                    schema=schema_name,
                 ):
-                    is_view = table_name in view_names
-
-                    # Получаем описание колонок: имена, типы, возможность NULL и значения по умолчанию.
-                    columns = inspector.get_columns(
-                        table_name,
-                        schema=schema_name,
+                    raise ValueError(
+                        f"Объект {schema_name}.{table_name} не найден"
                     )
 
-                    # Первичный ключ помогает распознать идентификаторы.
-                    pk_info = inspector.get_pk_constraint(
-                        table_name,
-                        schema=schema_name,
-                    )
-                    primary_keys = set(
-                        pk_info.get("constrained_columns") or []
-                    )
+                views = set(
+                    inspector.get_view_names(schema=schema_name)
+                )
 
-                    object_id = self._make_object_id(
+                # materialized_views = set(
+                #     inspector.get_materialized_view_names(
+                #         schema=schema_name
+                #     )
+                # )
+
+                # if table_name in materialized_views:
+                #     object_type = "materialized_view"
+                # el
+                if table_name in views:
+                    object_type = "view"
+                else:
+                    object_type = "table"
+
+                columns = inspector.get_columns(
+                    table_name,
+                    schema=schema_name,
+                )
+
+                primary_key = inspector.get_pk_constraint(
+                    table_name,
+                    schema=schema_name,
+                )
+
+                primary_key_columns = set(
+                    primary_key.get("constrained_columns") or []
+                )
+
+                object_id = self._make_object_id(
+                    source.source_id,
+                    schema_name,
+                    table_name,
+                )
+
+                fields = [
+                    SchemaField(
+                        name=column["name"],
+                        inferred_type=str(column["type"]),
+                        nullable=column.get("nullable"),
+                        is_identifier_candidate=(
+                                column["name"] in primary_key_columns
+                        ),
+                    )
+                    for column in columns
+                ]
+
+                schema_object = SchemaObject(
+                    object_id=object_id,
+                    name=f"{schema_name}.{table_name}",
+                    object_type=object_type,
+                    fields=fields,
+                )
+
+                relations: list[SchemaRelation] = []
+                seen_relations: set[
+                    tuple[str, str, str, str]
+                ] = set()
+
+                def add_foreign_key(
+                    fk_schema: str,
+                    fk_table: str,
+                    constrained_columns: list[str],
+                    referred_schema: str,
+                    referred_table: str,
+                    referred_columns: list[str],
+                ) -> None:
+                    if len(constrained_columns) != len(referred_columns):
+                        logger.warning(
+                            "Mismatched foreign key columns: %s.%s -> %s.%s",
+                            fk_schema,
+                            fk_table,
+                            referred_schema,
+                            referred_table,
+                        )
+                        return
+
+                    left_id = self._make_object_id(
                         source.source_id,
-                        schema_name,
-                        table_name,
+                        fk_schema,
+                        fk_table,
+                    )
+                    right_id = self._make_object_id(
+                        source.source_id,
+                        referred_schema,
+                        referred_table,
                     )
 
-                    fields: list[SchemaField] = []
-
-                    for column in columns:
-                        column_name = column["name"]
-
-                        # Это лишь эвристика для подсказки аналитику. Она не доказывает, что поле действительно ID.
-                        is_identifier = (
-                            column_name in primary_keys
-                            or column_name.lower() in {
-                                "id", "uuid", "guid"
-                            }
-                            or column_name.lower().endswith("_id")
+                    for left_field, right_field in zip(
+                        constrained_columns,
+                        referred_columns,
+                    ):
+                        key = (
+                            left_id,
+                            left_field,
+                            right_id,
+                            right_field,
                         )
-
-                        fields.append(
-                            SchemaField(
-                                name=column_name,
-                                inferred_type=str(column["type"]),
-                                nullable=column.get("nullable"),
-                                is_identifier_candidate=is_identifier,
-                                description=None,
-                            )
-                        )
-
-                    # Представляем объект в формате приложения, а не в формате специфичных метаданных PostgreSQL.
-                    objects.append(
-                        SchemaObject(
-                            object_id=object_id,
-                            name=f"{schema_name}.{table_name}",
-                            object_type=(
-                                "view" if is_view else "table"
-                            ),
-                            fields=fields,
-                            # Не делаем COUNT(*) для каждой таблицы во время чтения схемы: это может быть дорого.
-                            row_count=None,
-                        )
-                    )
-
-                    # Получаем внешние ключи именно этой таблицы.
-                    foreign_keys = inspector.get_foreign_keys(
-                        table_name,
-                        schema=schema_name,
-                    )
-
-                    for foreign_key in foreign_keys:
-                        target_table = foreign_key.get(
-                            "referred_table"
-                        )
-
-                        target_schema = (
-                            foreign_key.get("referred_schema")
-                            or default_schema
-                        )
-
-                        local_columns = (
-                            foreign_key.get("constrained_columns")
-                            or []
-                        )
-                        target_columns = (
-                            foreign_key.get("referred_columns")
-                            or []
-                        )
-
-                        # Если сведения о целевой таблице отсутствуют, полноценную связь построить нельзя.
-                        if not target_table:
+                        if key in seen_relations:
                             continue
 
-                        # Внешний ключ может включать несколько колонок.
-                        # Каждая пара колонок становится отдельной связью.
-                        for local_column, target_column in zip(
-                            local_columns,
-                            target_columns,
+                        seen_relations.add(key)
+                        relations.append(
+                            SchemaRelation(
+                                left_object_id=left_id,
+                                left_field=left_field,
+                                right_object_id=right_id,
+                                right_field=right_field,
+                                discovery_method="foreign_key",
+                                confidence=1.0,
+                            )
+                        )
+
+                # Внешние ключи выбранной таблицы.
+                for fk in inspector.get_foreign_keys(
+                    table_name,
+                    schema=schema_name,
+                ):
+                    referred_table = fk.get("referred_table")
+                    if not referred_table:
+                        continue
+
+                    add_foreign_key(
+                        fk_schema=schema_name,
+                        fk_table=table_name,
+                        constrained_columns=(
+                            fk.get("constrained_columns") or []
+                        ),
+                        referred_schema=(
+                            fk.get("referred_schema") or schema_name
+                        ),
+                        referred_table=referred_table,
+                        referred_columns=(
+                            fk.get("referred_columns") or []
+                        ),
+                    )
+
+                # Входящие внешние ключи из остальных таблиц.
+                excluded_schemas = {
+                    "information_schema",
+                    "pg_catalog",
+                }
+
+                for candidate_schema in inspector.get_schema_names():
+                    if (
+                        candidate_schema in excluded_schemas
+                        or candidate_schema.startswith("pg_toast")
+                    ):
+                        continue
+
+                    for candidate_table in inspector.get_table_names(
+                        schema=candidate_schema
+                    ):
+                        if (
+                            candidate_schema == schema_name
+                            and candidate_table == table_name
                         ):
-                            relations.append(
-                                SchemaRelation(
-                                    left_object_id=object_id,
-                                    left_field=local_column,
-                                    right_object_id=self._make_object_id(
-                                        source.source_id,
-                                        target_schema,
-                                        target_table,
-                                    ),
-                                    right_field=target_column,
-                                    discovery_method="foreign_key",
-                                    confidence=1.0,
-                                )
+                            continue
+
+                        for fk in inspector.get_foreign_keys(
+                            candidate_table,
+                            schema=candidate_schema,
+                        ):
+                            if (
+                                fk.get("referred_table") != table_name
+                                or (
+                                    fk.get("referred_schema") or candidate_schema
+                                ) != schema_name
+                            ):
+                                continue
+
+                            add_foreign_key(
+                                fk_schema=candidate_schema,
+                                fk_table=candidate_table,
+                                constrained_columns=(
+                                    fk.get("constrained_columns") or []
+                                ),
+                                referred_schema=schema_name,
+                                referred_table=table_name,
+                                referred_columns=(
+                                    fk.get("referred_columns") or []
+                                ),
                             )
 
-            # Приводим всё к моделям, используемым каталогом схем.
-            return SourceSchema(
-                source_id=source.source_id,
-                version=source.schema_version,
-                objects=objects,
-                relations=relations,
-            )
+                return SourceSchema(
+                    source_id=source.source_id,
+                    objects=[schema_object],
+                    relations=relations,
+                )
 
         finally:
             engine.dispose()
