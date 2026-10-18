@@ -13,4 +13,10 @@ export type Entry = {
   elapsedMs?: number;
   conversationId?: string;
 };
-export type View = "preview" | "schema" | "profile" | "results";
+export type View =
+  | "overview"
+  | "preview"
+  | "schema"
+  | "profile"
+  | "quality"
+  | "results";

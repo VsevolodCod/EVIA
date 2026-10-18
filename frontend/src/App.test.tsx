@@ -4,6 +4,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import App from "./App";
 const source = (id: string) => ({
@@ -133,6 +134,7 @@ it("ignores late source previews after switching source", async () => {
   render(<App />);
   await select("A");
   await select("B");
+  fireEvent.click(screen.getByRole("button", { name: /^Данные$/ }));
   expect(await screen.findByText("row-B")).toBeInTheDocument();
   await act(async () => finish(Response.json([{ product: "stale-A" }])));
   expect(screen.queryByText("stale-A")).not.toBeInTheDocument();
@@ -177,9 +179,9 @@ it("continues one conversation, resumes an older one, and isolates sources", asy
   await screen.findByText("Ответ: Другой диалог");
   expect(screen.queryByText("Ответ: Первый")).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Первый" }));
-  expect(screen.getByText("Ответ: Уточнение")).toBeInTheDocument();
+  expect(within(screen.getByRole("complementary", { name: "Чат с EVIA" })).getByText("Ответ: Уточнение")).toBeInTheDocument();
   await ask("Продолжение");
-  await screen.findByText("Ответ: Продолжение");
+  await within(screen.getByRole("complementary", { name: "Чат с EVIA" })).findByText("Ответ: Продолжение");
   await select("B");
   await ask("Вопрос B");
   await screen.findByText("Ответ: Вопрос B");
@@ -205,7 +207,7 @@ it("does not switch back to an older conversation when its answer arrives late",
   await act(async () => finish[1](Response.json({ answer: "Новый ответ", steps: 1, tool_results: [] })));
   expect(screen.getByText("Новый ответ")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Старый" }));
-  expect(screen.getByText("Старый ответ")).toBeInTheDocument();
+  expect(within(screen.getByRole("complementary", { name: "Чат с EVIA" })).getByText("Старый ответ")).toBeInTheDocument();
 });
 it("shows mock mode honestly and only persists the quiet setting", async () => {
   setup();
@@ -249,6 +251,8 @@ it("uploads a CSV, selects the returned source and loads its real preview", asyn
       ],
     },
   });
+  expect(await screen.findByRole("heading", { name: "Обзор данных" })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: /^Данные$/ }));
   expect(await screen.findByText("uploaded-value")).toBeInTheDocument();
   expect(
     screen.getByRole("button", { name: "Источник uploaded" }),
@@ -281,6 +285,7 @@ it("recovers source metadata after a failed preview request", async () => {
   fireEvent.click(
     await screen.findByRole("button", { name: "Повторить загрузку" }),
   );
+  fireEvent.click(screen.getByRole("button", { name: /^Данные$/ }));
   expect(await screen.findByText("recovered")).toBeInTheDocument();
 });
 it("keeps a failed question in history after stopping the network request", async () => {

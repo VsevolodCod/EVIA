@@ -7,10 +7,20 @@ import {
   type Source,
   type SourceSchema,
 } from "../../api";
-import { DataTable, ErrorNotice, Icon, ToolResults } from "../../components";
+import { DataTable, ErrorNotice, Icon } from "../../components";
 import type { Entry, View } from "../chat/types";
-
 import { EviaMascot } from "../../components/EviaMascot";
+import { AnalysisResult } from "../results/AnalysisResult";
+import { ProfileOverview } from "./ProfileOverview";
+import { ProfileColumns } from "./ProfileColumns";
+import { ProfileQuality } from "./ProfileQuality";
+import {
+  numberText,
+  profileModel,
+  sampleDescription,
+  typeLabel,
+} from "./profileModel";
+import "./analytics.css";
 
 type SourceData = {
   id: string;
@@ -18,14 +28,14 @@ type SourceData = {
   rows: Row[];
   profile: Profile;
 };
-const formatNumber = (number: number) => number.toLocaleString("ru-RU");
-const typeNames: Record<string, string> = {
-  string: "Текст",
-  integer: "Целое число",
-  number: "Число",
-  boolean: "Да / нет",
-  unknown: "Не определён",
-};
+const views: [View, string][] = [
+  ["overview", "Обзор"],
+  ["profile", "Столбцы"],
+  ["quality", "Качество"],
+  ["preview", "Данные"],
+  ["schema", "Схема"],
+  ["results", "Результат"],
+];
 
 export function SourceInspector({
   source,
@@ -44,6 +54,11 @@ export function SourceInspector({
     message: string;
   } | null>(null);
   const [revision, setRevision] = useState(0);
+  const [columnSelection, setColumnSelection] = useState({
+    sourceId: source.source_id,
+    name: "",
+    revision: 0,
+  });
   useEffect(() => {
     const controller = new AbortController();
     setData(null);
@@ -65,28 +80,26 @@ export function SourceInspector({
   }, [source.source_id, revision]);
   const current = data?.id === source.source_id ? data : null;
   const error = failure?.id === source.source_id ? failure.message : null;
-  const rowCounts =
-    current?.schema.objects.map((object) => object.row_count) ?? [];
-  const totalRows =
-    rowCounts.length && rowCounts.every((count) => count !== null)
-      ? rowCounts.reduce<number>((sum, count) => sum + (count ?? 0), 0)
-      : null;
-  const fields =
-    current?.schema.objects.flatMap((object) => object.fields) ?? [];
-  const views: [View, string][] = [
-    ["preview", "Данные"],
-    ["schema", "Схема"],
-    ["profile", "Профиль"],
-    ["results", "Результат"],
-  ];
+  const model = current ? profileModel(current.schema, current.profile) : null;
+  function openColumn(name: string) {
+    setColumnSelection((previous) => ({
+      sourceId: source.source_id,
+      name,
+      revision: previous.revision + 1,
+    }));
+    setView("profile");
+  }
+
   return (
-    <>
+    <div className="analytics-workspace">
       <div className="analysis-heading">
         <div>
+          <p className="analytics-kicker">ИССЛЕДОВАНИЕ ДАННЫХ</p>
           <h1>{source.name}</h1>
           <p className="source-line">
             <span className="status-dot" />
-            CSV · {source.status === "available" ? "Доступен" : source.status}
+            {source.source_type.toUpperCase()} ·{" "}
+            {source.status === "available" ? "Доступен" : source.status}
           </p>
         </div>
         <button
@@ -97,68 +110,47 @@ export function SourceInspector({
           <Icon name="refresh" />
         </button>
       </div>
-      <div className="metrics" aria-label="Сведения об источнике">
+      <div className="analytics-metrics" aria-label="Сведения об источнике">
         <div>
           <span>Строк в источнике</span>
-          <strong>{totalRows === null ? "—" : formatNumber(totalRows)}</strong>
+          <strong>
+            {model?.totalRows == null ? "—" : numberText(model.totalRows)}
+          </strong>
+          <small>Полный датасет</small>
         </div>
         <div>
           <span>Столбцов</span>
-          <strong>{current ? formatNumber(fields.length) : "—"}</strong>
+          <strong>{model ? numberText(model.fields.length) : "—"}</strong>
+          <small>В схеме источника</small>
         </div>
         <div>
-          <span>Строк в выборке</span>
+          <span>Строк изучено</span>
           <strong>
-            {current ? formatNumber(current.profile.sample_size) : "—"}
+            {current ? numberText(current.profile.sample_size) : "—"}
           </strong>
-          <small>Для профиля данных</small>
+          <small>Для профиля выборки</small>
         </div>
       </div>
-      <section className="data-card" aria-label="Исследование данных">
-        <div className="tabs" aria-label="Разделы источника">
+      <section className="analytics-report" aria-label="Исследование данных">
+        <nav className="analytics-tabs" aria-label="Разделы источника">
           {views.map(([id, label]) => (
             <button
               key={id}
+              aria-label={label}
               aria-pressed={view === id}
-              onClick={() => setView(id)}
+              onClick={() => (id === "profile" ? openColumn("") : setView(id))}
             >
               {label}
-              {id === "results" && entry?.answer && (
-                <span className="tab-count">
-                  {entry.answer.tool_results.length}
+              {id === "quality" && Boolean(model?.missingFields.length) && (
+                <span className="count-badge">
+                  {model!.missingFields.length}
                 </span>
               )}
             </button>
           ))}
-        </div>
+        </nav>
         {view === "results" ? (
-          <div className="results-pane">
-            <div className="pane-heading">
-              <div>
-                <h2>Результаты инструментов</h2>
-              </div>
-            </div>
-            {entry?.answer ? (
-              <>
-                <p className="result-question">{entry.question}</p>
-                <ToolResults results={entry.answer.tool_results} />
-              </>
-            ) : (
-              <div className="empty-table">
-                <Icon name="chat" size={30} />
-                <p>
-                  {entry?.state === "pending"
-                    ? "Эвия работает над вопросом"
-                    : "Здесь появится результат"}
-                </p>
-                <span>
-                  {entry?.state === "error"
-                    ? "Повторите вопрос в диалоге."
-                    : "Задайте вопрос об источнике в диалоге справа."}
-                </span>
-              </div>
-            )}
-          </div>
+          <AnalysisResult entry={entry} />
         ) : error ? (
           <div className="pane-padding">
             <ErrorNotice
@@ -167,135 +159,130 @@ export function SourceInspector({
               label="Повторить загрузку"
             />
           </div>
-        ) : !current ? (
+        ) : !current || !model ? (
           <div className="loading-panel" role="status">
             <EviaMascot state="profiling" size={80} decorative />
             Изучаем структуру источника…
           </div>
-        ) : view === "preview" ? (
-          <>
-            <div className="pane-heading">
-              <div>
-                <h2>Предпросмотр данных</h2>
-                <p>
-                  Первые {formatNumber(current.rows.length)} строк · максимум
-                  100
-                </p>
-              </div>
-              <Icon name="grid" />
-            </div>
-            <DataTable
-              rows={current.rows}
-              columns={current.schema.objects[0]?.fields.map(
-                (field) => field.name,
-              )}
-              label="Предпросмотр источника"
-            />
-          </>
-        ) : view === "schema" ? (
-          <div className="pane-padding">
-            <div className="pane-heading compact">
-              <div>
-                <h2>Структура источника</h2>
-                <p>Типы определены автоматически по выборке.</p>
-              </div>
-            </div>
-            {current.schema.objects.length === 0 ? (
-              <p className="muted">В источнике нет объектов схемы.</p>
-            ) : (
-              current.schema.objects.map((object) => (
-                <section key={object.object_id}>
-                  <h3 className="object-name">{object.name}</h3>
-                  <div className="schema-list">
-                    {object.fields.map((field, i) => (
-                      <div className="schema-field" key={`${field.name}-${i}`}>
-                        <span className="field-type">
-                          {field.inferred_type === "string"
-                            ? "Aa"
-                            : field.inferred_type === "boolean"
-                              ? "✓"
-                              : "#"}
-                        </span>
-                        <div>
-                          <strong>{field.name}</strong>
-                          <small>
-                            {typeNames[field.inferred_type] ||
-                              field.inferred_type}
-                            {field.is_identifier_candidate
-                              ? " · Возможный идентификатор"
-                              : ""}
-                          </small>
-                          {field.description && <p>{field.description}</p>}
-                        </div>
-                        <span className="nullable">
-                          {field.nullable === null
-                            ? "Нет выборки"
-                            : field.nullable
-                              ? "Есть пропуски"
-                              : "Без пропусков"}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              ))
-            )}
-          </div>
         ) : (
-          <div className="pane-padding">
-            <div className="pane-heading compact">
-              <div>
-                <h2>Профиль выборки</h2>
+          <>
+            {["overview", "profile", "quality"].includes(view) && (
+              <div className="profile-scope">
+                <span className="scope-dot" aria-hidden="true" />
                 <p>
-                  По {formatNumber(current.profile.sample_size)} строкам из
-                  первых {formatNumber(current.profile.sample_limit)}.
+                  {sampleDescription(current.profile)}
+                  <small>
+                    Статистика относится к выборке, а не ко всему источнику.
+                  </small>
                 </p>
               </div>
-              <span className="pill">Выборка</span>
-            </div>
-            <p className="sample-note">
-              Частоты, пропуски и уникальные значения относятся только к
-              выборке, а не ко всему источнику.
-            </p>
-            {Object.entries(current.profile.columns).map(([name, column]) => (
-              <section className="profile-column" key={name}>
-                <h3>{name}</h3>
-                <dl>
+            )}
+            {view === "overview" ? (
+              <ProfileOverview
+                model={model}
+                profile={current.profile}
+                onColumn={openColumn}
+                onQuality={() => setView("quality")}
+                onColumns={() => openColumn("")}
+              />
+            ) : view === "profile" ? (
+              <ProfileColumns
+                key={`${source.source_id}-${columnSelection.revision}`}
+                fields={model.fields}
+                initialSearch={
+                  columnSelection.sourceId === source.source_id
+                    ? columnSelection.name
+                    : ""
+                }
+              />
+            ) : view === "quality" ? (
+              <ProfileQuality model={model} onColumn={openColumn} />
+            ) : view === "preview" ? (
+              <>
+                <div className="pane-heading">
                   <div>
-                    <dt>Заполнено</dt>
-                    <dd>{formatNumber(column.sample_non_null_count)}</dd>
+                    <h2>Предпросмотр данных</h2>
+                    <p>
+                      Первые {numberText(current.rows.length)} строк · максимум
+                      100
+                    </p>
                   </div>
-                  <div>
-                    <dt>Пропуски</dt>
-                    <dd>{formatNumber(column.sample_null_count)}</dd>
-                  </div>
-                  <div>
-                    <dt>Уникальных</dt>
-                    <dd>{formatNumber(column.distinct_sample_values)}</dd>
-                  </div>
-                </dl>
-                <small>Частые значения в выборке</small>
-                <div className="top-values">
-                  {column.top_values.length ? (
-                    column.top_values.map((item, i) => (
-                      <span key={i}>
-                        {item.value}
-                        <b>{formatNumber(item.count)}</b>
-                      </span>
-                    ))
-                  ) : (
-                    <span>Нет заполненных значений</span>
-                  )}
+                  <Icon name="grid" />
                 </div>
-              </section>
-            ))}
-            <details className="profile-note">
-              <summary>Примечание сервера</summary>
-              <p>{current.profile.note}</p>
-            </details>
-          </div>
+                <DataTable
+                  rows={current.rows}
+                  columns={current.schema.objects[0]?.fields.map(
+                    (field) => field.name,
+                  )}
+                  label="Предпросмотр источника"
+                />
+              </>
+            ) : (
+              <div className="analytics-section">
+                <div className="analytics-title">
+                  <div>
+                    <span className="analytics-kicker">
+                      УСТРОЙСТВО ДАТАСЕТА
+                    </span>
+                    <h2>Структура источника</h2>
+                  </div>
+                </div>
+                <p className="analytics-caption">
+                  Типы определены автоматически по выборке.
+                </p>
+                {!current.schema.objects.length ? (
+                  <p className="muted">В источнике нет объектов схемы.</p>
+                ) : (
+                  current.schema.objects.map((object) => (
+                    <section key={object.object_id}>
+                      <h3 className="object-name">{object.name}</h3>
+                      <div className="schema-list">
+                        {object.fields.map((field) => (
+                          <div className="schema-field" key={field.name}>
+                            <span className="field-type">
+                              {field.inferred_type === "string" ? "Aa" : "#"}
+                            </span>
+                            <div>
+                              <strong>{field.name}</strong>
+                              <small>
+                                {typeLabel(field.inferred_type)}
+                                {field.is_identifier_candidate
+                                  ? " · Возможный идентификатор"
+                                  : ""}
+                              </small>
+                              {field.description && <p>{field.description}</p>}
+                            </div>
+                            <span className="nullable">
+                              {field.nullable === null
+                                ? "Нет выборки"
+                                : field.nullable
+                                  ? "Есть пропуски"
+                                  : "Без пропусков"}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                  ))
+                )}
+              </div>
+            )}
+            {["overview", "profile", "quality"].includes(view) && (
+              <details className="profile-method">
+                <summary>Как рассчитан профиль</summary>
+                <p>
+                  Источник: {source.name}. Версия схемы:{" "}
+                  {current.schema.version}. Число строк датасета берётся из
+                  схемы; остальные показатели — из профиля выборки.
+                  Заполненность — доля непустых ячеек среди ячеек с доступной
+                  статистикой. Частые значения сравниваются как исходные строки.
+                </p>
+                <p>{current.profile.note}</p>
+              </details>
+            )}
+          </>
         )}
       </section>
-    </>
+    </div>
   );
 }
