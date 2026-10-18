@@ -5,7 +5,7 @@ import io
 from itertools import islice
 from typing import TextIO
 
-PARSER_VERSION = 3
+PARSER_VERSION = 4
 SAMPLE_CHARS = 65536
 
 
@@ -29,13 +29,15 @@ def detect_delimiter(sample: str) -> str:
         return ','  # A valid one-column CSV needs no separator.
     candidates.sort(reverse=True)
     best = candidates[0]
-    ties = [item for item in candidates if item[:2] == best[:2]]
+    ties = [item for item in candidates if item[:3] == best[:3]]
     if len(ties) > 1:
-        try:
-            detected = csv.Sniffer().sniff(sample, delimiters=''.join(item[3] for item in ties)).delimiter
-            return detected
-        except csv.Error:
-            pass
+        # In Russian-language sources a semicolon-delimited record with decimal
+        # commas can look equally regular when parsed by comma.  Sniffer cannot
+        # distinguish that shape and chooses comma, collapsing the real schema.
+        # Prefer the semicolon convention only after all structural evidence
+        # (consistency and width) is tied.
+        preferred = (';', '\t', '|', ',')
+        return next(delimiter for delimiter in preferred if any(item[3] == delimiter for item in ties))
     return best[3]
 
 

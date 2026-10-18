@@ -5,7 +5,7 @@ import pytest
 from app.models import SourceSchema
 from app.schema_catalog import SchemaCatalog
 from app.source_service import SourceService
-from app.data_sources.csv_format import PARSER_VERSION
+from app.data_sources.csv_format import PARSER_VERSION, detect_delimiter
 
 
 @pytest.fixture
@@ -54,7 +54,17 @@ def test_full_file_validation_catches_wrong_width_after_sample(service):
         service.register_csv('tail.csv', content)
 
 
-@pytest.mark.parametrize('old_parser_version', [1, 2])
+def test_semicolon_is_preferred_when_decimal_commas_are_data_not_delimiters():
+    content = (
+        'Код;План, ч;Факт, ч\n'
+        'ЗД-1;4,00;3,00\n'
+        'ЗД-2;2,50;2,00\n'
+    )
+
+    assert detect_delimiter(content) == ';'
+
+
+@pytest.mark.parametrize('old_parser_version', [1, 2, 3])
 def test_legacy_schema_repaired_once_without_reupload(service, old_parser_version):
     source = service.register_csv('synthetic.csv', b'id;value\n001;10\n')
     service.catalog.save_schema(SourceSchema(source_id=source.source_id, parser_version=old_parser_version))
