@@ -12,6 +12,8 @@ def test_production_image_builds_frontend_and_starts_http_server() -> None:
     assert "npm run build" in dockerfile
     assert "FROM python:3.12-slim" in dockerfile
     assert "COPY --from=frontend-build" in dockerfile
+    assert "useradd --system --gid evia" in dockerfile
+    assert "USER evia" in dockerfile
     assert "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}" in dockerfile
 
 

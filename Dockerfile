@@ -28,7 +28,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app/ ./app/
 COPY --from=frontend-build /build/frontend/dist ./frontend/dist
 
-RUN mkdir -p /data
+RUN groupadd --system evia \
+    && useradd --system --gid evia --home-dir /app --shell /usr/sbin/nologin evia \
+    && mkdir -p /data \
+    && chown -R evia:evia /app /data
+
+USER evia
 
 EXPOSE 8000
 
