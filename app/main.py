@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 import logging
+from pathlib import Path
 from typing import cast
 
 from fastapi import (
@@ -14,7 +15,7 @@ from fastapi import (
 
 from app.agent import AgentRuntime
 from app.config import PROJECT_ROOT, get_settings
-from app.data_sources import inspect_postgresql_connection
+from app.data_sources import inspect_postgresql_connection, inspect_clickhouse_connection, inspect_sqlite_connection
 from app.db import create_chat_database, initialize_chat_database, create_catalog_database
 from app.llm.factory import create_llm_provider
 from app.models import *
@@ -207,6 +208,80 @@ def upload_postgresql(
         ) from exc
 
 
+@app.post("/sources/clickhouse", response_model=list[DataSource])
+def upload_clickhouse(
+        connection_properties: ClickHouseProperties,
+        name: str,
+
+        connection_manager: ConnectionManager = Depends(get_connection_manager),
+        source_service: SourceService = Depends(get_source_service)
+):
+    try:
+        objects = inspect_clickhouse_connection(connection_properties)
+        logger.info(f"Successful connection to ClickHouse DB: '{name}'")
+        connection_id = connection_manager.create_connection(
+            name=name,
+            connection_type="clickhouse",
+            properties=connection_properties
+        )
+        logger.info(f"Connected to connection with id: '{connection_id}'")
+        return source_service.register_clickhouse(
+            connection_id=connection_id,
+            name_db=name,
+            objects=objects
+        )
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        ) from exc
+
+    except Exception as exc:
+        logger.exception("Could not register ClickHouse")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Could not register ClickHouse: {type(exc).__name__}",
+        ) from exc
+
+
+@app.post("/sources/sqlite", response_model=list[DataSource])
+def upload_sqlite(
+        path: str,
+        name: str,
+
+        connection_manager: ConnectionManager = Depends(get_connection_manager),
+        source_service: SourceService = Depends(get_source_service)
+):
+    try:
+        objects = inspect_sqlite_connection(path)
+        logger.info(f"Successful connection to SQLite DB: '{name}'")
+        connection_id = connection_manager.create_connection(
+            name=name,
+            connection_type="sqlite",
+            properties={"path": path}
+        )
+        logger.info(f"Connected to connection with id: '{connection_id}'")
+        return source_service.register_sqlite(
+            connection_id=connection_id,
+            name_db=name,
+            objects=objects
+        )
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        ) from exc
+
+    except Exception as exc:
+        logger.exception("Could not register SQLite")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Could not register SQLite: {type(exc).__name__}",
+        ) from exc
+
+
 @app.get("/sources", response_model=list[DataSource])
 def list_sources(
         catalog: SchemaCatalog = Depends(get_catalog)
@@ -378,6 +453,7 @@ async def get_chat(
     :param request:
     :param limit: Количество загружаемых сообщений
     :param offset: Номер последнего загруженного сообщения
+    :param before: С какого загружали до этого
     :return:
     """
     chat_manager: ChatManager = request.app.state.chat_manager
@@ -442,6 +518,32 @@ async def delete_chat(
         )
 
     return None
+
+
+@app.get("/connections", response_model=list[DBConnection])
+async def list_connections(
+        request: Request,
+):
+    connection_manager: ConnectionManager = request.app.state.connection_manager
+    return connection_manager.list_connections()
+
+
+@app.get("/connections/{connection_id}", response_model=DBConnection)
+async def get_connection(
+        connection_id: str,
+        request: Request,
+):
+    connection_manager: ConnectionManager = request.app.state.connection_manager
+
+    connection = connection_manager.get_connection(connection_id)
+
+    if connection is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Connection '{connection_id}' not found",
+        )
+
+    return connection
 
 
 # Register last: the UI must never shadow the API or its documentation.

@@ -1,3 +1,5 @@
 from app.data_sources.base import DataSourceAdapter
 from app.data_sources.csv_adapter import CSVAdapter
 from app.data_sources.postgresql_adapter import PostgreSQLAdapter, inspect_postgresql_connection
+from app.data_sources.clickhouse_adapter import ClickHouseAdapter, inspect_clickhouse_connection
+from app.data_sources.sqlite_adapter import SQLiteAdapter, inspect_sqlite_connection

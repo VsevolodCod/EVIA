@@ -102,7 +102,7 @@ class ConnectionManager:
 
             raise ValueError(f"Unsupported connection type: {connection_type}")
 
-    def list_connections(self) -> list[dict]:
+    def list_connections(self) -> list[DBConnection]:
         """
         Возвращает список подключений без конфигураций и паролей.
         """
@@ -112,12 +112,12 @@ class ConnectionManager:
             ).all()
 
             return [
-                {
-                    "connection_id": connection.connection_id,
-                    "name": connection.name,
-                    "connection_type": connection.connection_type,
-                    "created_at": connection.created_at,
-                }
+                DBConnection(
+                    connecion_id=connection.connection_id,
+                    name=connection.name,
+                    connection_type=connection.connection_type,
+                    created_at=connection.created_at
+                )
                 for connection in connections
             ]
 

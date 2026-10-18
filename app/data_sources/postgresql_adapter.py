@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
 from typing import Any
 
 from sqlalchemy import (
@@ -12,9 +11,9 @@ from sqlalchemy import (
     create_engine,
     func,
     inspect,
-    select, text,
+    select,
 )
-from sqlalchemy.engine import Engine, URL, make_url
+from sqlalchemy.engine import Engine, URL
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.connection_manager import ConnectionManager
@@ -34,6 +33,16 @@ logger = logging.getLogger(__name__)
 def inspect_postgresql_connection(
     properties: PostgreSQLProperties,
 ) -> list[tuple[str, str]]:
+    """
+    Проверяет подключение и возвращает список доступных
+    таблиц и представлений в базе PostgresSQL.
+
+    Результат:
+        [
+            ("default", "users"),
+            ("analytics", "events"),
+        ]
+    """
     url = URL.create(
         "postgresql+psycopg",
         username=properties.username,
@@ -455,11 +464,8 @@ class PostgreSQLAdapter(DataSourceAdapter):
         finally:
             engine.dispose()
 
-    def _reflect_table(
-        self,
-        engine: Engine,
-        object_name: str,
-    ) -> Table:
+    @staticmethod
+    def _reflect_table(engine: Engine, object_name: str) -> Table:
         """
         Получает SQLAlchemy-описание существующей таблицы.
 
