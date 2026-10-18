@@ -1,0 +1,17 @@
+.git
+.github
+.worktrees
+.venv
+.pytest_cache
+__pycache__
+*.py[cod]
+.env
+data
+logs
+frontend/node_modules
+frontend/dist
+frontend/coverage
+frontend/test-results
+frontend/playwright-report
+SEVINO GOVNO
+прогон таски 5

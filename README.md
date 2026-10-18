@@ -36,6 +36,35 @@ $env:LLM_PROVIDER = 'mock'
 
 Откройте **http://127.0.0.1:8000**. API-документация: **http://127.0.0.1:8000/docs**. `Ctrl+C` завершает процессы, созданные launcher. Готовое приложение обслуживается одним FastAPI; Node.js нужен для подготовки сборки, а не для её дальнейшего запуска.
 
+## Публикация на Railway
+
+Railway разворачивает EVIA как один контейнер: на стадии сборки Docker собирает React, а FastAPI отдаёт готовый интерфейс и API с одного домена. Первый production-запуск использует тестовый провайдер, поэтому не требует GPU, Ollama или ключа внешней LLM.
+
+1. В проекте Railway откройте сервис **EVIA** → **Settings** → **Source** и выберите репозиторий `VsevolodCod/EVIA`, ветку `main`. Root Directory оставьте пустым.
+2. Railway обнаружит `Dockerfile`. В **Deploy** оставьте пустыми Pre-deploy Command и Custom Start Command: команды уже определены образом.
+3. Добавьте Volume к сервису EVIA с Mount Path `/data`.
+4. В **Variables** задайте:
+
+   ```dotenv
+   LLM_PROVIDER=mock
+   BI_DATA_DIR=/data
+   CATALOG_DB_PATH=/data/catalog.db
+   CHAT_DB_PATH=/data/chats.db
+   ```
+
+   `PORT` Railway задаёт сам. Не добавляйте `DATABASE_URL`: текущая версия приложения хранит каталог, файлы и историю в SQLite на Volume. Сервис Postgres можно оставить созданным, но его подключение требует отдельной миграции приложения.
+5. В **Networking** включите HTTP Proxy и сгенерируйте публичный домен. В **Healthcheck Path** укажите `/health`.
+6. Нажмите Deploy. Успешная проверка: домен открывает интерфейс, а `<домен>/health` отвечает JSON с `status: "ok"`.
+
+Перед отправкой в Railway можно проверить тот же production-образ локально:
+
+```sh
+docker build -t evia:local .
+docker run --rm -p 8000:8000 -e PORT=8000 -v "$(pwd)/.local-data:/data" evia:local
+```
+
+Откройте `http://127.0.0.1:8000/health`. Второй запуск с тем же `-v "$(pwd)/.local-data:/data"` использует те же CSV, каталог и сохранённые чаты. Каталог `.local-data/` содержит пользовательские данные и не должен попадать в git.
+
 ### Первое исследование
 
 1. Загрузите `sample-data/sales.csv` — это небольшой синтетический пример, не конкурсные данные.
