@@ -24,7 +24,7 @@ export default function App() {
     Record<string, string | undefined>
   >({});
   const [drafts, setDrafts] = useState<Record<string, string>>({});
-  const [view, setView] = useState<View>("preview");
+  const [view, setView] = useState<View>("overview");
   const [quiet, setQuiet] = useState(() => {
     try {
       return localStorage.getItem("linza.quiet") === "true";
@@ -124,7 +124,7 @@ export default function App() {
     setSelectedId(id);
     setUploadFailure(null);
     setUploadError("");
-    setView("preview");
+    setView("overview");
   }
   function changeDraft(value: string) {
     if (selectedId)
@@ -141,7 +141,7 @@ export default function App() {
     setUploadedId(null);
     setUploadFailure(null);
     setUploadError("");
-    setView("preview");
+    setView("overview");
     composer.current?.focus();
   }
   function toggleQuiet() {
