@@ -1,0 +1,9 @@
+{
+  "contract": "Error",
+  "data": {
+    "code": "QUERY_TIMEOUT",
+    "message": "Query time limit exceeded",
+    "request_id": "request-error",
+    "retryable": true
+  }
+}

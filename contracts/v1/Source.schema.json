@@ -1,0 +1,40 @@
+{
+  "$id": "urn:evia:contracts:1.0:Source",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "schema_version": {
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "source_id": {
+      "title": "Source Id",
+      "type": "string"
+    },
+    "source_type": {
+      "title": "Source Type",
+      "type": "string"
+    },
+    "status": {
+      "default": "registered",
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "required": [
+    "source_id",
+    "name",
+    "source_type"
+  ],
+  "title": "DataSource",
+  "type": "object"
+}

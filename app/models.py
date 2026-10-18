@@ -45,6 +45,7 @@ class SchemaRelation(BaseModel):
 
 class SourceSchema(BaseModel):
     source_id: str
+    parser_version: int = 1
     version: int = 1
     discovered_at: datetime = Field(default_factory=utc_now)
     objects: list[SchemaObject] = Field(default_factory=list)
@@ -68,10 +69,28 @@ class LLMMessage(BaseModel):
     tool_calls: list[dict[str, Any]] | None = None
 
 
+class ModelTiming(BaseModel):
+    elapsed_ms: float = Field(default=0, ge=0)
+    model: str | None = None
+    load_ms: float | None = Field(default=None, ge=0)
+    prompt_ms: float | None = Field(default=None, ge=0)
+    generation_ms: float | None = Field(default=None, ge=0)
+    prompt_tokens: int | None = Field(default=None, ge=0)
+    generated_tokens: int | None = Field(default=None, ge=0)
+
+
+class AgentTiming(BaseModel):
+    elapsed_ms: float = Field(default=0, ge=0)
+    llm_ms: float = Field(default=0, ge=0)
+    tools_ms: float = Field(default=0, ge=0)
+    calls: list[ModelTiming] = Field(default_factory=list)
+
+
 class LLMResponse(BaseModel):
     content: str = ""
     tool_calls: list[ToolCall] = Field(default_factory=list)
     raw_tool_calls: list[dict[str, Any]] = Field(default_factory=list)
+    timing: ModelTiming | None = None
 
 
 class ToolResult(BaseModel):
@@ -91,6 +110,7 @@ class AskResponse(BaseModel):
     steps: int
     tool_results: list[ToolResult] = Field(default_factory=list)
     chat_id: str | None = None
+    timing: AgentTiming | None = None
 
 
 class ChatMessage(LLMMessage):
@@ -128,4 +148,5 @@ class ChatHistoryResponse(BaseModel):
     messages: list[ChatMessage]
     total_messages: int
     next_offset: int | None
+    next_before: int | None = None
     has_more: bool

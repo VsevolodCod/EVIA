@@ -1,0 +1,72 @@
+import json
+
+import httpx
+import pytest
+
+from app.agent import AgentRuntime
+from app.config import Settings
+from app.llm.ollama_provider import OllamaModel, OllamaProvider
+from app.models import LLMResponse, ToolCall, ToolResult
+
+
+def test_ollama_nanoseconds_missing_metrics_and_zero_tokens():
+    parsed = OllamaProvider._parse_response({'model': 'test', 'message': {'content': 'ok'},
+        'load_duration': 2_500_000, 'prompt_eval_duration': 7_000_000,
+        'eval_duration': 20_000_000, 'prompt_eval_count': 5, 'eval_count': 0})
+    assert parsed.timing.load_ms == 2.5
+    assert parsed.timing.prompt_ms == 7
+    assert parsed.timing.generation_ms == 20
+    assert parsed.timing.generated_tokens == 0
+    assert OllamaProvider._parse_response({'message': {}}).timing.load_ms is None
+
+
+@pytest.mark.asyncio
+async def test_agent_timings_accumulate_across_tool_rounds(monkeypatch):
+    clock = iter([0, 1, 3, 4, 5, 6, 9, 10])
+    monkeypatch.setattr('app.agent.perf_counter', lambda: next(clock))
+    class LLM:
+        count = 0
+        async def chat(self, *args):
+            self.count += 1
+            return LLMResponse(tool_calls=[ToolCall(name='test')]) if self.count == 1 else LLMResponse(content='ok')
+    class Tools:
+        def descriptions(self): return []
+        def execute(self, *args): return ToolResult(tool_name='test', ok=True)
+    result = await AgentRuntime(LLM(), Tools()).ask('test')
+    assert result.timing.elapsed_ms == 10000
+    assert result.timing.llm_ms == 5000
+    assert result.timing.tools_ms == 1000
+    assert [c.elapsed_ms for c in result.timing.calls] == [2000, 3000]
+    assert all(c.load_ms is None for c in result.timing.calls)
+
+
+@pytest.mark.asyncio
+async def test_failed_call_logs_elapsed_without_prompt(monkeypatch, caplog):
+    clock = iter([0, 1, 3, 4])
+    monkeypatch.setattr('app.agent.perf_counter', lambda: next(clock))
+    class FailingLLM:
+        async def chat(self, *args): raise RuntimeError('outage')
+    class Tools:
+        def descriptions(self): return []
+    with caplog.at_level('INFO'), pytest.raises(RuntimeError):
+        await AgentRuntime(FailingLLM(), Tools()).ask('PRIVATE_QUESTION')
+    assert 'elapsed_ms=4000.0 llm_ms=2000.0' in caplog.text
+    assert 'outcome=error' in caplog.text
+    assert 'PRIVATE_QUESTION' not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_keep_alive_is_sent_without_changing_context_or_token_limit(monkeypatch):
+    monkeypatch.setenv('LLM_MODEL', 'synthetic')
+    monkeypatch.setenv('OLLAMA_KEEP_ALIVE', '60m')
+    monkeypatch.setenv('MAX_TOKENS_G', '768')
+    monkeypatch.setenv('THINKING', '0')
+    original = httpx.AsyncClient
+    def handle(request):
+        data = json.loads(request.content)
+        assert data['keep_alive'] == '60m'
+        assert data['options'] == {'num_ctx': 4096, 'num_predict': 768}
+        assert data['think'] is False
+        return httpx.Response(200, json={'done': True})
+    monkeypatch.setattr(httpx, 'AsyncClient', lambda **kwargs: original(transport=httpx.MockTransport(handle), **kwargs))
+    assert (await OllamaModel(Settings()).generate({'messages': []}))['done']

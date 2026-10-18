@@ -1,0 +1,23 @@
+{
+  "contract": "AgentResponse",
+  "data": {
+    "analysis": null,
+    "answer": "Query timed out",
+    "artifact_ids": [],
+    "chat_id": null,
+    "contract_version": "1.0",
+    "error": {
+      "code": "QUERY_TIMEOUT",
+      "message": "Query time limit exceeded",
+      "request_id": "request-error",
+      "retryable": true
+    },
+    "job_id": null,
+    "request_id": "request-error",
+    "results": [],
+    "status": "error",
+    "steps": 1,
+    "timing": null,
+    "tool_results": []
+  }
+}
