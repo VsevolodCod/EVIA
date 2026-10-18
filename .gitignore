@@ -3,6 +3,8 @@ __pycache__/
 .pytest_cache/
 .env
 data/
+# Organizer CSVs used only for local audit; never commit them.
+прогон таски 5/
 *.py[cod]
 # Local UI build, dependencies, verification output and isolated checkouts
 .worktrees/

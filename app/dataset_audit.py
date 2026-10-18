@@ -6,6 +6,7 @@ import csv
 import codecs
 from datetime import date, datetime
 import hashlib
+from itertools import combinations
 from pathlib import Path
 import re
 from typing import Any
@@ -96,6 +97,45 @@ def _semantic_candidates(
     return sorted(labels), grain_candidates
 
 
+def _is_date_like_name(name: str) -> bool:
+    normalized = name.casefold()
+    return any(token in normalized for token in ("date", "дата", "time", "время"))
+
+
+def _find_composite_grain_keys(
+    path: Path, *, encoding: str, delimiter: str, header: list[str], row_count: int,
+) -> list[list[str]]:
+    """Find the first unique two- or three-column grain without retaining rows."""
+    candidate_names = [name for name in header if _ID_NAME.search(name.casefold()) or _is_date_like_name(name)]
+    if len(candidate_names) < 2:
+        return []
+    indexes = {name: header.index(name) for name in candidate_names}
+    for width in range(2, min(3, len(candidate_names)) + 1):
+        for names in combinations(candidate_names, width):
+            distinct_keys: set[tuple[str, ...]] = set()
+            valid = True
+            with path.open("r", encoding=encoding, newline="") as source:
+                reader = csv.reader(source, delimiter=delimiter, strict=True)
+                next(reader, None)
+                observed_rows = 0
+                for row in reader:
+                    if not row:
+                        continue
+                    if len(row) != len(header):
+                        raise ValueError(
+                            f"{path.name}: row ending at line {reader.line_num} has {len(row)} fields; expected {len(header)}",
+                        )
+                    observed_rows += 1
+                    key = tuple(row[indexes[name]] for name in names)
+                    if "" in key:
+                        valid = False
+                        break
+                    distinct_keys.add(key)
+            if valid and observed_rows == row_count and len(distinct_keys) == row_count:
+                return [list(names)]
+    return []
+
+
 def audit_csv(path: Path) -> dict[str, Any]:
     """Return metadata and aggregate field statistics, never source rows."""
     encoding = _detect_encoding(path)
@@ -154,6 +194,13 @@ def audit_csv(path: Path) -> dict[str, Any]:
     semantic_candidates, grain_candidates = _semantic_candidates(
         schema, row_count=row_count, distinct_values=distinct_values,
     )
+    composite_grain_keys = []
+    if not grain_candidates:
+        composite_grain_keys = _find_composite_grain_keys(
+            path, encoding=encoding, delimiter=delimiter, header=header, row_count=row_count,
+        )
+        if composite_grain_keys:
+            semantic_candidates = sorted(set(semantic_candidates) | {"grain"})
     return {
         "name": path.name,
         "sha256": digest.hexdigest(),
@@ -164,6 +211,7 @@ def audit_csv(path: Path) -> dict[str, Any]:
         "schema": schema,
         "semantic_candidates": semantic_candidates,
         "candidate_grain_keys": grain_candidates,
+        "candidate_composite_grain_keys": composite_grain_keys,
     }
 
 
@@ -188,9 +236,10 @@ def write_public_method_report() -> str:
 публикует raw rows, значения ячеек или исходные CSV.
 
 Повторный запуск над теми же байтами должен вернуть те же hash и metadata.
-Кандидаты ключей, grain, дат, десятичных значений, NULL, возвратов, событий,
-сессий, попыток и цепочек являются эвристиками для последующей проверки
-командой данных: они не подтверждают бизнес-смысл автоматически.
+Кандидаты ключей, в том числе двух- и трёхколоночный grain, дат, десятичных
+значений, NULL, возвратов, событий, сессий, попыток и цепочек являются
+эвристиками для последующей проверки командой данных: они не подтверждают
+бизнес-смысл автоматически.
 
 Ограничения: распознаются UTF-8, UTF-8 BOM, UTF-16 и Windows-1251; сложные
 форматы и неоднозначные разделители требуют ручной проверки. Публичный отчёт

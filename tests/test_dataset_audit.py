@@ -1,7 +1,7 @@
 import csv
 import json
 
-from app.dataset_audit import audit_directory, write_public_method_report
+from app.dataset_audit import audit_csv, audit_directory, write_public_method_report
 
 
 def write_csv(path, rows, *, encoding="utf-8-sig", delimiter=";"):
@@ -72,3 +72,26 @@ def test_audit_rejects_an_unexpected_number_of_files_and_public_report_has_no_da
     assert "raw rows" in report
     assert "secret-value" not in report
     assert "only.csv" not in report
+
+
+def test_audit_finds_a_composite_grain_when_no_single_identifier_is_unique(tmp_path):
+    dataset = tmp_path / "pharmacy.csv"
+    write_csv(
+        dataset,
+        [
+            ["Дата", "ID_Аптеки", "ID_Лекарства", "Количество"],
+            ["2026-10-01", "1", "10", "3"],
+            ["2026-10-01", "1", "11", "2"],
+            ["2026-10-01", "2", "10", "4"],
+            ["2026-10-01", "2", "11", "5"],
+            ["2026-10-02", "1", "10", "6"],
+            ["2026-10-02", "1", "11", "7"],
+            ["2026-10-02", "2", "10", "8"],
+            ["2026-10-02", "2", "11", "9"],
+        ],
+    )
+
+    result = audit_csv(dataset)
+
+    assert result["candidate_grain_keys"] == []
+    assert result["candidate_composite_grain_keys"] == [["Дата", "ID_Аптеки", "ID_Лекарства"]]
