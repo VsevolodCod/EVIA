@@ -1,0 +1,41 @@
+{
+  "$id": "urn:evia:contracts:1.0:Error",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "code": {
+      "enum": [
+        "VALIDATION_ERROR",
+        "SOURCE_NOT_FOUND",
+        "IMPORT_FAILED",
+        "QUERY_REJECTED",
+        "QUERY_TIMEOUT",
+        "MODEL_UNAVAILABLE",
+        "INTERNAL_ERROR"
+      ],
+      "title": "Code",
+      "type": "string"
+    },
+    "message": {
+      "title": "Message",
+      "type": "string"
+    },
+    "request_id": {
+      "maxLength": 200,
+      "minLength": 1,
+      "title": "Request Id",
+      "type": "string"
+    },
+    "retryable": {
+      "default": false,
+      "title": "Retryable",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "code",
+    "message",
+    "request_id"
+  ],
+  "title": "Error",
+  "type": "object"
+}

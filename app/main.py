@@ -364,10 +364,11 @@ async def list_chats(
 
 @app.get("/chats/{chat_id}", response_model=ChatHistoryResponse)
 async def get_chat(
-        chat_id: str,
-        request: Request,
-        limit: int = Query(default=50, ge=1, le=500),
-        offset: int = Query(default=0, ge=0),
+    chat_id: str,
+    request: Request,
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    before: int | None = Query(default=None, ge=0),
 ):
     """
     Загружает последние ``limit`` сообщений, заканчивая сообщением номер ``offset`` по айди чата
@@ -379,10 +380,14 @@ async def get_chat(
     """
     chat_manager: ChatManager = request.app.state.chat_manager
 
+    if before is not None and offset:
+        raise HTTPException(status_code=400, detail='Use before or offset, not both')
+
     chat = await chat_manager.get_persistent_chat(
         chat_id=chat_id,
         limit=limit,
         offset=offset,
+        before=before,
     )
 
     if chat is None:

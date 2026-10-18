@@ -9,7 +9,7 @@ export default defineConfig(({ mode }) => {
     base: "/",
     server: {
       proxy: Object.fromEntries(
-        ["/health", "/sources", "/agent"].map((path) => [path, { target }]),
+        ["/health", "/sources", "/agent", "/chats"].map((path) => [path, { target }]),
       ),
     },
     test: {

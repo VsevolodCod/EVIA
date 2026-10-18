@@ -75,6 +75,15 @@ def test_app_runs_csv_to_mock_over_http_and_stops(tmp_path, dev):
                 assert answer.status_code == 200
                 assert answer.json()['answer']
                 assert answer.json()['tool_results'][0]['data'][0]['source_id'] == source_id
+                chat = client.post('/chats', json={'title': 'Synthetic conversation'})
+                assert chat.status_code == 201
+                chat_id = chat.json()['chat_id']
+                for question in ('First turn', 'Follow-up'):
+                    continued = client.post('/agent/chat', params={'chat_id': chat_id},
+                                            json={'question': question, 'source_ids': [source_id]})
+                    assert continued.status_code == 200
+                    assert continued.json()['chat_id'] == chat_id
+                assert client.get(f'/chats/{chat_id}').json()['total_messages'] == 4
         finally:
             try:
                 if process.poll() is None:

@@ -4,6 +4,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import App from "./App";
 const source = (id: string) => ({
@@ -48,9 +49,10 @@ const profile = {
   note: "Sample only",
 };
 function setup(
-  ask?: (init?: RequestInit) => Promise<Response>,
+  ask?: (init?: RequestInit, url?: string) => Promise<Response>,
   preview?: (url: string) => Promise<Response>,
 ) {
+  let nextChat = 0;
   vi.stubGlobal(
     "fetch",
     vi.fn((url: string, init?: RequestInit) => {
@@ -60,7 +62,15 @@ function setup(
         );
       if (url === "/sources")
         return Promise.resolve(Response.json([source("A"), source("B")]));
-      if (url === "/agent/ask" && ask) return ask(init);
+      if (url === "/chats?limit=100") return Promise.resolve(Response.json([]));
+      if (url === "/chats") return Promise.resolve(Response.json({
+        chat_id: `chat-${++nextChat}`,
+        title: "Новый чат",
+        created_at: "2026-10-18T08:00:00Z",
+        updated_at: "2026-10-18T08:00:00Z",
+      }));
+      if (url.startsWith("/agent/chat?") && ask) return ask(init, url).then(async (response) =>
+        response.ok ? Response.json({ ...await response.json(), chat_id: new URL(url, "http://test").searchParams.get("chat_id") }) : response);
       if (url.endsWith("/schema"))
         return Promise.resolve(Response.json(schema(url.split("/")[2])));
       if (url.includes("/preview"))
@@ -81,12 +91,16 @@ async function select(id: string) {
   );
 }
 async function ask(question: string) {
+  const previousCalls = vi.mocked(fetch).mock.calls.filter(([url]) => String(url).startsWith("/agent/chat?")).length;
   fireEvent.change(screen.getByRole("textbox", { name: "Ваш вопрос" }), {
     target: { value: question },
   });
   fireEvent.click(screen.getByRole("button", { name: "Отправить вопрос" }));
+  await waitFor(() => expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).startsWith("/agent/chat?")).length).toBeGreaterThan(previousCalls));
 }
 it("keeps late answers and history bound to their source", async () => {
+  let now = 1000;
+  vi.spyOn(performance, "now").mockImplementation(() => now);
   let finish!: (r: Response) => void;
   setup(
     () =>
@@ -98,18 +112,101 @@ it("keeps late answers and history bound to their source", async () => {
   await select("A");
   await ask("Вопрос A");
   await select("B");
+  now = 5000;
   await act(async () =>
     finish(
       Response.json({ answer: "Ответ только A", steps: 1, tool_results: [] }),
     ),
   );
   expect(screen.queryByText("Ответ только A")).not.toBeInTheDocument();
+  expect(screen.queryByText(/Ответ за/)).not.toBeInTheDocument();
   expect(
     screen.queryByRole("button", { name: "Вопрос A" }),
   ).not.toBeInTheDocument();
   await select("A");
   expect(await screen.findByText("Ответ только A")).toBeInTheDocument();
+  expect(screen.getByText("Ответ за 4,0 с")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Вопрос A" })).toBeInTheDocument();
+});
+it("reopens a server conversation after reload without mixing it into another source", async () => {
+  localStorage.setItem("evia.chat-sources.v1", JSON.stringify({ "chat-a": "A" }));
+  const fetcher = vi.fn((url: string) => {
+    if (url === "/health") return Promise.resolve(Response.json({ status: "ok", llm_provider: "mock" }));
+    if (url === "/sources") return Promise.resolve(Response.json([source("A"), source("B")]));
+    if (url === "/chats?limit=100") return Promise.resolve(Response.json([
+      { chat_id: "chat-a", title: "Продажи по месяцам", created_at: "2026-10-18T08:00:00Z", updated_at: "2026-10-18T08:01:00Z" },
+    ]));
+    if (url === "/chats/chat-a?limit=50") return Promise.resolve(Response.json({
+      chat_id: "chat-a",
+      title: "Продажи по месяцам",
+      messages: [
+        { message_id: "question-a", role: "user", content: "Покажи продажи", created_at: "2026-10-18T08:00:00Z" },
+        { message_id: "answer-a", role: "assistant", content: "Продажи выросли.", created_at: "2026-10-18T08:00:01Z" },
+      ],
+      total_messages: 2,
+      next_offset: null,
+      next_before: null,
+      has_more: false,
+    }));
+    if (url.endsWith("/schema")) return Promise.resolve(Response.json(schema(url.split("/")[2])));
+    if (url.includes("/preview")) return Promise.resolve(Response.json([{ product: "row" }]));
+    if (url.endsWith("/profile")) return Promise.resolve(Response.json(profile));
+    return Promise.reject(new Error("Unexpected route " + url));
+  });
+  vi.stubGlobal("fetch", fetcher);
+  render(<App />);
+  await select("A");
+  fireEvent.click(await screen.findByRole("button", { name: "Покажи продажи" }));
+  expect(
+    await within(
+      screen.getByRole("complementary", { name: "Чат с EVIA" }),
+    ).findByText("Продажи выросли."),
+  ).toBeInTheDocument();
+  await select("B");
+  expect(screen.queryByText("Продажи выросли.")).not.toBeInTheDocument();
+});
+it("loads an older page of the reopened server conversation", async () => {
+  localStorage.setItem("evia.chat-sources.v1", JSON.stringify({ "chat-a": "A" }));
+  const fetcher = vi.fn((url: string) => {
+    if (url === "/health") return Promise.resolve(Response.json({ status: "ok", llm_provider: "mock" }));
+    if (url === "/sources") return Promise.resolve(Response.json([source("A")]));
+    if (url === "/chats?limit=100") return Promise.resolve(Response.json([
+      { chat_id: "chat-a", title: "История продаж", created_at: "2026-10-18T08:00:00Z", updated_at: "2026-10-18T08:01:00Z" },
+    ]));
+    if (url === "/chats/chat-a?limit=50") return Promise.resolve(Response.json({
+      chat_id: "chat-a", title: "История продаж",
+      messages: [
+        { message_id: "question-latest", role: "user", content: "Новый вопрос", created_at: "2026-10-18T08:01:00Z" },
+        { message_id: "answer-latest", role: "assistant", content: "Новый ответ", created_at: "2026-10-18T08:01:01Z" },
+      ], total_messages: 4, next_offset: 2, next_before: 2, has_more: true,
+    }));
+    if (url === "/chats/chat-a?limit=50&before=2") return Promise.resolve(Response.json({
+      chat_id: "chat-a", title: "История продаж",
+      messages: [
+        { message_id: "question-old", role: "user", content: "Старый вопрос", created_at: "2026-10-18T08:00:00Z" },
+        { message_id: "answer-old", role: "assistant", content: "Старый ответ", created_at: "2026-10-18T08:00:01Z" },
+      ], total_messages: 4, next_offset: null, next_before: null, has_more: false,
+    }));
+    if (url.endsWith("/schema")) return Promise.resolve(Response.json(schema(url.split("/")[2])));
+    if (url.includes("/preview")) return Promise.resolve(Response.json([{ product: "row" }]));
+    if (url.endsWith("/profile")) return Promise.resolve(Response.json(profile));
+    return Promise.reject(new Error("Unexpected route " + url));
+  });
+  vi.stubGlobal("fetch", fetcher);
+  render(<App />);
+  await select("A");
+  fireEvent.click(await screen.findByRole("button", { name: "Новый вопрос" }));
+  expect(
+    await within(
+      screen.getByRole("complementary", { name: "Чат с EVIA" }),
+    ).findByText("Новый ответ"),
+  ).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Показать предыдущие сообщения" }));
+  expect(
+    await within(
+      screen.getByRole("complementary", { name: "Чат с EVIA" }),
+    ).findByText("Старый ответ"),
+  ).toBeInTheDocument();
 });
 it("ignores late source previews after switching source", async () => {
   let finish!: (r: Response) => void;
@@ -123,6 +220,7 @@ it("ignores late source previews after switching source", async () => {
   render(<App />);
   await select("A");
   await select("B");
+  fireEvent.click(screen.getByRole("button", { name: /^Данные$/ }));
   expect(await screen.findByText("row-B")).toBeInTheDocument();
   await act(async () => finish(Response.json([{ product: "stale-A" }])));
   expect(screen.queryByText("stale-A")).not.toBeInTheDocument();
@@ -142,6 +240,60 @@ it("retries a failed question with its original source and displays the response
   );
   expect(await screen.findByText("Повтор успешен")).toBeInTheDocument();
   expect(calls).toBe(2);
+  expect(vi.mocked(fetch).mock.calls.filter(([url]) => url === "/chats")).toHaveLength(1);
+  expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).startsWith("/agent/chat?")).map(([url]) => url))
+    .toEqual(["/agent/chat?chat_id=chat-1", "/agent/chat?chat_id=chat-1"]);
+});
+
+it("continues one conversation, resumes an older one, and isolates sources", async () => {
+  const sent: { url?: string; question: string; source_ids: string[] }[] = [];
+  setup(async (init, url) => {
+    const body = JSON.parse(String(init?.body));
+    sent.push({ url, ...body });
+    return Response.json({ answer: `Ответ: ${body.question}`, steps: 1, tool_results: [] });
+  });
+  render(<App />);
+  await select("A");
+  await ask("Первый");
+  await screen.findByText("Ответ: Первый");
+  await ask("Уточнение");
+  await screen.findByText("Ответ: Уточнение");
+  expect(screen.getByText("Ответ: Первый")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Уточнение" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Новый анализ" }));
+  await ask("Другой диалог");
+  await screen.findByText("Ответ: Другой диалог");
+  expect(screen.queryByText("Ответ: Первый")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Первый" }));
+  expect(within(screen.getByRole("complementary", { name: "Чат с EVIA" })).getByText("Ответ: Уточнение")).toBeInTheDocument();
+  await ask("Продолжение");
+  await within(screen.getByRole("complementary", { name: "Чат с EVIA" })).findByText("Ответ: Продолжение");
+  await select("B");
+  await ask("Вопрос B");
+  await screen.findByText("Ответ: Вопрос B");
+  await select("A");
+  expect(screen.queryByText("Ответ: Вопрос B")).not.toBeInTheDocument();
+  expect(sent.map((s) => s.url)).toEqual([
+    "/agent/chat?chat_id=chat-1", "/agent/chat?chat_id=chat-1", "/agent/chat?chat_id=chat-2",
+    "/agent/chat?chat_id=chat-1", "/agent/chat?chat_id=chat-3",
+  ]);
+  expect(sent.map((s) => s.source_ids)).toEqual([["A"], ["A"], ["A"], ["A"], ["B"]]);
+});
+
+it("does not switch back to an older conversation when its answer arrives late", async () => {
+  const finish: ((response: Response) => void)[] = [];
+  setup(() => new Promise((resolve) => finish.push(resolve)));
+  render(<App />);
+  await select("A");
+  await ask("Старый");
+  fireEvent.click(screen.getByRole("button", { name: "Новый анализ" }));
+  await ask("Новый");
+  await act(async () => finish[0](Response.json({ answer: "Старый ответ", steps: 1, tool_results: [] })));
+  expect(screen.queryByText("Старый ответ")).not.toBeInTheDocument();
+  await act(async () => finish[1](Response.json({ answer: "Новый ответ", steps: 1, tool_results: [] })));
+  expect(screen.getByText("Новый ответ")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Старый" }));
+  expect(within(screen.getByRole("complementary", { name: "Чат с EVIA" })).getByText("Старый ответ")).toBeInTheDocument();
 });
 it("shows mock mode honestly and only persists the quiet setting", async () => {
   setup();
@@ -185,6 +337,8 @@ it("uploads a CSV, selects the returned source and loads its real preview", asyn
       ],
     },
   });
+  expect(await screen.findByRole("heading", { name: "Обзор данных" })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: /^Данные$/ }));
   expect(await screen.findByText("uploaded-value")).toBeInTheDocument();
   expect(
     screen.getByRole("button", { name: "Источник uploaded" }),
@@ -217,6 +371,7 @@ it("recovers source metadata after a failed preview request", async () => {
   fireEvent.click(
     await screen.findByRole("button", { name: "Повторить загрузку" }),
   );
+  fireEvent.click(screen.getByRole("button", { name: /^Данные$/ }));
   expect(await screen.findByText("recovered")).toBeInTheDocument();
 });
 it("keeps a failed question in history after stopping the network request", async () => {
@@ -274,6 +429,7 @@ it("shows thinking, cancellation, retry and the finished answer as real mascot s
   expect(
     container.querySelector('[data-evia-state="retrying"]'),
   ).toBeInTheDocument();
+  await waitFor(() => expect(finish).toBeTypeOf("function"));
   await act(async () =>
     finish(Response.json({ answer: "Готово", steps: 1, tool_results: [] })),
   );

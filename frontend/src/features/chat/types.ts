@@ -9,5 +9,14 @@ export type Entry = {
   answer?: Answer;
   error?: string;
   mascotState?: EviaState;
+  startedAt?: number;
+  elapsedMs?: number;
+  conversationId?: string;
 };
-export type View = "preview" | "schema" | "profile" | "results";
+export type View =
+  | "overview"
+  | "preview"
+  | "schema"
+  | "profile"
+  | "quality"
+  | "results";

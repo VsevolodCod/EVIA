@@ -1,4 +1,6 @@
-import { api } from "./api";
+import { api, waitForChat } from "./api";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 const source = {
   source_id: "a",
   name: "A",
@@ -7,6 +9,39 @@ const source = {
   created_at: "2026-10-16",
   schema_version: 1,
 };
+
+it("continues the requested chat and rejects a response from another chat", async () => {
+  const fetcher = vi.fn().mockResolvedValueOnce(Response.json({ answer: "ok", chat_id: "chat-A", steps: 1, tool_results: [] }))
+    .mockResolvedValueOnce(Response.json({ answer: "wrong", chat_id: "chat-B", steps: 1, tool_results: [] }));
+  vi.stubGlobal("fetch", fetcher);
+  expect((await api.chat("next", "source-A", "chat-A")).answer).toBe("ok");
+  expect(fetcher).toHaveBeenCalledWith("/agent/chat?chat_id=chat-A", expect.objectContaining({
+    body: JSON.stringify({ question: "next", source_ids: ["source-A"] }),
+  }));
+  await expect(api.chat("next", "source-A", "chat-A")).rejects.toThrow("другого диалога");
+});
+
+it("cancels waiting for creation without losing the reusable chat ID", async () => {
+  let finish!: (id: string) => void;
+  const chat = new Promise<string>((resolve) => { finish = resolve; });
+  const controller = new AbortController();
+  const pending = waitForChat(chat, controller.signal);
+  controller.abort();
+  await expect(pending).rejects.toThrow("Aborted");
+  finish("created-chat");
+  await expect(waitForChat(chat, new AbortController().signal)).resolves.toBe("created-chat");
+});
+
+it("accepts shared versioned fixtures without breaking the current API reader", async () => {
+  const fixture = (name: string) => JSON.parse(readFileSync(resolve(process.cwd(), `../contracts/v1/fixtures/${name}.json`), "utf8")).data;
+  vi.stubGlobal("fetch", vi.fn()
+    .mockResolvedValueOnce(Response.json([fixture("source")]))
+    .mockResolvedValueOnce(Response.json(fixture("profile")))
+    .mockResolvedValueOnce(Response.json(fixture("success"))));
+  expect((await api.sources())[0].source_id).toBe("synthetic-sales");
+  expect((await api.profile("synthetic-sales")).sample_size).toBe(2);
+  expect((await api.ask("fixture", "synthetic-sales")).tool_results[0].data).toEqual([{ id: "0001" }]);
+});
 it("accepts valid source responses and rejects an invalid response shape", async () => {
   vi.stubGlobal(
     "fetch",

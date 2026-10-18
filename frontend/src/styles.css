@@ -290,12 +290,14 @@ a {
 }
 .history-list {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 5px;
   max-height: 350px;
   overflow: auto;
 }
 .history-item {
   display: flex;
+  min-width: 0;
   align-items: center;
   gap: 9px;
   padding: 10px;
@@ -305,6 +307,8 @@ a {
   color: var(--muted);
 }
 .history-item span:not(.pending-dot) {
+  min-width: 0;
+  flex: 1;
   font-size: 12px;
   white-space: nowrap;
   overflow: hidden;
@@ -1595,3 +1599,9 @@ summary {
   background: var(--soft);
   color: var(--accent);
 }
+/* Request-local measurements; no progress estimate or live-region ticking. */
+.response-timing { color: var(--muted, #526b62); font-size: 0.75rem; margin-top: 12px; overflow-wrap: anywhere; }
+.response-timing p { margin: 6px 0; }
+.response-timing summary { cursor: pointer; }
+.response-timing ol { padding-left: 20px; }
+.chat-turn + .chat-turn { margin-top: 28px; padding-top: 20px; border-top: 1px solid #d9e7df; }

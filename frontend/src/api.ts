@@ -47,7 +47,22 @@ const profileSchema = z.object({
 });
 const answerSchema = z.object({
   answer: z.string(),
+  chat_id: z.string().nullable().optional(),
   steps: z.number().int().nonnegative(),
+  timing: z.object({
+    elapsed_ms: z.number().nonnegative(),
+    llm_ms: z.number().nonnegative(),
+    tools_ms: z.number().nonnegative(),
+    calls: z.array(z.object({
+      elapsed_ms: z.number().nonnegative(),
+      model: z.string().nullable().optional(),
+      load_ms: z.number().nonnegative().nullable().optional(),
+      prompt_ms: z.number().nonnegative().nullable().optional(),
+      generation_ms: z.number().nonnegative().nullable().optional(),
+      prompt_tokens: z.number().int().nonnegative().nullable().optional(),
+      generated_tokens: z.number().int().nonnegative().nullable().optional(),
+    })),
+  }).nullable().optional(),
   tool_results: z.array(
     z.object({
       tool_name: z.string(),
@@ -59,13 +74,50 @@ const answerSchema = z.object({
 });
 const healthSchema = z.object({ status: z.string(), llm_provider: z.string() });
 const rowsSchema = z.array(z.record(z.string(), z.unknown()));
+const chatSummarySchema = z.object({
+  chat_id: z.string().min(1),
+  title: z.string(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+const chatMessageSchema = z.object({
+  message_id: z.string().min(1),
+  role: z.enum(["user", "assistant", "system", "tool"]),
+  content: z.string(),
+  created_at: z.string(),
+});
+const chatHistorySchema = z.object({
+  chat_id: z.string().min(1),
+  title: z.string(),
+  messages: z.array(chatMessageSchema),
+  total_messages: z.number().int().nonnegative(),
+  next_offset: z.number().int().nonnegative().nullable(),
+  next_before: z.number().int().nonnegative().nullable(),
+  has_more: z.boolean(),
+});
 export type Source = z.infer<typeof sourceSchema>;
 export type SourceSchema = z.infer<typeof schemaSchema>;
 export type Profile = z.infer<typeof profileSchema>;
 export type Answer = z.infer<typeof answerSchema>;
 export type Health = z.infer<typeof healthSchema>;
+export type ChatSummary = z.infer<typeof chatSummarySchema>;
+export type ChatHistory = z.infer<typeof chatHistorySchema>;
+export type ChatMessage = z.infer<typeof chatMessageSchema>;
 export type ToolResult = Answer["tool_results"][number];
 export type Row = Record<string, unknown>;
+
+// Keep chat creation alive to retain its ID, but stop the user's wait promptly.
+export function waitForChat(chat: Promise<string>, signal: AbortSignal): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const abort = () => reject(new DOMException("Aborted", "AbortError"));
+    if (signal.aborted) { abort(); return; }
+    signal.addEventListener("abort", abort, { once: true });
+    chat.then(
+      (id) => { signal.removeEventListener("abort", abort); resolve(id); },
+      (error) => { signal.removeEventListener("abort", abort); reject(error); },
+    );
+  });
+}
 
 export class ApiError extends Error {
   constructor(
@@ -78,6 +130,8 @@ export class ApiError extends Error {
 }
 
 const knownErrors: Record<string, string> = {
+  "CSV contains duplicate column names": "Названия столбцов повторяются. Укажите уникальные заголовки.",
+  "CSV must contain non-empty column names": "Каждый столбец должен иметь непустое название.",
   "Only CSV files are supported": "Поддерживаются только файлы .csv.",
   "Uploaded CSV is empty": "Файл пуст. Выберите CSV с заголовком и данными.",
   "CSV must be valid UTF-8":
@@ -135,6 +189,23 @@ async function request<T>(
 }
 const path = (id: string) => `/sources/${encodeURIComponent(id)}`;
 export const api = {
+  createChat: (title: string) => request("/chats", chatSummarySchema, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title }),
+  }),
+  chats: (signal?: AbortSignal) => request("/chats?limit=100", z.array(chatSummarySchema), { signal }),
+  chatHistory: (chatId: string, before?: number, signal?: AbortSignal) => {
+    const query = new URLSearchParams({ limit: "50" });
+    if (before !== undefined) query.set("before", String(before));
+    return request(`/chats/${encodeURIComponent(chatId)}?${query}`, chatHistorySchema, { signal });
+  },
+  chat: async (question: string, id: string, chatId: string, signal?: AbortSignal) => {
+    const result = await request(`/agent/chat?chat_id=${encodeURIComponent(chatId)}`, answerSchema, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question, source_ids: [id] }), signal,
+    });
+    if (result.chat_id !== chatId) throw new Error("Сервер вернул ответ другого диалога. Повторите запрос.");
+    return result;
+  },
   health: (signal?: AbortSignal) =>
     request("/health", healthSchema, { signal }),
   sources: (signal?: AbortSignal) =>

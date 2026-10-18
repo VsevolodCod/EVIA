@@ -5,7 +5,7 @@ import httpx
 
 from app.config import Settings
 from app.llm.base import LLMProvider, AsyncModel
-from app.models import LLMMessage, LLMResponse, ToolCall
+from app.models import LLMMessage, LLMResponse, ToolCall, ModelTiming
 
 
 class OllamaModel(AsyncModel):
@@ -27,6 +27,7 @@ class OllamaModel(AsyncModel):
         self.timeout = settings.timeout
         self.think = settings.thinking
         self.num_predict = settings.max_tokens_generate
+        self.keep_alive = settings.ollama_keep_alive
 
     async def generate(
         self,
@@ -44,7 +45,7 @@ class OllamaModel(AsyncModel):
             **payload,
             "model": self.model_name,
             "stream": False,
-            "keep_alive": "10m",
+            "keep_alive": self.keep_alive,
             "options": {
                 "num_ctx": 4096,
             },
@@ -138,6 +139,14 @@ class OllamaProvider(LLMProvider):
             content=message.get("content") or "",
             tool_calls=calls,
             raw_tool_calls=raw_calls,
+            timing=ModelTiming(
+                model=data.get('model'),
+                load_ms=data['load_duration'] / 1_000_000 if data.get('load_duration') is not None else None,
+                prompt_ms=data['prompt_eval_duration'] / 1_000_000 if data.get('prompt_eval_duration') is not None else None,
+                generation_ms=data['eval_duration'] / 1_000_000 if data.get('eval_duration') is not None else None,
+                prompt_tokens=data.get('prompt_eval_count'),
+                generated_tokens=data.get('eval_count'),
+            ),
         )
 
     async def chat(

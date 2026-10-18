@@ -26,6 +26,7 @@ class Settings:
         self.ollama_base_url = os.getenv(
             "OLLAMA_BASE_URL", "http://127.0.0.1:11434"
         ).rstrip("/")
+        self.ollama_keep_alive = os.getenv("OLLAMA_KEEP_ALIVE", "10m")
 
         self.data_dir = Path(os.getenv("BI_DATA_DIR", str(PROJECT_ROOT / "data"))).resolve()
         self.chat_db_path = Path(

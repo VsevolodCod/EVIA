@@ -2,6 +2,15 @@ import type { Row, ToolResult } from "../../api";
 import { DataTable } from "./DataTable";
 import { Icon } from "../../components/Icon";
 
+const titles: Record<string, string> = {
+  list_sources: "Источники данных",
+  preview_source: "Выборка данных",
+  profile_source: "Профиль данных",
+  get_schema: "Структура данных",
+  execute_sql: "Результат расчёта",
+  run_sql: "Результат расчёта",
+};
+
 export function ToolResults({ results }: { results: ToolResult[] }) {
   if (!results.length)
     return (
@@ -16,7 +25,7 @@ export function ToolResults({ results }: { results: ToolResult[] }) {
       {results.map((result, i) => (
         <section className="tool-result" key={i}>
           <div className="section-heading">
-            <h3>{result.tool_name}</h3>
+            <h3>{titles[result.tool_name] ?? "Результат инструмента"}</h3>
             <span className={`pill ${result.ok ? "" : "error-pill"}`}>
               {result.ok ? "Выполнено" : "Ошибка"}
             </span>
@@ -36,13 +45,22 @@ export function ToolResults({ results }: { results: ToolResult[] }) {
               label={`Результат ${result.tool_name}`}
             />
           ) : result.data !== null && result.data !== undefined ? (
-            <details open>
-              <summary>Данные инструмента</summary>
+            <details>
+              <summary>Технические данные · {result.tool_name}</summary>
               <pre>{JSON.stringify(result.data, null, 2)}</pre>
             </details>
           ) : result.ok ? (
             <p className="muted">Инструмент не вернул данные.</p>
           ) : null}
+          {Array.isArray(result.data) && (
+            <details className="tool-method">
+              <summary>Об источнике результата</summary>
+              <p>
+                Инструмент: {result.tool_name}. Отображены строки, возвращённые
+                сервером.
+              </p>
+            </details>
+          )}
         </section>
       ))}
     </div>
