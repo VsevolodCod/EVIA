@@ -157,7 +157,11 @@ it("reopens a server conversation after reload without mixing it into another so
   render(<App />);
   await select("A");
   fireEvent.click(await screen.findByRole("button", { name: "Покажи продажи" }));
-  expect(await screen.findByText("Продажи выросли.")).toBeInTheDocument();
+  expect(
+    await within(
+      screen.getByRole("complementary", { name: "Чат с EVIA" }),
+    ).findByText("Продажи выросли."),
+  ).toBeInTheDocument();
   await select("B");
   expect(screen.queryByText("Продажи выросли.")).not.toBeInTheDocument();
 });
@@ -192,9 +196,17 @@ it("loads an older page of the reopened server conversation", async () => {
   render(<App />);
   await select("A");
   fireEvent.click(await screen.findByRole("button", { name: "Новый вопрос" }));
-  expect(await screen.findByText("Новый ответ")).toBeInTheDocument();
+  expect(
+    await within(
+      screen.getByRole("complementary", { name: "Чат с EVIA" }),
+    ).findByText("Новый ответ"),
+  ).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Показать предыдущие сообщения" }));
-  expect(await screen.findByText("Старый ответ")).toBeInTheDocument();
+  expect(
+    await within(
+      screen.getByRole("complementary", { name: "Чат с EVIA" }),
+    ).findByText("Старый ответ"),
+  ).toBeInTheDocument();
 });
 it("ignores late source previews after switching source", async () => {
   let finish!: (r: Response) => void;
