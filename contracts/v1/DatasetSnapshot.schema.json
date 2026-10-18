@@ -1,0 +1,65 @@
+{
+  "$id": "urn:evia:contracts:1.0:DatasetSnapshot",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "content_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Content Sha256",
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "row_count": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Row Count"
+    },
+    "schema_version": {
+      "minimum": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "snapshot_id": {
+      "maxLength": 200,
+      "minLength": 1,
+      "title": "Snapshot Id",
+      "type": "string"
+    },
+    "source_id": {
+      "maxLength": 200,
+      "minLength": 1,
+      "title": "Source Id",
+      "type": "string"
+    },
+    "state": {
+      "enum": [
+        "importing",
+        "ready",
+        "failed"
+      ],
+      "title": "State",
+      "type": "string"
+    }
+  },
+  "required": [
+    "source_id",
+    "snapshot_id",
+    "schema_version",
+    "content_sha256",
+    "created_at",
+    "state"
+  ],
+  "title": "DatasetSnapshot",
+  "type": "object"
+}

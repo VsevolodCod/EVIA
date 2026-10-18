@@ -1,0 +1,180 @@
+{
+  "$defs": {
+    "SchemaField": {
+      "properties": {
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "inferred_type": {
+          "default": "unknown",
+          "title": "Inferred Type",
+          "type": "string"
+        },
+        "is_identifier_candidate": {
+          "default": false,
+          "title": "Is Identifier Candidate",
+          "type": "boolean"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "nullable": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Nullable"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "SchemaField",
+      "type": "object"
+    },
+    "SchemaObject": {
+      "properties": {
+        "fields": {
+          "items": {
+            "$ref": "#/$defs/SchemaField"
+          },
+          "title": "Fields",
+          "type": "array"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "object_id": {
+          "title": "Object Id",
+          "type": "string"
+        },
+        "object_type": {
+          "default": "unknown",
+          "title": "Object Type",
+          "type": "string"
+        },
+        "row_count": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Row Count"
+        }
+      },
+      "required": [
+        "object_id",
+        "name"
+      ],
+      "title": "SchemaObject",
+      "type": "object"
+    },
+    "SchemaRelation": {
+      "properties": {
+        "confidence": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Confidence"
+        },
+        "discovery_method": {
+          "default": "unknown",
+          "title": "Discovery Method",
+          "type": "string"
+        },
+        "left_field": {
+          "title": "Left Field",
+          "type": "string"
+        },
+        "left_object_id": {
+          "title": "Left Object Id",
+          "type": "string"
+        },
+        "right_field": {
+          "title": "Right Field",
+          "type": "string"
+        },
+        "right_object_id": {
+          "title": "Right Object Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "left_object_id",
+        "left_field",
+        "right_object_id",
+        "right_field"
+      ],
+      "title": "SchemaRelation",
+      "type": "object"
+    }
+  },
+  "$id": "urn:evia:contracts:1.0:SourceSchema",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "discovered_at": {
+      "format": "date-time",
+      "title": "Discovered At",
+      "type": "string"
+    },
+    "objects": {
+      "items": {
+        "$ref": "#/$defs/SchemaObject"
+      },
+      "title": "Objects",
+      "type": "array"
+    },
+    "parser_version": {
+      "default": 1,
+      "title": "Parser Version",
+      "type": "integer"
+    },
+    "relations": {
+      "items": {
+        "$ref": "#/$defs/SchemaRelation"
+      },
+      "title": "Relations",
+      "type": "array"
+    },
+    "source_id": {
+      "title": "Source Id",
+      "type": "string"
+    },
+    "version": {
+      "default": 1,
+      "title": "Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "source_id"
+  ],
+  "title": "SourceSchema",
+  "type": "object"
+}

@@ -1,0 +1,12 @@
+{
+  "contract": "DatasetSnapshot",
+  "data": {
+    "content_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "created_at": "2026-10-17T00:00:00Z",
+    "row_count": 2,
+    "schema_version": 1,
+    "snapshot_id": "snapshot-001",
+    "source_id": "synthetic-sales",
+    "state": "ready"
+  }
+}

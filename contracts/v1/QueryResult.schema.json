@@ -1,0 +1,148 @@
+{
+  "$defs": {
+    "JsonValue": {},
+    "Provenance": {
+      "properties": {
+        "executed_at": {
+          "format": "date-time",
+          "title": "Executed At",
+          "type": "string"
+        },
+        "schema_version": {
+          "minimum": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "snapshot_id": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Snapshot Id",
+          "type": "string"
+        },
+        "source_id": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Source Id",
+          "type": "string"
+        },
+        "tool_name": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Tool Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_id",
+        "snapshot_id",
+        "schema_version",
+        "tool_name",
+        "executed_at"
+      ],
+      "title": "Provenance",
+      "type": "object"
+    },
+    "ResultColumn": {
+      "properties": {
+        "data_type": {
+          "enum": [
+            "string",
+            "integer",
+            "number",
+            "decimal",
+            "boolean",
+            "date",
+            "datetime",
+            "unknown"
+          ],
+          "title": "Data Type",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "nullable": {
+          "default": true,
+          "title": "Nullable",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "data_type"
+      ],
+      "title": "ResultColumn",
+      "type": "object"
+    }
+  },
+  "$id": "urn:evia:contracts:1.0:QueryResult",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "columns": {
+      "items": {
+        "$ref": "#/$defs/ResultColumn"
+      },
+      "title": "Columns",
+      "type": "array"
+    },
+    "elapsed_ms": {
+      "minimum": 0,
+      "title": "Elapsed Ms",
+      "type": "number"
+    },
+    "provenance": {
+      "items": {
+        "$ref": "#/$defs/Provenance"
+      },
+      "minItems": 1,
+      "title": "Provenance",
+      "type": "array"
+    },
+    "result_id": {
+      "maxLength": 200,
+      "minLength": 1,
+      "title": "Result Id",
+      "type": "string"
+    },
+    "returned_rows": {
+      "minimum": 0,
+      "title": "Returned Rows",
+      "type": "integer"
+    },
+    "row_limit": {
+      "maximum": 10000,
+      "minimum": 1,
+      "title": "Row Limit",
+      "type": "integer"
+    },
+    "rows": {
+      "items": {
+        "items": {
+          "$ref": "#/$defs/JsonValue"
+        },
+        "type": "array"
+      },
+      "title": "Rows",
+      "type": "array"
+    },
+    "truncated": {
+      "title": "Truncated",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "result_id",
+    "columns",
+    "rows",
+    "returned_rows",
+    "row_limit",
+    "truncated",
+    "elapsed_ms",
+    "provenance"
+  ],
+  "title": "QueryResult",
+  "type": "object"
+}

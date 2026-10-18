@@ -1,0 +1,62 @@
+{
+  "contract": "AgentResponse",
+  "data": {
+    "analysis": {
+      "explanation": "Fixture only; SQL is not executed by this schema",
+      "intent": "sum",
+      "sql": "SELECT SUM(amount) FROM synthetic_sales"
+    },
+    "answer": "Synthetic fixture: 30.50",
+    "artifact_ids": [],
+    "chat_id": null,
+    "contract_version": "1.0",
+    "error": null,
+    "job_id": null,
+    "request_id": "request-success",
+    "results": [
+      {
+        "columns": [
+          {
+            "data_type": "decimal",
+            "name": "amount",
+            "nullable": false
+          }
+        ],
+        "elapsed_ms": 1.5,
+        "provenance": [
+          {
+            "executed_at": "2026-10-17T00:00:00Z",
+            "schema_version": 1,
+            "snapshot_id": "snapshot-001",
+            "source_id": "synthetic-sales",
+            "tool_name": "query_data"
+          }
+        ],
+        "result_id": "result-001",
+        "returned_rows": 1,
+        "row_limit": 100,
+        "rows": [
+          [
+            "30.50"
+          ]
+        ],
+        "truncated": false
+      }
+    ],
+    "status": "answered",
+    "steps": 2,
+    "timing": null,
+    "tool_results": [
+      {
+        "data": [
+          {
+            "id": "0001"
+          }
+        ],
+        "error": null,
+        "ok": true,
+        "tool_name": "preview_data"
+      }
+    ]
+  }
+}

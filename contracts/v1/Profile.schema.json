@@ -1,0 +1,164 @@
+{
+  "$defs": {
+    "ColumnProfile": {
+      "properties": {
+        "distinct_sample_values": {
+          "minimum": 0,
+          "title": "Distinct Sample Values",
+          "type": "integer"
+        },
+        "sample_non_null_count": {
+          "minimum": 0,
+          "title": "Sample Non Null Count",
+          "type": "integer"
+        },
+        "sample_null_count": {
+          "minimum": 0,
+          "title": "Sample Null Count",
+          "type": "integer"
+        },
+        "top_values": {
+          "items": {
+            "$ref": "#/$defs/TopValue"
+          },
+          "title": "Top Values",
+          "type": "array"
+        }
+      },
+      "required": [
+        "sample_non_null_count",
+        "sample_null_count",
+        "distinct_sample_values",
+        "top_values"
+      ],
+      "title": "ColumnProfile",
+      "type": "object"
+    },
+    "DatasetSnapshot": {
+      "properties": {
+        "content_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Content Sha256",
+          "type": "string"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "row_count": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Row Count"
+        },
+        "schema_version": {
+          "minimum": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "snapshot_id": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Snapshot Id",
+          "type": "string"
+        },
+        "source_id": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Source Id",
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "importing",
+            "ready",
+            "failed"
+          ],
+          "title": "State",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_id",
+        "snapshot_id",
+        "schema_version",
+        "content_sha256",
+        "created_at",
+        "state"
+      ],
+      "title": "DatasetSnapshot",
+      "type": "object"
+    },
+    "TopValue": {
+      "properties": {
+        "count": {
+          "minimum": 0,
+          "title": "Count",
+          "type": "integer"
+        },
+        "value": {
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "value",
+        "count"
+      ],
+      "title": "TopValue",
+      "type": "object"
+    }
+  },
+  "$id": "urn:evia:contracts:1.0:Profile",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "columns": {
+      "additionalProperties": {
+        "$ref": "#/$defs/ColumnProfile"
+      },
+      "title": "Columns",
+      "type": "object"
+    },
+    "note": {
+      "title": "Note",
+      "type": "string"
+    },
+    "sample_limit": {
+      "minimum": 1,
+      "title": "Sample Limit",
+      "type": "integer"
+    },
+    "sample_size": {
+      "minimum": 0,
+      "title": "Sample Size",
+      "type": "integer"
+    },
+    "snapshot": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DatasetSnapshot"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "sample_size",
+    "sample_limit",
+    "columns",
+    "note"
+  ],
+  "title": "Profile",
+  "type": "object"
+}

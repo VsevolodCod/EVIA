@@ -1,0 +1,18 @@
+{
+  "contract": "AgentResponse",
+  "data": {
+    "analysis": null,
+    "answer": "Which period?",
+    "artifact_ids": [],
+    "chat_id": null,
+    "contract_version": "1.0",
+    "error": null,
+    "job_id": null,
+    "request_id": "request-clarification",
+    "results": [],
+    "status": "clarification",
+    "steps": 1,
+    "timing": null,
+    "tool_results": []
+  }
+}
