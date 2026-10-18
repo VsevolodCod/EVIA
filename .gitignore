@@ -3,6 +3,7 @@ __pycache__/
 .pytest_cache/
 .env
 data/
+.local-data/
 # Organizer CSVs used only for local audit; never commit them.
 прогон таски 5/
 *.py[cod]
