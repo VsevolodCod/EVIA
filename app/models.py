@@ -2,17 +2,27 @@ from datetime import datetime, timezone
 from typing import Any, Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SecretStr
 
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+__all__ = ["DataSource", "SchemaField", "SourceSchema", "SchemaObject", "SchemaRelation", "ToolCall",
+           "LLMResponse", "LLMMessage", "ToolResult", "AskRequest", "AskResponse", "ChatMessage", "Chat",
+           "ChatCreateRequest", "ChatHistoryResponse", "ChatSummary",
+           "DBConnection",
+           "PostgreSQLConnection", "PostgreSQLProperties",
+           "ClickHouseConnection", "ClickHouseProperties",
+           "SQLiteConnection"]
+
+
 class DataSource(BaseModel):
     source_id: str
     name: str
     source_type: str
+    connection_id: str
     status: str = "registered"
     created_at: datetime = Field(default_factory=utc_now)
     schema_version: int = 1
@@ -129,3 +139,46 @@ class ChatHistoryResponse(BaseModel):
     total_messages: int
     next_offset: int | None
     has_more: bool
+
+
+class DBConnection(BaseModel):
+    connection_id: str = Field(default_factory=lambda: uuid4().hex)
+    name: str = Field(min_length=1, max_length=200)
+    connection_type: str
+    created_at: datetime = Field(default_factory=utc_now)
+
+
+class PostgreSQLProperties(BaseModel):
+    host: str
+    port: int = Field(default=5432, ge=1, le=65535)
+    database: str
+    username: str
+    password: SecretStr
+    sslmode: str = "prefer"
+
+
+class PostgreSQLConnection(DBConnection):
+    connection_type: Literal["postgresql"] = "postgresql"
+
+    properties: PostgreSQLProperties
+
+
+class ClickHouseProperties(BaseModel):
+    host: str
+    port: int = Field(default=8123, ge=1, le=65535)
+    database: str = "default"
+    username: str = "default"
+    password: SecretStr | None = None
+    secure: bool = False
+
+
+class ClickHouseConnection(DBConnection):
+    connection_type: Literal["clickhouse"] = "clickhouse"
+
+    properties: ClickHouseProperties
+
+
+class SQLiteConnection(DBConnection):
+    connection_type: Literal["sqlite"] = "sqlite"
+
+    path: str

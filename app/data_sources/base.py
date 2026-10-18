@@ -6,7 +6,7 @@ from app.models import DataSource, SourceSchema
 
 class DataSourceAdapter(ABC):
     """
-    Общий контракт для CSV, PostgreSQL, ClickHouse и других источников.
+    Общий контракт для одной таблицы CSV, PostgreSQL, ClickHouse и других источников.
     """
 
     @abstractmethod

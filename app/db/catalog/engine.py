@@ -1,36 +1,38 @@
 from pathlib import Path
 
-from sqlalchemy.engine import URL
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    async_sessionmaker,
-    create_async_engine,
-)
+from sqlalchemy import create_engine
+from sqlalchemy.engine import Engine, URL
+from sqlalchemy.orm import Session, sessionmaker
 
 from app.db.base import CatalogBase
+
+# Импортируем ORM-модели, чтобы они зарегистрировались
+# в CatalogBase.metadata перед create_all.
+# from app.db.catalog import (
+#     ConnectionORM,
+#     DataSourceORM,
+#     SourceSchemaORM,
+# )
 
 
 def create_catalog_database(
     db_path: Path,
-) -> tuple[AsyncEngine, async_sessionmaker]:
+) -> tuple[Engine, sessionmaker[Session]]:
     db_path = db_path.expanduser().resolve()
     db_path.parent.mkdir(parents=True, exist_ok=True)
 
     url = URL.create(
-        "sqlite+aiosqlite",
+        "sqlite+pysqlite",
         database=str(db_path),
     )
 
-    engine = create_async_engine(url)
+    engine = create_engine(url)
 
-    session_factory = async_sessionmaker(
-        engine,
+    CatalogBase.metadata.create_all(engine)
+
+    session_factory = sessionmaker(
+        bind=engine,
         expire_on_commit=False,
     )
 
     return engine, session_factory
-
-
-async def initialize_catalog_database(engine: AsyncEngine) -> None:
-    async with engine.begin() as connection:
-        await connection.run_sync(CatalogBase.metadata.create_all)

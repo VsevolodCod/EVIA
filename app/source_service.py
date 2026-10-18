@@ -4,7 +4,8 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from app.data_sources.csv_adapter import CSVAdapter
+from app.connection_manager import ConnectionManager
+from app.data_sources import CSVAdapter, PostgreSQLAdapter
 from app.models import DataSource, SourceSchema
 from app.schema_catalog import SchemaCatalog
 
@@ -14,13 +15,22 @@ class SourceService:
         self,
         data_dir: Path,
         catalog: SchemaCatalog,
+        connection_manager: ConnectionManager
     ) -> None:
 
         self.data_dir = data_dir.resolve()
         self.data_dir.mkdir(parents=True, exist_ok=True)
 
         self.catalog = catalog
+        self.connection_manager = connection_manager
+
         self.csv_adapter = CSVAdapter(self.data_dir)
+        self.postgresql_adapter = PostgreSQLAdapter(self.connection_manager)
+
+        self.adapters = {
+            "csv": self.csv_adapter,
+            "postgresql": self.postgresql_adapter
+        }
 
     def register_csv(
         self,
@@ -77,6 +87,33 @@ class SourceService:
 
         return source
 
+    def register_postgresql(self, connection_id: str, name_db: str, objects: list[tuple[str, str]]) -> list[DataSource]:
+        all_sources = []
+        for i in objects:
+            source_id = uuid.uuid4().hex
+            source_name = ".".join([name_db, *i])
+            source = DataSource(
+                source_id=source_id,
+                name=source_name,
+                connection_id=connection_id,
+                source_type="postgresql",
+                status="available"
+            )
+            response = self.postgresql_adapter.test_connection(source)
+            if not response[0]:
+                raise ConnectionError(response[1])
+
+            try:
+                schema = self.postgresql_adapter.introspect_schema(source)
+                source.schema_version = schema.version
+                self.catalog.upsert_source(source)
+                self.catalog.save_schema(schema)
+                all_sources.append(source)
+            except Exception:
+                raise
+
+        return all_sources
+
     def get_schema(self, source_id: str) -> SourceSchema:
         source = self.catalog.get_source(source_id)
 
@@ -86,7 +123,7 @@ class SourceService:
         schema = self.catalog.get_schema(source_id)
 
         if schema is None:
-            schema = self.csv_adapter.introspect_schema(source)
+            schema = self.adapters[source.source_type].introspect_schema(source)
             self.catalog.save_schema(schema)
 
         return schema
@@ -102,7 +139,7 @@ class SourceService:
         if source is None:
             raise KeyError(f"Unknown source: {source_id}")
 
-        return self.csv_adapter.preview(source, source.name, limit)
+        return self.adapters[source.source_type].preview(source, source.name, limit)
 
     def profile(self, source_id: str) -> dict[str, Any]:
         source = self.catalog.get_source(source_id)
@@ -110,5 +147,5 @@ class SourceService:
         if source is None:
             raise KeyError(f"Unknown source: {source_id}")
 
-        return self.csv_adapter.profile(source, source.name)
+        return self.adapters[source.source_type].profile(source, source.name)
     

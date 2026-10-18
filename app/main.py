@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 import logging
+from typing import cast
 
 from fastapi import (
     FastAPI,
@@ -8,22 +9,22 @@ from fastapi import (
     HTTPException,
     Query,
     Request,
-    UploadFile,
+    UploadFile, Depends,
 )
 
 from app.agent import AgentRuntime
 from app.config import PROJECT_ROOT, get_settings
-from app.db import create_chat_database, initialize_chat_database
+from app.data_sources import inspect_postgresql_connection
+from app.db import create_chat_database, initialize_chat_database, create_catalog_database
 from app.llm.factory import create_llm_provider
-from app.models import AskRequest, AskResponse, ChatMessage, DataSource, Chat, ChatCreateRequest, ChatSummary, \
-    ChatHistoryResponse
+from app.models import *
 from app.schema_catalog import SchemaCatalog
 from app.source_service import SourceService
 from app.tools import build_tool_registry
 from app.core.logging import setup_logging
 from app.chat_manager import ChatManager, ChatNotFoundError
 from app.web import mount_frontend
-
+from app.connection_manager import ConnectionManager
 
 # Логирование и настройки
 setup_logging()
@@ -32,50 +33,64 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
-# Каталог источников и схем.
-# SchemaCatalog самостоятельно создаёт синхронный SQLAlchemy engine.
-catalog = SchemaCatalog(settings.catalog_db_path)
-
-source_service = SourceService(
-    settings.data_dir,
-    catalog,
-)
-
-tool_registry = build_tool_registry(
-    catalog,
-    source_service,
-)
-
-
-# LLM и агент
-llm_provider = create_llm_provider(settings)
-
-agent = AgentRuntime(
-    llm=llm_provider,
-    tools=tool_registry,
-    max_steps=settings.agent_max_steps,
-)
-
-
 # Жизненный цикл приложения
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    chat_engine, chat_sessions = create_chat_database(
-        settings.chat_db_path
-    )
+    catalog_engine = None
+    chat_engine = None
 
     try:
+        # 1. Инициализируем каталог.
+        catalog_engine, catalog_sessions = create_catalog_database(
+            settings.catalog_db_path
+        )
+
+        # 2. Инициализируем базу чатов.
+        chat_engine, chat_sessions = create_chat_database(
+            settings.chat_db_path
+        )
         await initialize_chat_database(chat_engine)
 
-        # Менеджер получает фабрику асинхронных сессий.
-        app.state.chat_manager = ChatManager(chat_sessions)
+        # 3. Создаём менеджеры.
+        catalog = SchemaCatalog(
+            settings.catalog_db_path,
+            session_factory=catalog_sessions,
+        )
+        connection_manager = ConnectionManager(catalog_sessions)
+        source_service = SourceService(settings.data_dir, catalog)
+        chat_manager = ChatManager(chat_sessions)
+
+        # 4. Создаём инструменты и агента после зависимостей.
+        tool_registry = build_tool_registry(
+            catalog,
+            source_service,
+        )
+        llm_provider = create_llm_provider(settings)
+
+        agent = AgentRuntime(
+            llm=llm_provider,
+            tools=tool_registry,
+            max_steps=settings.agent_max_steps,
+        )
+
+        # 5. Сохраняем зависимости на время работы приложения.
+        app.state.catalog = catalog
+        app.state.connection_manager = connection_manager
+        app.state.source_service = source_service
+        app.state.chat_manager = chat_manager
+        app.state.tool_registry = tool_registry
+        app.state.agent = agent
 
         logger.info("Application started")
         yield
 
     finally:
-        await chat_engine.dispose()
-        catalog.close()
+        if chat_engine is not None:
+            await chat_engine.dispose()
+
+        if catalog_engine is not None:
+            catalog_engine.dispose()
+
         logger.info("Application stopped")
 
 
@@ -85,6 +100,36 @@ app = FastAPI(
     description="Local-first foundation for an AI-Native BI platform.",
     lifespan=lifespan,
 )
+
+
+# Функции для получения Runtime переменных из lifespan
+
+def get_agent(request: Request) -> AgentRuntime:
+    return cast(AgentRuntime, request.app.state.agent)
+
+
+def get_connection_manager(request: Request) -> ConnectionManager:
+    return cast(
+        ConnectionManager,
+        request.app.state.connection_manager,
+    )
+
+
+def get_source_service(request: Request) -> SourceService:
+    return cast(
+        SourceService,
+        request.app.state.source_service,
+    )
+
+
+def get_catalog(request: Request) -> SchemaCatalog:
+    return cast(
+        SchemaCatalog,
+        request.app.state.catalog,
+    )
+
+
+# =================== Объявление эндпоинтов =======================
 
 
 @app.get("/health")
@@ -97,8 +142,10 @@ def health():
 
 @app.post("/sources/csv", response_model=DataSource)
 async def upload_csv(
-    file: UploadFile = File(...),
-    name: str | None = Form(default=None),
+        file: UploadFile = File(...),
+        name: str | None = Form(default=None),
+
+        source_service: SourceService = Depends(get_source_service)
 ):
     try:
         content = await file.read()
@@ -123,13 +170,51 @@ async def upload_csv(
         ) from exc
 
 
+@app.post("/sources/postgresql", response_model=list[DataSource])
+def upload_postgresql(
+        connection_properties: PostgreSQLProperties,
+        name: str,
+
+        connection_manager: ConnectionManager = Depends(get_connection_manager),
+        source_service: SourceService = Depends(get_source_service)
+):
+    try:
+        objects = inspect_postgresql_connection(connection_properties)
+        connection_id = connection_manager.create_connection(
+            name=name,
+            connection_type="postgresql",
+            properties=connection_properties
+        )
+        return source_service.register_postgresql(
+            connection_id=connection_id,
+            name_db=name,
+            objects=objects
+        )
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        ) from exc
+
+    except Exception as exc:
+        logger.exception("Could not register PostgreSQL")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Could not register PostgreSQL: {type(exc).__name__}",
+        ) from exc
+
+
 @app.get("/sources", response_model=list[DataSource])
-def list_sources():
+def list_sources(
+        catalog: SchemaCatalog = Depends(get_catalog)
+):
     return catalog.list_sources()
 
 
 @app.get("/sources/{source_id}/schema")
-def get_schema(source_id: str):
+def get_schema(source_id: str,
+               source_service: SourceService = Depends(get_source_service)):
     try:
         return source_service.get_schema(source_id)
 
@@ -141,7 +226,8 @@ def get_schema(source_id: str):
 
 
 @app.get("/sources/{source_id}/preview")
-def preview_source(source_id: str, limit: int = 10):
+def preview_source(source_id: str, limit: int = 10,
+                   source_service: SourceService = Depends(get_source_service)):
     try:
         return source_service.preview(source_id, limit)
 
@@ -159,7 +245,8 @@ def preview_source(source_id: str, limit: int = 10):
 
 
 @app.get("/sources/{source_id}/profile")
-def profile_source(source_id: str):
+def profile_source(source_id: str,
+                   source_service: SourceService = Depends(get_source_service)):
     try:
         return source_service.profile(source_id)
 
@@ -171,7 +258,8 @@ def profile_source(source_id: str):
 
 
 @app.post("/agent/ask", response_model=AskResponse)
-async def ask_agent(body: AskRequest):
+async def ask_agent(body: AskRequest,
+                    agent: AgentRuntime = Depends(get_agent)):
     try:
         return await agent.ask(
             question=body.question,
@@ -188,10 +276,12 @@ async def ask_agent(body: AskRequest):
 
 @app.post("/agent/chat", response_model=AskResponse)
 async def chat_agent(
-    body: AskRequest,
-    http_request: Request,
-    chat_id: str | None = Query(default=None),
-    temporary_chat: bool = Query(default=False),
+        body: AskRequest,
+        http_request: Request,
+        chat_id: str | None = Query(default=None),
+        temporary_chat: bool = Query(default=False),
+
+        agent: AgentRuntime = Depends(get_agent)
 ):
     chat_manager: ChatManager = http_request.app.state.chat_manager
 
@@ -260,9 +350,9 @@ async def chat_agent(
 
 @app.get("/chats", response_model=list[ChatSummary])
 async def list_chats(
-    request: Request,
-    limit: int = Query(default=50, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
+        request: Request,
+        limit: int = Query(default=50, ge=1, le=100),
+        offset: int = Query(default=0, ge=0),
 ):
     chat_manager: ChatManager = request.app.state.chat_manager
 
@@ -274,10 +364,10 @@ async def list_chats(
 
 @app.get("/chats/{chat_id}", response_model=ChatHistoryResponse)
 async def get_chat(
-    chat_id: str,
-    request: Request,
-    limit: int = Query(default=50, ge=1, le=500),
-    offset: int = Query(default=0, ge=0),
+        chat_id: str,
+        request: Request,
+        limit: int = Query(default=50, ge=1, le=500),
+        offset: int = Query(default=0, ge=0),
 ):
     """
     Загружает последние ``limit`` сообщений, заканчивая сообщением номер ``offset`` по айди чата
@@ -306,8 +396,8 @@ async def get_chat(
 
 @app.post("/chats", response_model=ChatSummary, status_code=201)
 async def create_chat(
-    body: ChatCreateRequest,
-    request: Request,
+        body: ChatCreateRequest,
+        request: Request,
 ):
     chat_manager: ChatManager = request.app.state.chat_manager
 
@@ -328,8 +418,8 @@ async def create_chat(
 
 @app.delete("/chats/{chat_id}", status_code=204)
 async def delete_chat(
-    chat_id: str,
-    request: Request,
+        chat_id: str,
+        request: Request,
 ):
     chat_manager: ChatManager = request.app.state.chat_manager
 
