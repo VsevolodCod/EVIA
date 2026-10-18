@@ -1,5 +1,13 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { api, waitForChat, errorMessage, type Health, type Source } from "./api";
+import {
+  api,
+  waitForChat,
+  errorMessage,
+  type ChatMessage,
+  type ChatSummary,
+  type Health,
+  type Source,
+} from "./api";
 import { ErrorNotice, Evia, Icon, SafeMarkdown } from "./components";
 import { SourceInspector } from "./features/sources/SourceInspector";
 import type { Entry, View } from "./features/chat/types";
@@ -12,6 +20,65 @@ import {
 } from "./features/mascot/resolveEviaState";
 import type { EviaState } from "./features/mascot/states";
 
+const CHAT_SOURCE_STORAGE_KEY = "evia.chat-sources.v1";
+
+type ChatPage = {
+  hasMore: boolean;
+  nextBefore: number | null;
+  loading: boolean;
+  error: string;
+};
+
+function savedChatSources(): Record<string, string> {
+  try {
+    const value: unknown = JSON.parse(localStorage.getItem(CHAT_SOURCE_STORAGE_KEY) ?? "{}");
+    if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+    return Object.fromEntries(
+      Object.entries(value).filter((entry): entry is [string, string] =>
+        typeof entry[0] === "string" && typeof entry[1] === "string"),
+    );
+  } catch {
+    return {};
+  }
+}
+
+function entriesFromMessages(chatId: string, messages: ChatMessage[]): Entry[] {
+  const entries: Entry[] = [];
+  let user: ChatMessage | undefined;
+  for (const message of messages) {
+    if (message.role === "user") {
+      user = message;
+      continue;
+    }
+    if (message.role === "assistant" && user) {
+      entries.push({
+        id: user.message_id,
+        conversationId: chatId,
+        question: user.content,
+        state: "success",
+        answer: { answer: message.content, steps: 0, tool_results: [] },
+      });
+      user = undefined;
+    }
+  }
+  if (user) {
+    entries.push({
+      id: user.message_id,
+      conversationId: chatId,
+      question: user.content,
+      state: "error",
+      mascotState: "warning",
+      error: "Ответ для этого вопроса не сохранился. Повторите запрос.",
+    });
+  }
+  return entries;
+}
+
+function mergeEntries(existing: Entry[], loaded: Entry[]): Entry[] {
+  const known = new Set(existing.map((entry) => entry.id));
+  return [...loaded.filter((entry) => !known.has(entry.id)), ...existing];
+}
+
 export default function App() {
   const [sources, setSources] = useState<Source[]>([]);
   const [sourcesLoading, setSourcesLoading] = useState(true);
@@ -20,6 +87,11 @@ export default function App() {
   const [healthError, setHealthError] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [histories, setHistories] = useState<Record<string, Entry[]>>({});
+  const [chatSummaries, setChatSummaries] = useState<ChatSummary[]>([]);
+  const [chatSources, setChatSources] = useState<Record<string, string>>(savedChatSources);
+  const [historyPages, setHistoryPages] = useState<Record<string, ChatPage>>({});
+  const [historyListLoading, setHistoryListLoading] = useState(true);
+  const [historyListError, setHistoryListError] = useState("");
   const [activeIds, setActiveIds] = useState<
     Record<string, string | undefined>
   >({});
@@ -44,8 +116,10 @@ export default function App() {
   const healthController = useRef<AbortController | null>(null);
   const uploadController = useRef<AbortController | null>(null);
   const askControllers = useRef(new Map<string, AbortController>());
+  const historyControllers = useRef(new Map<string, AbortController>());
   const activeConversations = useRef(new Map<string, string>());
-  const serverChats = useRef(new Map<string, Promise<string>>());
+  const pendingChats = useRef(new Map<string, Promise<string>>());
+  const loadedChats = useRef(new Set<string>());
   const sequence = useRef(0);
   const mounted = useRef(true);
   const source = sources.find((item) => item.source_id === selectedId);
@@ -58,6 +132,14 @@ export default function App() {
     : [];
   const conversations = history.filter((entry, index) =>
     history.findIndex((item) => item.conversationId === entry.conversationId) === index);
+  const selectedServerChats = selectedId
+    ? chatSummaries.filter((chat) => chatSources[chat.chat_id] === selectedId)
+    : [];
+  const failedServerChat = selectedServerChats.find(
+    (chat) => historyPages[chat.chat_id]?.error,
+  );
+  const activeConversationId = activeEntry?.conversationId;
+  const activePage = activeConversationId ? historyPages[activeConversationId] : undefined;
   const pending = conversationEntries.find((entry) => entry.state === "pending");
   const draft = selectedId ? (drafts[selectedId] ?? "") : "";
   const mascotState = resolveEviaState({
@@ -107,18 +189,106 @@ export default function App() {
       }
     }
   }
+  async function loadChatList() {
+    setHistoryListLoading(true);
+    setHistoryListError("");
+    try {
+      const list = await api.chats();
+      if (mounted.current) setChatSummaries(list);
+    } catch (error) {
+      if (mounted.current) setHistoryListError(errorMessage(error));
+    } finally {
+      if (mounted.current) setHistoryListLoading(false);
+    }
+  }
+  function rememberChatSource(chatId: string, sourceId: string) {
+    setChatSources((previous) => {
+      const next = { ...previous, [chatId]: sourceId };
+      try {
+        localStorage.setItem(CHAT_SOURCE_STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        /* The chat remains available for this session if browser storage is unavailable. */
+      }
+      return next;
+    });
+  }
+  async function loadChatHistory(sourceId: string, chatId: string, before?: number) {
+    const requestKey = `${chatId}:${before ?? "latest"}`;
+    if (historyControllers.current.has(requestKey)) return;
+    const controller = new AbortController();
+    historyControllers.current.set(requestKey, controller);
+    setHistoryPages((previous) => ({
+      ...previous,
+      [chatId]: {
+        hasMore: previous[chatId]?.hasMore ?? false,
+        nextBefore: previous[chatId]?.nextBefore ?? null,
+        loading: true,
+        error: "",
+      },
+    }));
+    try {
+      const page = await api.chatHistory(chatId, before, controller.signal);
+      if (controller.signal.aborted || !mounted.current) return;
+      const entries = entriesFromMessages(chatId, page.messages);
+      setHistories((previous) => ({
+        ...previous,
+        [sourceId]: before
+          ? mergeEntries(previous[sourceId] ?? [], entries)
+          : [
+              ...(previous[sourceId] ?? []).filter((entry) => entry.conversationId !== chatId),
+              ...entries,
+            ],
+      }));
+      setHistoryPages((previous) => ({
+        ...previous,
+        [chatId]: {
+          hasMore: page.has_more,
+          nextBefore: page.next_before,
+          loading: false,
+          error: "",
+        },
+      }));
+      loadedChats.current.add(chatId);
+    } catch (error) {
+      if (!controller.signal.aborted && mounted.current) {
+        setHistoryPages((previous) => ({
+          ...previous,
+          [chatId]: {
+            hasMore: previous[chatId]?.hasMore ?? false,
+            nextBefore: previous[chatId]?.nextBefore ?? null,
+            loading: false,
+            error: errorMessage(error),
+          },
+        }));
+      }
+    } finally {
+      historyControllers.current.delete(requestKey);
+    }
+  }
   useEffect(() => {
     mounted.current = true;
     void loadSources();
     void loadHealth();
+    void loadChatList();
     return () => {
       mounted.current = false;
       sourceController.current?.abort();
       healthController.current?.abort();
       uploadController.current?.abort();
       askControllers.current.forEach((controller) => controller.abort());
+      historyControllers.current.forEach((controller) => controller.abort());
     };
   }, []);
+
+  useEffect(() => {
+    if (!selectedId || historyListLoading) return;
+    chatSummaries
+      .filter((chat) => chatSources[chat.chat_id] === selectedId)
+      .forEach((chat) => {
+        if (!loadedChats.current.has(chat.chat_id))
+          void loadChatHistory(selectedId, chat.chat_id);
+      });
+  }, [selectedId, chatSummaries, chatSources, historyListLoading]);
 
   function selectSource(id: string) {
     setSelectedId(id);
@@ -241,11 +411,18 @@ export default function App() {
     try {
       // Create once before asking, so an LLM failure/abort cannot lose chat_id.
       // Let creation finish even if waiting is cancelled; reuse it on retry.
-      let chat = serverChats.current.get(conversationId);
+      let chat = pendingChats.current.get(conversationId);
       if (!chat) {
-        chat = api.createChat(entry.question.slice(0, 200)).then((result) => result.chat_id);
-        serverChats.current.set(conversationId, chat);
-        chat.catch(() => serverChats.current.delete(conversationId));
+        chat = api.createChat(entry.question.slice(0, 200)).then((result) => {
+          rememberChatSource(result.chat_id, sourceId);
+          setChatSummaries((previous) => [
+            result,
+            ...previous.filter((item) => item.chat_id !== result.chat_id),
+          ]);
+          return result.chat_id;
+        });
+        pendingChats.current.set(conversationId, chat);
+        chat.catch(() => pendingChats.current.delete(conversationId));
       }
       const chatId = await waitForChat(chat, controller.signal);
       controller.signal.throwIfAborted();
@@ -411,7 +588,21 @@ export default function App() {
                 <span className="nav-count">{conversations.length}</span>
               )}
             </div>
-            {history.length ? (
+            {historyListLoading ? (
+              <p className="sidebar-note" role="status">Загружаем диалоги…</p>
+            ) : historyListError ? (
+              <ErrorNotice
+                message={historyListError}
+                onRetry={() => void loadChatList()}
+                label="Повторить загрузку диалогов"
+              />
+            ) : failedServerChat && !history.length ? (
+              <ErrorNotice
+                message={historyPages[failedServerChat.chat_id]?.error ?? "Не удалось загрузить историю."}
+                onRetry={() => selectedId && void loadChatHistory(selectedId, failedServerChat.chat_id)}
+                label="Повторить загрузку истории"
+              />
+            ) : history.length ? (
               <div className="history-list">
                 {[...conversations].reverse().map((entry) => (
                   <button
@@ -537,6 +728,26 @@ export default function App() {
           <div className="chat-content">
             {activeEntry ? (
               <>
+              {activePage?.hasMore && (
+                <div className="history-pagination">
+                  {activePage.loading ? (
+                    <p role="status">Загружаем предыдущие сообщения…</p>
+                  ) : activePage.error ? (
+                    <ErrorNotice
+                      message={activePage.error}
+                      onRetry={() => selectedId && activePage.nextBefore !== null && void loadChatHistory(selectedId, activeConversationId!, activePage.nextBefore)}
+                      label="Повторить загрузку истории"
+                    />
+                  ) : (
+                    <button
+                      className="text-button"
+                      onClick={() => selectedId && activePage.nextBefore !== null && void loadChatHistory(selectedId, activeConversationId!, activePage.nextBefore)}
+                    >
+                      Показать предыдущие сообщения
+                    </button>
+                  )}
+                </div>
+              )}
               {conversationEntries.map((message) => <article key={message.id} className="chat-turn">
                 <div className="user-message">{message.question}</div>
                 <section className="assistant-message" aria-label="Ответ EVIA">
