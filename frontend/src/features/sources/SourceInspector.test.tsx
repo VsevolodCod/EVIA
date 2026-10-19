@@ -90,22 +90,21 @@ function Workspace({
   );
 }
 
-it("opens an overview with cell completeness explicitly scoped to the sample", async () => {
+it("opens a compact dashboard scoped to rows returned for preview", async () => {
   setup();
   render(<Workspace />);
   expect(
-    await screen.findByRole("heading", { name: "Обзор данных" }),
+    await screen.findByRole("heading", { name: "Продажи" }),
   ).toBeInTheDocument();
-  expect(screen.getByText("87,5%")).toBeInTheDocument();
-  expect(screen.getByText(/Выборка: 4 строки/)).toBeInTheDocument();
-  expect(screen.getByText("2 000")).toBeInTheDocument();
-  expect(screen.queryByText(/оценка качества/i)).not.toBeInTheDocument();
+  expect(screen.getByText("Строк в выборке")).toBeInTheDocument();
+  expect(screen.getByText(/1 строка в предпросмотре источника/)).toBeInTheDocument();
+  expect(screen.queryByText(/полный датасет/i)).not.toBeInTheDocument();
 });
 
 it("drills down from missing cells to a column and searches columns", async () => {
   setup();
   render(<Workspace />);
-  await screen.findByRole("heading", { name: "Обзор данных" });
+  await screen.findByRole("heading", { name: "Продажи" });
   fireEvent.click(screen.getByRole("button", { name: "Качество" }));
   fireEvent.click(screen.getByRole("button", { name: "Изучить region" }));
   const column = await screen.findByRole("region", { name: "Столбец region" });
@@ -126,28 +125,29 @@ it("drills down from missing cells to a column and searches columns", async () =
   expect(screen.getByText("Столбцы не найдены")).toBeInTheDocument();
 });
 
-it("does not equate an empty or incomplete profile with perfect completeness", async () => {
+it("keeps an empty preview distinct from an incomplete profile", async () => {
   setup({ ...profile, sample_size: 0, columns: {} });
+  vi.mocked(api.preview).mockResolvedValue([]);
   render(<Workspace />);
-  expect(await screen.findByText("В выборке нет строк")).toBeInTheDocument();
+  expect(await screen.findByText("В предпросмотре нет строк")).toBeInTheDocument();
   expect(screen.queryByText("100%")).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Столбцы" }));
   expect(screen.getAllByText("Статистика столбца недоступна")).toHaveLength(2);
 });
 
-it("marks partial coverage rather than counting unprofiled columns as filled", async () => {
+it("keeps source dashboard calculations tied to preview rather than profile coverage", async () => {
   setup({ ...profile, columns: { region: profile.columns.region } });
   render(<Workspace />);
   expect(
-    await screen.findByText(/Профиль доступен для 1 из 2 столбцов/),
+    await screen.findByRole("heading", { name: "Продажи" }),
   ).toBeInTheDocument();
-  expect(screen.getByText("75%")).toBeInTheDocument();
+  expect(screen.getByText(/1 строка в предпросмотре источника/)).toBeInTheDocument();
 });
 
 it("clears old analytics while a different source is loading", async () => {
   setup();
   const { rerender } = render(<Workspace />);
-  await screen.findByRole("heading", { name: "Обзор данных" });
+  await screen.findByRole("heading", { name: "Продажи" });
   let finish!: (value: Profile) => void;
   vi.mocked(api.profile).mockImplementation(
     () =>
@@ -164,7 +164,8 @@ it("clears old analytics while a different source is loading", async () => {
   expect(screen.queryByText("87,5%")).not.toBeInTheDocument();
   expect(screen.getByRole("status")).toHaveTextContent("Изучаем структуру");
   await act(async () => finish({ ...profile, sample_size: 0, columns: {} }));
-  expect(await screen.findByText("В выборке нет строк")).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "Другой источник" })).toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "Продажи" })).not.toBeInTheDocument();
 });
 
 it("shows the actual answer safely in the analysis pane with its table", async () => {
@@ -193,6 +194,9 @@ it("shows the actual answer safely in the analysis pane with its table", async (
   expect(screen.getByText("Север", { selector: "strong" })).toBeInTheDocument();
   expect(
     screen.getByRole("region", { name: "Результат execute_sql" }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("img", { name: "Распределение поля revenue" }),
   ).toBeInTheDocument();
   expect(
     container.querySelector("script, iframe, a[href^='javascript:']"),

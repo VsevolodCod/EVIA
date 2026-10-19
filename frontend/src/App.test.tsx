@@ -370,7 +370,7 @@ it("uploads a CSV, selects the returned source and loads its real preview", asyn
       ],
     },
   });
-  expect(await screen.findByRole("heading", { name: "Обзор данных" })).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "Источник uploaded" })).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: /^Данные$/ }));
   expect(await screen.findByText("uploaded-value")).toBeInTheDocument();
   expect(

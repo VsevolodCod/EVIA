@@ -1,0 +1,27 @@
+.line-chart g[tabindex]:focus {
+  outline: none;
+}
+
+.line-chart g[tabindex]:focus circle {
+  stroke: #202833;
+  stroke-width: 2;
+}
+
+@media print {
+  .topbar,
+  .sidebar,
+  .chat-panel,
+  .analytics-tabs,
+  .skip-link {
+    display: none !important;
+  }
+
+  .workspace {
+    display: block !important;
+    min-height: auto !important;
+  }
+
+  .analytics-workspace {
+    display: block !important;
+  }
+}
