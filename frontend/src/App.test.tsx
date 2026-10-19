@@ -261,6 +261,7 @@ it("continues one conversation, resumes an older one, and isolates sources", asy
   expect(screen.getByText("Ответ: Первый")).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Уточнение" })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Новый анализ" }));
+  await select("A");
   await ask("Другой диалог");
   await screen.findByText("Ответ: Другой диалог");
   expect(screen.queryByText("Ответ: Первый")).not.toBeInTheDocument();
@@ -280,6 +281,20 @@ it("continues one conversation, resumes an older one, and isolates sources", asy
   expect(sent.map((s) => s.source_ids)).toEqual([["A"], ["A"], ["A"], ["A"], ["B"]]);
 });
 
+it("returns to the CSV start screen without removing connected sources", async () => {
+  setup();
+  render(<App />);
+  await select("A");
+
+  fireEvent.click(screen.getByRole("button", { name: "Новый анализ" }));
+
+  expect(
+    await screen.findByRole("heading", { name: "Добавьте CSV" }),
+  ).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Источник A" })).toBeInTheDocument();
+  expect(screen.getByRole("textbox", { name: "Ваш вопрос" })).toBeDisabled();
+});
+
 it("does not switch back to an older conversation when its answer arrives late", async () => {
   const finish: ((response: Response) => void)[] = [];
   setup(() => new Promise((resolve) => finish.push(resolve)));
@@ -287,6 +302,7 @@ it("does not switch back to an older conversation when its answer arrives late",
   await select("A");
   await ask("Старый");
   fireEvent.click(screen.getByRole("button", { name: "Новый анализ" }));
+  await select("A");
   await ask("Новый");
   await act(async () => finish[0](Response.json({ answer: "Старый ответ", steps: 1, tool_results: [] })));
   expect(screen.queryByText("Старый ответ")).not.toBeInTheDocument();
@@ -295,19 +311,12 @@ it("does not switch back to an older conversation when its answer arrives late",
   fireEvent.click(screen.getByRole("button", { name: "Старый" }));
   expect(within(screen.getByRole("complementary", { name: "Чат с EVIA" })).getByText("Старый ответ")).toBeInTheDocument();
 });
-it("shows mock mode honestly and only persists the quiet setting", async () => {
+it("shows mock mode honestly without exposing a quiet-mode control", async () => {
   setup();
   render(<App />);
   expect(await screen.findByText(/Тестовая модель/)).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Тихий режим" }));
-  expect(localStorage.getItem("linza.quiet")).toBe("true");
-  expect(localStorage.length).toBe(1);
-  await waitFor(() =>
-    expect(screen.getByRole("button", { name: "Тихий режим" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    ),
-  );
+  expect(screen.queryByRole("button", { name: "Тихий режим" })).not.toBeInTheDocument();
+  expect(localStorage.getItem("linza.quiet")).toBeNull();
 });
 it("uploads a CSV, selects the returned source and loads its real preview", async () => {
   const fetcher = vi.fn(async (url: string, init?: RequestInit) => {

@@ -97,13 +97,6 @@ export default function App() {
   >({});
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [view, setView] = useState<View>("overview");
-  const [quiet, setQuiet] = useState(() => {
-    try {
-      return localStorage.getItem("linza.quiet") === "true";
-    } catch {
-      return false;
-    }
-  });
   const [uploadedId, setUploadedId] = useState<string | null>(null);
   const [uploadFailure, setUploadFailure] = useState<EviaState | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -301,27 +294,19 @@ export default function App() {
       setDrafts((previous) => ({ ...previous, [selectedId]: value }));
   }
   function newAnalysis() {
-    if (!selectedId) {
-      fileInput.current?.click();
-      return;
+    if (selectedId) {
+      setActiveIds((previous) => ({ ...previous, [selectedId]: undefined }));
+      activeConversations.current.delete(selectedId);
+      setDrafts((previous) => ({ ...previous, [selectedId]: "" }));
     }
-    setActiveIds((previous) => ({ ...previous, [selectedId]: undefined }));
-    activeConversations.current.delete(selectedId);
-    changeDraft("");
+
+    setSelectedId(null);
     setUploadedId(null);
     setUploadFailure(null);
     setUploadError("");
+    setFailedFile(null);
+    setDragOver(false);
     setView("overview");
-    composer.current?.focus();
-  }
-  function toggleQuiet() {
-    const next = !quiet;
-    setQuiet(next);
-    try {
-      localStorage.setItem("linza.quiet", String(next));
-    } catch {
-      /* The preference still works for this session. */
-    }
   }
   async function upload(file: File) {
     if (uploading) return;
@@ -457,7 +442,7 @@ export default function App() {
   }
 
   return (
-    <div className={`app ${quiet ? "quiet" : ""}`}>
+    <div className="app">
       <a className="skip-link" href="#analysis">
         Перейти к данным
       </a>
@@ -634,19 +619,6 @@ export default function App() {
               <p className="sidebar-note">Нет диалогов</p>
             )}
           </section>
-          <div className="sidebar-bottom">
-            <button
-              className="quiet-button"
-              aria-pressed={quiet}
-              onClick={toggleQuiet}
-            >
-              <Icon name="quiet" />
-              Тихий режим
-              <span className="toggle">
-                <span />
-              </span>
-            </button>
-          </div>
         </aside>
         <main
           className={`analysis ${source ? "" : "analysis-empty"}`}
@@ -794,7 +766,7 @@ export default function App() {
               </>
             ) : (
               <div className="chat-welcome">
-                <Evia large state={mascotState} quiet={quiet} />
+                <Evia large state={mascotState} />
                 <p
                   className={`evia-live-status ${["welcome", "waiting", "listening", "explaining"].includes(mascotState) ? "visually-hidden" : ""}`}
                   role="status"
@@ -827,7 +799,7 @@ export default function App() {
           <div className="chat-bottom">
             {activeEntry && (
               <div className="helper">
-                <Evia state={mascotState} quiet={quiet} />
+                <Evia state={mascotState} />
                 <div role="status">
                   <strong>{eviaStatus(mascotState)}</strong>
                 </div>
@@ -905,7 +877,7 @@ export default function App() {
               <summary>О чате</summary>
               <p>
                 Вопросы продолжают выбранный диалог: модель получает предыдущие
-                сообщения. «Новый анализ» начинает отдельный диалог. У каждого
+                сообщения. «Новый анализ» открывает экран добавления источника. У каждого
                 источника своя история. Сообщения сохраняются на сервере;
                 список диалогов этой вкладки пока доступен до обновления страницы.
               </p>
