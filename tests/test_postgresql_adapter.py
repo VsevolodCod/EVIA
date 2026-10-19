@@ -57,6 +57,7 @@ def test_discovery_returns_only_allowlisted_tables_and_uses_readonly_transaction
         def __init__(self):
             self.cursor_instance = Cursor()
             self.executed = []
+            self.read_only = False
 
         def execute(self, query, params=None):
             self.executed.append((str(query), params))
@@ -81,7 +82,8 @@ def test_discovery_returns_only_allowlisted_tables_and_uses_readonly_transaction
     discovered = adapter.discover()
 
     assert [(source.schema_name, source.table_name) for source in discovered] == [("public", "orders")]
-    assert any("READ ONLY" in query for query, _params in connection.executed)
+    assert connection.read_only is True
+    assert not any("BEGIN READ ONLY" in query for query, _params in connection.executed)
     assert "secret" not in repr(discovered)
 
 
@@ -199,3 +201,38 @@ async def test_postgresql_status_endpoint_is_secret_free_when_unconfigured():
     assert response.status_code == 200
     assert response.json() == {"configured": False, "connected": False}
     assert "postgresql://" not in response.text
+
+
+def test_query_tool_returns_only_postgresql_stable_error_code(tmp_path):
+    from app.config import PostgresSettings
+    from app.data_sources.postgresql_adapter import PostgreSQLAdapter
+    from app.schema_catalog import SchemaCatalog
+    from app.source_service import SourceService
+    from app.tools import build_tool_registry
+
+    source = PostgreSQLAdapter(
+        PostgresSettings(
+            dsn="postgresql://reader:secret@db.example/analytics",
+            allowed_tables=frozenset({("public", "orders")}),
+            connect_timeout_seconds=5,
+            statement_timeout_ms=10_000,
+        )
+    )._source("public", "orders")
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    try:
+        service = SourceService(tmp_path / "data", catalog, postgres_adapter=PostgreSQLAdapter(
+            PostgresSettings(
+                dsn="postgresql://reader:secret@db.example/analytics",
+                allowed_tables=frozenset({("public", "orders")}),
+                connect_timeout_seconds=5,
+                statement_timeout_ms=10_000,
+            )
+        ))
+        catalog.upsert_source(source)
+        result = build_tool_registry(catalog, service).execute(
+            "query_data", {"source_id": source.source_id, "sql": "DELETE FROM source"}
+        )
+        assert result.ok is False
+        assert result.error == "QUERY_REJECTED"
+    finally:
+        catalog.close()

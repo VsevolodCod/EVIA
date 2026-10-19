@@ -56,10 +56,16 @@ class PostgreSQLAdapter(DataSourceAdapter):
                 self.settings.dsn,
                 connect_timeout=self.settings.connect_timeout_seconds,
             )
-            connection.execute("BEGIN READ ONLY")
+            # Set this before the first statement. psycopg otherwise opens an
+            # implicit transaction first, making a later BEGIN READ ONLY only
+            # emit a PostgreSQL warning instead of changing its mode.
+            connection.read_only = True
+            # PostgreSQL does not accept a bind parameter in ``SET`` itself;
+            # set_config keeps the timeout value parameterized and local to
+            # this read-only transaction.
             connection.execute(
-                "SET LOCAL statement_timeout = %s",
-                (self.settings.statement_timeout_ms,),
+                "SELECT set_config('statement_timeout', %s, true)",
+                (str(self.settings.statement_timeout_ms),),
             )
             yield connection
         except PostgresSourceError:
