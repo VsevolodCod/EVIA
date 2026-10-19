@@ -98,6 +98,7 @@ export function AnalysisResult({ entry }: { entry?: Entry }) {
             scope={`result-${entry.id}`}
             schema={result.schema}
             rows={result.rows}
+            context="result"
           />}
           <p className="analysis-question">{entry.question}</p>
           <section className="analysis-answer" aria-label="Вывод EVIA">

@@ -90,15 +90,16 @@ function Workspace({
   );
 }
 
-it("opens a compact dashboard scoped to rows returned for preview", async () => {
+it("distinguishes the full source from its preview in the dashboard", async () => {
   setup();
   render(<Workspace />);
   expect(
     await screen.findByRole("heading", { name: "Продажи" }),
   ).toBeInTheDocument();
-  expect(screen.getByText("Строк в выборке")).toBeInTheDocument();
+  expect(screen.getByText("Строк в источнике")).toBeInTheDocument();
+  expect(screen.getByText("2 000")).toBeInTheDocument();
   expect(screen.getByText(/1 строка в предпросмотре источника/)).toBeInTheDocument();
-  expect(screen.queryByText(/полный датасет/i)).not.toBeInTheDocument();
+  expect(screen.getByText("Полный датасет")).toBeInTheDocument();
 });
 
 it("keeps the section navigation above every analytics view", async () => {
@@ -151,6 +152,18 @@ it("keeps source dashboard calculations tied to preview rather than profile cove
     await screen.findByRole("heading", { name: "Продажи" }),
   ).toBeInTheDocument();
   expect(screen.getByText(/1 строка в предпросмотре источника/)).toBeInTheDocument();
+});
+
+it("keeps the overview available when the profile request fails", async () => {
+  setup();
+  vi.mocked(api.profile).mockRejectedValueOnce(new Error("Профиль временно недоступен"));
+  render(<Workspace />);
+
+  expect(await screen.findByRole("heading", { name: "Продажи" })).toBeInTheDocument();
+  expect(screen.getByText("Строк в источнике")).toBeInTheDocument();
+  expect(screen.getByText("Полный датасет")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Данные" }));
+  expect(await screen.findByRole("region", { name: "Предпросмотр источника" })).toBeInTheDocument();
 });
 
 it("clears old analytics while a different source is loading", async () => {

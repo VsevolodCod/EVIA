@@ -29,7 +29,7 @@
   box-shadow: 0 1px 0 var(--button-edge);
 }
 
-@media (max-width: 720px) {
+@media (max-width: 1000px) {
   .analytics-workspace:has(.dashboard) .analytics-tabs {
     padding-right: 2px;
   }

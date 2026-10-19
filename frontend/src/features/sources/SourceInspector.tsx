@@ -26,7 +26,7 @@ type SourceData = {
   id: string;
   schema: SourceSchema;
   rows: Row[];
-  profile: Profile;
+  profile?: Profile;
 };
 const views: [View, string][] = [
   ["overview", "Обзор"],
@@ -42,6 +42,12 @@ function previewLabel(type: string, count: number) {
   const lastDigit = remainder % 10;
   const noun = remainder > 10 && remainder < 20 ? "строк" : lastDigit === 1 ? "строка" : lastDigit > 1 && lastDigit < 5 ? "строки" : "строк";
   return `${type.toUpperCase()} · ${numberText(count)} ${noun}`;
+}
+
+function sourceRowCount(schema: SourceSchema) {
+  return schema.objects.reduce<number | null>((total, object) =>
+    total === null || object.row_count === null ? null : total + object.row_count,
+  0);
 }
 
 export function SourceInspector({
@@ -60,6 +66,10 @@ export function SourceInspector({
     id: string;
     message: string;
   } | null>(null);
+  const [profileFailure, setProfileFailure] = useState<{
+    id: string;
+    message: string;
+  } | null>(null);
   const [revision, setRevision] = useState(0);
   const [columnSelection, setColumnSelection] = useState({
     sourceId: source.source_id,
@@ -70,14 +80,29 @@ export function SourceInspector({
     const controller = new AbortController();
     setData(null);
     setFailure(null);
+    setProfileFailure(null);
+    let loadedProfile: Profile | undefined;
+    void api.profile(source.source_id, controller.signal)
+      .then((profile) => {
+        loadedProfile = profile;
+        if (!controller.signal.aborted) {
+          setData((previous) => previous?.id === source.source_id
+            ? { ...previous, profile }
+            : previous);
+        }
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted) {
+          setProfileFailure({ id: source.source_id, message: errorMessage(error) });
+        }
+      });
     Promise.all([
       api.schema(source.source_id, controller.signal),
       api.preview(source.source_id, controller.signal),
-      api.profile(source.source_id, controller.signal),
     ])
-      .then(([schema, rows, profile]) => {
+      .then(([schema, rows]) => {
         if (!controller.signal.aborted)
-          setData({ id: source.source_id, schema, rows, profile });
+          setData({ id: source.source_id, schema, rows, profile: loadedProfile });
       })
       .catch((error) => {
         if (!controller.signal.aborted)
@@ -87,7 +112,8 @@ export function SourceInspector({
   }, [source.source_id, revision]);
   const current = data?.id === source.source_id ? data : null;
   const error = failure?.id === source.source_id ? failure.message : null;
-  const model = current ? profileModel(current.schema, current.profile) : null;
+  const profileError = profileFailure?.id === source.source_id ? profileFailure.message : null;
+  const model = current?.profile ? profileModel(current.schema, current.profile) : null;
   function openColumn(name: string) {
     setColumnSelection((previous) => ({
       sourceId: source.source_id,
@@ -150,7 +176,7 @@ export function SourceInspector({
         <div>
           <span>Строк изучено</span>
           <strong>
-            {current ? numberText(current.profile.sample_size) : "—"}
+            {current?.profile ? numberText(current.profile.sample_size) : "—"}
           </strong>
           <small>Для профиля выборки</small>
         </div>
@@ -166,14 +192,14 @@ export function SourceInspector({
               label="Повторить загрузку"
             />
           </div>
-        ) : !current || !model ? (
+        ) : !current ? (
           <div className="loading-panel" role="status">
             <EviaMascot state="profiling" size={80} decorative />
             Изучаем структуру источника…
           </div>
         ) : (
           <>
-            {["profile", "quality"].includes(view) && (
+            {current.profile && model && ["profile", "quality"].includes(view) && (
               <div className="profile-scope">
                 <span className="scope-dot" aria-hidden="true" />
                 <p>
@@ -191,9 +217,11 @@ export function SourceInspector({
                 scope={source.source_id}
                 schema={current.schema}
                 rows={current.rows}
+                profile={current.profile}
+                fullSourceRows={sourceRowCount(current.schema)}
               />
             ) : view === "profile" ? (
-              <ProfileColumns
+              model ? <ProfileColumns
                 key={`${source.source_id}-${columnSelection.revision}`}
                 fields={model.fields}
                 initialSearch={
@@ -201,9 +229,35 @@ export function SourceInspector({
                     ? columnSelection.name
                     : ""
                 }
-              />
+              /> : profileError ? (
+                <div className="pane-padding">
+                  <ErrorNotice
+                    message={`Не удалось построить профиль: ${profileError}`}
+                    onRetry={() => setRevision((value) => value + 1)}
+                    label="Повторить расчёт"
+                  />
+                </div>
+              ) : (
+                <div className="loading-panel" role="status">
+                  <EviaMascot state="profiling" size={80} decorative />
+                  Рассчитываем профиль источника…
+                </div>
+              )
             ) : view === "quality" ? (
-              <ProfileQuality model={model} onColumn={openColumn} />
+              model ? <ProfileQuality model={model} onColumn={openColumn} /> : profileError ? (
+                <div className="pane-padding">
+                  <ErrorNotice
+                    message={`Не удалось построить профиль: ${profileError}`}
+                    onRetry={() => setRevision((value) => value + 1)}
+                    label="Повторить расчёт"
+                  />
+                </div>
+              ) : (
+                <div className="loading-panel" role="status">
+                  <EviaMascot state="profiling" size={80} decorative />
+                  Рассчитываем профиль источника…
+                </div>
+              )
             ) : view === "preview" ? (
               <>
                 <div className="pane-heading">
@@ -274,7 +328,7 @@ export function SourceInspector({
                 )}
               </div>
             )}
-            {["profile", "quality"].includes(view) && (
+            {current.profile && model && ["profile", "quality"].includes(view) && (
               <details className="profile-method">
                 <summary>Как рассчитан профиль</summary>
                 <p>
