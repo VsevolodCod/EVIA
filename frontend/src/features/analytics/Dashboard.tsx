@@ -2,9 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import type { Row, SourceSchema } from "../../api";
 import { numberText, percentText } from "../sources/profileModel";
 import { buildDashboardModel, type ChartValue } from "./dashboardModel";
-import { defaultPalette, loadPalette, savePalette, seriesColor } from "./palette";
+import { defaultPalette, loadPalette, savePalette, seriesColor, type PalettePreference } from "./palette";
 import { PaletteEditor } from "./PaletteEditor";
 import "./dashboard.css";
+import "./dashboardPrint.css";
 
 function ChartCard({ title, unit, children }: { title: string; unit?: string; children: React.ReactNode }) {
   return <section className="dashboard-card chart-card"><div className="chart-heading"><h3>{title}</h3>{unit && <small>{unit}</small>}</div>{children}</section>;
@@ -29,7 +30,7 @@ function LineChart({ values, color, gradient, label }: { values: ChartValue[]; c
     {[0, .5, 1].map((step) => <line key={step} x1={left} x2={width - right} y1={y(maximum * step)} y2={y(maximum * step)} />)}
     {gradient && <path d={area} fill="url(#chart-area)" />}
     <polyline points={points} fill="none" stroke={color} strokeWidth="3" strokeLinejoin="round" data-testid="chart-color-0" data-color={color} />
-    {values.map((point, index) => <g key={point.label}><circle cx={x(index)} cy={y(point.value)} r="4" fill={color}><title>{`${point.label}: ${numberText(point.value)}`}</title></circle><text x={x(index)} y={height - 10} textAnchor="middle">{point.label}</text></g>)}
+    {values.map((point, index) => <g key={point.label} tabIndex={0} aria-label={`${point.label}: ${numberText(point.value)}`}><circle cx={x(index)} cy={y(point.value)} r="4" fill={color}><title>{`${point.label}: ${numberText(point.value)}`}</title></circle><text x={x(index)} y={height - 10} textAnchor="middle">{point.label}</text></g>)}
   </svg>;
 }
 
@@ -50,10 +51,15 @@ function previewRowsText(count: number) {
 export function Dashboard({ title, sourceLabel, scope, schema, rows }: { title: string; sourceLabel: string; scope: string; schema: SourceSchema; rows: Row[] }) {
   const model = useMemo(() => buildDashboardModel(schema, rows), [schema, rows]);
   const [showPalette, setShowPalette] = useState(false);
-  const [colors, setColors] = useState(() => loadPalette(scope) ?? defaultPalette.colors);
-  const [gradient, setGradient] = useState(false);
-  useEffect(() => setColors(loadPalette(scope) ?? defaultPalette.colors), [scope]);
-  const updateColors = (next: string[], nextGradient: boolean) => { setColors(next); setGradient(nextGradient); savePalette(scope, next); };
+  const fallbackPreference: PalettePreference = { colors: defaultPalette.colors, gradient: false };
+  const [preference, setPreference] = useState<PalettePreference>(() => loadPalette(scope) ?? fallbackPreference);
+  useEffect(() => setPreference(loadPalette(scope) ?? fallbackPreference), [scope]);
+  const updateColors = (colors: string[], gradient: boolean) => {
+    const next = { colors, gradient };
+    setPreference(next);
+    savePalette(scope, next);
+  };
+  const { colors, gradient } = preference;
   const primary = colors[0]; const secondary = colors[1];
   const hasCharts = Boolean(model.category || model.numeric || model.timeline);
 
@@ -70,7 +76,7 @@ export function Dashboard({ title, sourceLabel, scope, schema, rows }: { title: 
       <section className="dashboard-card"><span>Заполнено ячеек</span><strong>{percentText(model.completeness)}</strong></section>
     </div>
     {hasCharts ? <div className="dashboard-grid">
-      {model.timeline && <ChartCard title={`Динамика по полю ${model.timeline.field}`} unit="строки"><LineChart values={model.timeline.values} color={primary} gradient={gradient} label={`Динамика по полю ${model.timeline.field}`} /></ChartCard>}
+      {model.timeline && <ChartCard title={`Динамика по полю ${model.timeline.field}`} unit="строки"><LineChart values={model.timeline.values} color={primary} gradient={gradient} label={`Динамика по полю ${model.timeline.field}`} /><p className="visually-hidden">{model.timeline.values.map((point) => `${point.label}: ${numberText(point.value)}`).join("; ")}</p></ChartCard>}
       {model.category && <ChartCard title={`Частые значения: ${model.category.field}`} unit="строки"><HorizontalBars values={model.category.values} color={model.timeline ? secondary : primary} label={`Частые значения поля ${model.category.field}`} /></ChartCard>}
       {model.numeric && <ChartCard title={`Распределение: ${model.numeric.field}`} unit="строки"><Histogram values={model.numeric.histogram} color={seriesColor(model.numeric.field, colors)} field={model.numeric.field} /><div className="numeric-summary"><span>Мин. <b>{model.numeric.min.toLocaleString("ru-RU")}</b></span><span>Среднее <b>{model.numeric.mean.toLocaleString("ru-RU", { maximumFractionDigits: 2 })}</b></span><span>Макс. <b>{model.numeric.max.toLocaleString("ru-RU")}</b></span></div></ChartCard>}
     </div> : <div className="dashboard-empty">Для графиков нужны числовые, текстовые или временные поля.</div>}

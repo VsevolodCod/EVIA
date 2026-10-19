@@ -4,6 +4,11 @@ export type Palette = {
   colors: string[];
 };
 
+export type PalettePreference = {
+  colors: string[];
+  gradient: boolean;
+};
+
 export const palettes: Palette[] = [
   { id: "calm", label: "Спокойная", colors: ["#518ed5", "#ddaa65", "#8873bb", "#679b9a"] },
   { id: "contrast", label: "Контрастная", colors: ["#3166b5", "#c96653", "#7b63a8", "#55846a"] },
@@ -45,18 +50,27 @@ export function seriesColor(key: string, colors: string[]) {
 
 const storageKey = (scope: string) => `evia.dashboard.palette.${scope}`;
 
-export function loadPalette(scope: string): string[] | null {
+export function loadPalette(scope: string): PalettePreference | null {
   try {
     const stored = globalThis.localStorage?.getItem(storageKey(scope));
-    return stored ? validatePalette(JSON.parse(stored)) : null;
+    if (!stored) return null;
+    const value: unknown = JSON.parse(stored);
+    if (Array.isArray(value)) return { colors: validatePalette(value), gradient: false };
+    if (!value || typeof value !== "object") return null;
+    const preference = value as { colors?: unknown; gradient?: unknown };
+    if (typeof preference.gradient !== "boolean") return null;
+    return { colors: validatePalette(preference.colors), gradient: preference.gradient };
   } catch {
     return null;
   }
 }
 
-export function savePalette(scope: string, colors: string[]) {
+export function savePalette(scope: string, preference: PalettePreference) {
   try {
-    globalThis.localStorage?.setItem(storageKey(scope), JSON.stringify(validatePalette(colors)));
+    globalThis.localStorage?.setItem(storageKey(scope), JSON.stringify({
+      colors: validatePalette(preference.colors),
+      gradient: preference.gradient,
+    }));
     return true;
   } catch {
     return false;

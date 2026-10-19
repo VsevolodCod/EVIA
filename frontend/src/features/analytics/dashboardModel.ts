@@ -18,8 +18,8 @@ export type DashboardModel = {
   timeline: { field: string; values: ChartValue[] } | null;
 };
 
-const numericTypes = new Set(["number", "integer", "float"]);
-const dateTypes = new Set(["date", "datetime"]);
+const numericTypes = new Set(["number", "integer", "float", "numeric", "decimal", "real", "double precision", "double", "bigint", "smallint"]);
+const dateTypes = new Set(["date", "datetime", "timestamp", "timestamp without time zone", "timestamp with time zone", "timestamptz"]);
 const identifierName = /(^|[_\-\s])(id|uuid|guid|code|key|номер|идентификатор)($|[_\-\s])/i;
 const dateName = /(date|time|дата|время)/i;
 const isMissing = (value: unknown) =>

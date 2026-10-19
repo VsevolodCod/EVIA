@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   defaultPalette,
+  loadPalette,
   parsePalette,
+  savePalette,
   seriesColor,
   validatePalette,
 } from "./palette";
@@ -23,5 +25,12 @@ describe("palette", () => {
     const palette = defaultPalette.colors;
     expect(seriesColor("Подписчики", palette)).toBe(seriesColor("Подписчики", palette));
     expect(seriesColor("Без подписки", palette)).not.toBeUndefined();
+  });
+
+  it("keeps gradient preference scoped to the selected source", () => {
+    savePalette("first", { colors: ["#112233", "#445566"], gradient: true });
+    savePalette("second", { colors: ["#778899", "#aabbcc"], gradient: false });
+    expect(loadPalette("first")).toEqual({ colors: ["#112233", "#445566"], gradient: true });
+    expect(loadPalette("second")).toEqual({ colors: ["#778899", "#aabbcc"], gradient: false });
   });
 });

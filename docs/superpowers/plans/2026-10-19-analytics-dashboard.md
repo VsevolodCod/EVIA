@@ -48,7 +48,7 @@
 - [x] **Step 2: Run** `npm test -- --run src/features/analytics/Dashboard.test.tsx` and verify the missing-component failure.
 - [x] **Step 3: Implement** neutral cards, responsive grid, SVG charts, accessible labels/tooltips, palette panel and print styles; wire the existing source preview/profile into the overview while preserving technical tabs.
 - [x] **Step 4: Run** the focused tests and then `npm test` and `npm run build` from `frontend`.
-- [ ] **Step 5: Commit** the UI integration.
+- [x] **Step 5: Commit** the UI integration.
 
 ### Task 4: Agent-result dashboard and manual acceptance
 

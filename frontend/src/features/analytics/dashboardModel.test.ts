@@ -81,4 +81,20 @@ describe("buildDashboardModel", () => {
     expect(sourceLikeProfile.category?.field).not.toBe("date");
     expect(sourceLikeProfile.numeric?.field).not.toBe("order_id");
   });
+
+  it("recognizes PostgreSQL numeric and timestamp types", () => {
+    const postgresql = buildDashboardModel({
+      ...schema,
+      objects: [{ ...schema.objects[0], fields: [
+        { name: "amount", inferred_type: "numeric", nullable: false, is_identifier_candidate: false },
+        { name: "created_at", inferred_type: "timestamp without time zone", nullable: false, is_identifier_candidate: false },
+      ] }],
+    }, [
+      { amount: 10.5, created_at: "2026-01-01T12:00:00Z" },
+      { amount: 20.5, created_at: "2026-02-01T12:00:00Z" },
+    ]);
+
+    expect(postgresql.numeric?.field).toBe("amount");
+    expect(postgresql.timeline?.field).toBe("created_at");
+  });
 });
