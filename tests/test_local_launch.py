@@ -74,7 +74,8 @@ def test_app_runs_csv_to_mock_over_http_and_stops(tmp_path, dev):
                 answer = client.post('/agent/ask', json={'question': 'Что есть в данных?', 'source_ids': [source_id]})
                 assert answer.status_code == 200
                 assert answer.json()['answer']
-                assert answer.json()['tool_results'][0]['data'][0]['source_id'] == source_id
+                assert answer.json()['tool_results'][0]['tool_name'] == 'preview_data'
+                assert answer.json()['tool_results'][0]['data'][0]['order_id'] == '0001'
                 chat = client.post('/chats', json={'title': 'Synthetic conversation'})
                 assert chat.status_code == 201
                 chat_id = chat.json()['chat_id']

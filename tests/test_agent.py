@@ -37,6 +37,28 @@ async def test_agent_calls_tool_and_returns_answer(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_mock_agent_previews_selected_source_for_every_question(tmp_path):
+    catalog = SchemaCatalog(tmp_path / "catalog.sqlite3")
+    source_service = SourceService(tmp_path / "data", catalog)
+    source = source_service.register_csv(
+        filename="sales.csv",
+        content=b"month,revenue\n2026-01,120\n2026-02,180\n",
+    )
+    agent = AgentRuntime(
+        llm=MockLLMProvider(),
+        tools=build_tool_registry(catalog, source_service),
+        max_steps=3,
+    )
+
+    first = await agent.ask("Покажи выручку", [source.source_id])
+    second = await agent.ask("Покажи ещё раз", [source.source_id])
+
+    assert [item.tool_name for item in first.tool_results] == ["preview_data"]
+    assert [item.tool_name for item in second.tool_results] == ["preview_data"]
+    assert first.tool_results[0].data[0]["revenue"] == "120"
+
+
+@pytest.mark.asyncio
 async def test_history_is_optional_and_not_mutated(tmp_path):
     from app.models import ChatMessage, LLMResponse
 

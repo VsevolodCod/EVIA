@@ -35,8 +35,9 @@ async def test_workspace_csv_to_agent_contract(tmp_path, monkeypatch):
         assert result.status_code == 200
         answer = result.json()
         assert answer['answer']
+        assert answer['tool_results'][0]['tool_name'] == 'preview_data'
         assert answer['tool_results'][0]['ok']
-        assert answer['tool_results'][0]['data'][0]['source_id'] == source_id
+        assert answer['tool_results'][0]['data'][0] == {'id': '001', 'revenue': '10'}
         assert (await client.get('/chats')).json() == [], 'Stateless UI questions must not create persistent chats'
         assert (await client.post('/agent/ask', json={'question': '', 'source_ids': [source_id]})).status_code == 422
         assert (await client.get('/sources/missing/schema')).status_code == 404
