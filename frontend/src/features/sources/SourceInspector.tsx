@@ -99,6 +99,23 @@ export function SourceInspector({
 
   return (
     <div className="analytics-workspace">
+      <nav className="analytics-tabs" aria-label="Разделы источника">
+        {views.map(([id, label]) => (
+          <button
+            key={id}
+            aria-label={label}
+            aria-pressed={view === id}
+            onClick={() => (id === "profile" ? openColumn("") : setView(id))}
+          >
+            {label}
+            {id === "quality" && Boolean(model?.missingFields.length) && (
+              <span className="count-badge">
+                {model!.missingFields.length}
+              </span>
+            )}
+          </button>
+        ))}
+      </nav>
       {view !== "overview" && <div className="analysis-heading">
         <div>
           <p className="analytics-kicker">ИССЛЕДОВАНИЕ ДАННЫХ</p>
@@ -139,23 +156,6 @@ export function SourceInspector({
         </div>
       </div>}
       <section className="analytics-report" aria-label="Исследование данных">
-        <nav className="analytics-tabs" aria-label="Разделы источника">
-          {views.map(([id, label]) => (
-            <button
-              key={id}
-              aria-label={label}
-              aria-pressed={view === id}
-              onClick={() => (id === "profile" ? openColumn("") : setView(id))}
-            >
-              {label}
-              {id === "quality" && Boolean(model?.missingFields.length) && (
-                <span className="count-badge">
-                  {model!.missingFields.length}
-                </span>
-              )}
-            </button>
-          ))}
-        </nav>
         {view === "results" ? (
           <AnalysisResult entry={entry} />
         ) : error ? (

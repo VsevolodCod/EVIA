@@ -1,0 +1,40 @@
+.analytics-workspace:has(.dashboard) .dashboard-actions {
+  position: absolute;
+  top: 3px;
+  right: 0;
+  z-index: 1;
+}
+
+.dashboard-actions button {
+  min-height: 40px;
+  padding: 8px 16px;
+  border: 2px solid var(--button-edge);
+  border-radius: 12px;
+  background: var(--button-face);
+  box-shadow: 0 4px 0 var(--button-edge);
+  color: var(--button-ink);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  touch-action: manipulation;
+  transition: transform .1s, box-shadow .1s, filter .15s;
+}
+
+.dashboard-actions button:hover {
+  filter: brightness(.98);
+}
+
+.dashboard-actions button:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 var(--button-edge);
+}
+
+@media (max-width: 720px) {
+  .analytics-workspace:has(.dashboard) .analytics-tabs {
+    padding-right: 2px;
+  }
+
+  .analytics-workspace:has(.dashboard) .dashboard-actions {
+    position: static;
+  }
+}

@@ -101,6 +101,15 @@ it("opens a compact dashboard scoped to rows returned for preview", async () => 
   expect(screen.queryByText(/полный датасет/i)).not.toBeInTheDocument();
 });
 
+it("keeps the section navigation above every analytics view", async () => {
+  setup();
+  const { container } = render(<Workspace initial="profile" />);
+  const title = await screen.findByRole("heading", { name: "Продажи" });
+  const navigation = container.querySelector(".analytics-tabs");
+  expect(navigation).not.toBeNull();
+  expect(navigation!.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
 it("drills down from missing cells to a column and searches columns", async () => {
   setup();
   render(<Workspace />);

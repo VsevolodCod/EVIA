@@ -64,6 +64,12 @@
   border-bottom: 1px solid #dce7e0;
   padding: 3px 2px 9px;
 }
+.analytics-workspace:has(.dashboard) {
+  position: relative;
+}
+.analytics-workspace:has(.dashboard) .analytics-tabs {
+  padding-right: 218px;
+}
 .analytics-tabs button {
   display: flex;
   align-items: center;
@@ -71,32 +77,20 @@
   flex: none;
   padding: 10px 12px;
   color: var(--muted);
-  position: relative;
-  border: 1px solid transparent;
-  border-radius: 7px;
+  border: 0;
+  border-radius: 9px;
   font-size: 12px;
   font-weight: 600;
   min-height: 40px;
 }
 .analytics-tabs button:hover {
-  background: #f1f3f6;
-  color: #2d353e;
+  background: #eaf4ee;
+  color: var(--accent);
 }
 .analytics-tabs button[aria-pressed="true"] {
-  background: #fff;
-  color: #282f37;
-  border-color: #dce1e7;
-  box-shadow: 0 2px 0 #d6dce2;
-}
-.analytics-tabs button[aria-pressed="true"]::after {
-  content: "";
-  position: absolute;
-  right: 11px;
-  bottom: -10px;
-  left: 11px;
-  height: 2px;
-  border-radius: 2px;
-  background: #518ed5;
+  background: #186b4c;
+  color: #fff;
+  box-shadow: 0 2px 0 #104b35;
 }
 .analytics-tabs button[aria-pressed="true"] .count-badge {
   background: #ffffff25;
