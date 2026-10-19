@@ -131,26 +131,6 @@ a {
   font-weight: 850;
   letter-spacing: -1.2px;
 }
-.connection {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 11px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  font-size: 12px;
-  color: var(--muted);
-  background: #f7faf9;
-}
-.status-dot {
-  width: 6px;
-  height: 6px;
-  display: inline-block;
-  flex: none;
-  border-radius: 50%;
-  background: #64835a;
-}
 .workspace {
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr) 340px;
@@ -1192,9 +1172,6 @@ summary {
 .error-notice .text-button {
   color: var(--error);
   margin-top: 7px;
-}
-.connection-error {
-  color: var(--error);
 }
 @keyframes spin {
   to {

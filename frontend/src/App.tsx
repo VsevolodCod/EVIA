@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   api,
+  ApiError,
   waitForChat,
   errorMessage,
   type ChatMessage,
   type ChatSummary,
-  type Health,
   type Source,
 } from "./api";
 import { ErrorNotice, Evia, Icon, SafeMarkdown } from "./components";
@@ -83,8 +83,6 @@ export default function App() {
   const [sources, setSources] = useState<Source[]>([]);
   const [sourcesLoading, setSourcesLoading] = useState(true);
   const [sourcesError, setSourcesError] = useState("");
-  const [health, setHealth] = useState<Health | null>(null);
-  const [healthError, setHealthError] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [histories, setHistories] = useState<Record<string, Entry[]>>({});
   const [chatSummaries, setChatSummaries] = useState<ChatSummary[]>([]);
@@ -106,7 +104,6 @@ export default function App() {
   const fileInput = useRef<HTMLInputElement>(null);
   const composer = useRef<HTMLTextAreaElement>(null);
   const sourceController = useRef<AbortController | null>(null);
-  const healthController = useRef<AbortController | null>(null);
   const uploadController = useRef<AbortController | null>(null);
   const askControllers = useRef(new Map<string, AbortController>());
   const historyControllers = useRef(new Map<string, AbortController>());
@@ -139,14 +136,12 @@ export default function App() {
     uploading,
     uploadFailure,
     request: pending ? (pending.mascotState ?? "thinking") : undefined,
-    connectionFailure: Boolean(healthError || sourcesError),
+    connectionFailure: Boolean(sourcesError),
     selectedId,
     uploadedId,
     draft,
     entry: activeEntry,
   });
-  const isMock = health?.llm_provider === "mock";
-
   async function loadSources() {
     sourceController.current?.abort();
     const controller = new AbortController();
@@ -165,21 +160,6 @@ export default function App() {
       if (!controller.signal.aborted) setSourcesError(errorMessage(error));
     } finally {
       if (!controller.signal.aborted) setSourcesLoading(false);
-    }
-  }
-  async function loadHealth() {
-    healthController.current?.abort();
-    const controller = new AbortController();
-    healthController.current = controller;
-    setHealthError("");
-    try {
-      const result = await api.health(controller.signal);
-      if (!controller.signal.aborted) setHealth(result);
-    } catch (error) {
-      if (!controller.signal.aborted) {
-        setHealth(null);
-        setHealthError(errorMessage(error));
-      }
     }
   }
   async function loadChatList() {
@@ -204,6 +184,23 @@ export default function App() {
       }
       return next;
     });
+  }
+  function forgetChatSource(chatId: string) {
+    setChatSources((previous) => {
+      if (!(chatId in previous)) return previous;
+      const { [chatId]: _removed, ...next } = previous;
+      try {
+        localStorage.setItem(CHAT_SOURCE_STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        /* The stale association stays removed for this session. */
+      }
+      return next;
+    });
+    setHistoryPages((previous) => {
+      const { [chatId]: _removed, ...next } = previous;
+      return next;
+    });
+    loadedChats.current.delete(chatId);
   }
   async function loadChatHistory(sourceId: string, chatId: string, before?: number) {
     const requestKey = `${chatId}:${before ?? "latest"}`;
@@ -244,6 +241,10 @@ export default function App() {
       loadedChats.current.add(chatId);
     } catch (error) {
       if (!controller.signal.aborted && mounted.current) {
+        if (error instanceof ApiError && error.status === 404) {
+          forgetChatSource(chatId);
+          return;
+        }
         setHistoryPages((previous) => ({
           ...previous,
           [chatId]: {
@@ -261,12 +262,10 @@ export default function App() {
   useEffect(() => {
     mounted.current = true;
     void loadSources();
-    void loadHealth();
     void loadChatList();
     return () => {
       mounted.current = false;
       sourceController.current?.abort();
-      healthController.current?.abort();
       uploadController.current?.abort();
       askControllers.current.forEach((controller) => controller.abort());
       historyControllers.current.forEach((controller) => controller.abort());
@@ -454,31 +453,6 @@ export default function App() {
         >
           EVIA
         </a>
-        <div
-          className="connection"
-          title={
-            isMock
-              ? "Ответы тестовые: аналитическая модель не подключена"
-              : undefined
-          }
-        >
-          {health ? (
-            <>
-              <span className="status-dot" />
-              {isMock ? "Тестовая модель" : `Модель: ${health.llm_provider}`}
-            </>
-          ) : healthError ? (
-            <button
-              className="text-button connection-error"
-              onClick={() => void loadHealth()}
-            >
-              <Icon name="refresh" />
-              Проверить соединение
-            </button>
-          ) : (
-            <span>Подключаемся…</span>
-          )}
-        </div>
       </header>
       <div className="workspace">
         <aside className="sidebar" aria-label="Навигация рабочего пространства">
@@ -625,13 +599,6 @@ export default function App() {
           id="analysis"
           tabIndex={-1}
         >
-          {healthError && (
-            <ErrorNotice
-              message={healthError}
-              onRetry={() => void loadHealth()}
-              label="Проверить сервис"
-            />
-          )}
           {source ? (
             <SourceInspector
               source={source}
