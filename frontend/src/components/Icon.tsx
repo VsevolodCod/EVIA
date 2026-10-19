@@ -6,7 +6,6 @@ type IconName =
   | "arrow"
   | "chat"
   | "refresh"
-  | "quiet"
   | "check"
   | "grid"
   | "upload"
@@ -25,13 +24,6 @@ const paths: Record<IconName, ReactNode> = {
     <>
       <path d="M20 7v5h-5M4 17v-5h5" />
       <path d="M6 7a7 7 0 0 1 12-1l2 3M4 15l2 3a7 7 0 0 0 12-1" />
-    </>
-  ),
-  quiet: (
-    <>
-      <path d="M9 4v16M15 4v16M4 8h4m3 0h9M4 16h10m3 0h3" />
-      <circle cx="9" cy="8" r="2" />
-      <circle cx="15" cy="16" r="2" />
     </>
   ),
   check: <path d="m5 12 4 4L19 6" />,

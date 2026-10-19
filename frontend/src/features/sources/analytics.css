@@ -5,24 +5,6 @@
   --chart-green: #24b77a;
   --chart-amber: #d99a32;
 }
-@media (min-width: 1001px) {
-  .workspace:has(.analytics-workspace) .chat-panel {
-    position: sticky;
-    top: 0;
-    align-self: start;
-    height: calc(100dvh - 72px);
-  }
-  .workspace:has(.analytics-workspace) .chat-content {
-    flex: 1;
-    min-height: 0;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-  }
-  .workspace:has(.analytics-workspace) .chat-header,
-  .workspace:has(.analytics-workspace) .chat-bottom {
-    flex: none;
-  }
-}
 .analytics-workspace .analysis-heading h1 {
   font-weight: 700;
   font-size: 27px;
