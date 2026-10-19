@@ -13,7 +13,9 @@ from app.data_sources.csv_format import (
     read_header,
 )
 from app.data_engine import DuckDBDataEngine
-from app.models import DataSource, SourceSchema
+from app.contracts.v1 import Provenance, QueryResult
+from app.models import DataSource, SourceSchema, utc_now
+from app.safe_sql import SafeQueryExecutor
 from app.schema_catalog import SchemaCatalog
 
 
@@ -30,6 +32,7 @@ class SourceService:
         self.catalog = catalog
         self.csv_adapter = CSVAdapter(self.data_dir)
         self.data_engine = DuckDBDataEngine(self.data_dir / "analytics.duckdb")
+        self.sql_executor = SafeQueryExecutor(self.data_engine.database_path)
 
     def register_csv(
         self,
@@ -143,19 +146,37 @@ class SourceService:
         source = self._ensure_materialized(source)
         return self.data_engine.profile(source, self.csv_adapter.sample_size)
 
-    def query(self, source_id: str, sql: str) -> list[dict[str, Any]]:
-        """Execute internal analytical SQL for a ready CSV snapshot.
-
-        This is deliberately not exposed as an API/tool before #9 adds the
-        read-only guard, table allowlist and resource limits.
-        """
+    def query(
+        self,
+        source_id: str,
+        sql: str,
+        *,
+        row_limit: int | None = None,
+        timeout_seconds: float | None = None,
+    ) -> QueryResult:
+        """Run one guarded analytical query against one ready snapshot."""
         source = self.catalog.get_source(source_id)
         if source is None:
             raise KeyError(f"Unknown source: {source_id}")
         source = self._ensure_materialized(source)
         if source.status != "available":
             raise ValueError("Source is not ready for analytics")
-        return self.data_engine.query(source, sql)
+        return self.sql_executor.execute(
+            sql,
+            allowed_tables={
+                "source": self.data_engine.table_name(source),
+                self.data_engine.table_name(source): self.data_engine.table_name(source),
+            },
+            provenance=Provenance(
+                source_id=source.source_id,
+                snapshot_id=source.snapshot_id or "legacy",
+                schema_version=source.schema_version,
+                tool_name="query_data",
+                executed_at=utc_now(),
+            ),
+            row_limit=row_limit,
+            timeout_seconds=timeout_seconds,
+        )
 
     def _ensure_materialized(self, source: DataSource) -> DataSource:
         """Repair pre-DuckDB catalog entries from their retained CSV artifact."""

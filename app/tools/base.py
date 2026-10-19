@@ -2,6 +2,7 @@ from collections.abc import Callable
 from typing import Any
 
 from app.models import ToolResult
+from app.safe_sql import SafeQueryError
 from app.schema_catalog import SchemaCatalog
 from app.source_service import SourceService
 
@@ -116,6 +117,12 @@ class ToolRegistry:
                 ok=True,
                 data=result,
             )
+        except SafeQueryError as exc:
+            return ToolResult(
+                tool_name=name,
+                ok=False,
+                error=exc.code,
+            )
         except Exception as exc:
             return ToolResult(
                 tool_name=name,
@@ -140,6 +147,27 @@ def build_tool_registry(
     """
 
     registry = ToolRegistry()
+
+    registry.register(
+        ToolDefinition(
+            name="query_data",
+            description=(
+                "Run one read-only analytical SELECT against a selected source. "
+                "Refer to the selected source as the table source."
+            ),
+            parameters={
+                "source_id": {"type": "string"},
+                "sql": {"type": "string", "minLength": 1},
+                "row_limit": {"type": "integer", "minimum": 1, "maximum": 10000},
+            },
+            required=["source_id", "sql"],
+            handler=lambda source_id, sql, row_limit=None: sources.query(
+                source_id,
+                sql,
+                row_limit=row_limit,
+            ),
+        )
+    )
 
     registry.register(
         ToolDefinition(
