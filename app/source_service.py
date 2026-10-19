@@ -13,6 +13,7 @@ from app.data_sources.csv_format import (
     read_header,
 )
 from app.data_engine import DuckDBDataEngine
+from app.data_sources.postgresql_adapter import PostgreSQLAdapter
 from app.contracts.v1 import Provenance, QueryResult
 from app.models import DataSource, SourceSchema, utc_now
 from app.safe_sql import SafeQueryExecutor
@@ -24,6 +25,8 @@ class SourceService:
         self,
         data_dir: Path,
         catalog: SchemaCatalog,
+        *,
+        postgres_adapter: PostgreSQLAdapter | None = None,
     ) -> None:
 
         self.data_dir = data_dir.resolve()
@@ -33,6 +36,17 @@ class SourceService:
         self.csv_adapter = CSVAdapter(self.data_dir)
         self.data_engine = DuckDBDataEngine(self.data_dir / "analytics.duckdb")
         self.sql_executor = SafeQueryExecutor(self.data_engine.database_path)
+        self.postgres_adapter = postgres_adapter
+
+    def register_postgresql_sources(self) -> list[DataSource]:
+        """Discover configured live PostgreSQL tables and cache non-secret metadata."""
+        if self.postgres_adapter is None:
+            return []
+        sources = self.postgres_adapter.discover()
+        for source in sources:
+            self.catalog.upsert_source(source)
+            self.catalog.save_schema(self.postgres_adapter.introspect_schema(source))
+        return sources
 
     def register_csv(
         self,
@@ -110,6 +124,13 @@ class SourceService:
         if source is None:
             raise KeyError(f"Unknown source: {source_id}")
 
+        if source.source_type == "postgresql":
+            if self.postgres_adapter is None:
+                raise ValueError("PostgreSQL source is not configured")
+            schema = self.postgres_adapter.introspect_schema(source)
+            self.catalog.save_schema(schema)
+            return schema
+
         source = self._ensure_materialized(source)
 
         schema = self.catalog.get_schema(source_id)
@@ -134,6 +155,11 @@ class SourceService:
         if source is None:
             raise KeyError(f"Unknown source: {source_id}")
 
+        if source.source_type == "postgresql":
+            if self.postgres_adapter is None:
+                raise ValueError("PostgreSQL source is not configured")
+            return self.postgres_adapter.preview(source, limit=limit)
+
         source = self._ensure_materialized(source)
         return self.data_engine.preview(source, limit)
 
@@ -142,6 +168,11 @@ class SourceService:
 
         if source is None:
             raise KeyError(f"Unknown source: {source_id}")
+
+        if source.source_type == "postgresql":
+            if self.postgres_adapter is None:
+                raise ValueError("PostgreSQL source is not configured")
+            return self.postgres_adapter.profile(source)
 
         source = self._ensure_materialized(source)
         return self.data_engine.profile(source, self.csv_adapter.sample_size)
@@ -158,6 +189,10 @@ class SourceService:
         source = self.catalog.get_source(source_id)
         if source is None:
             raise KeyError(f"Unknown source: {source_id}")
+        if source.source_type == "postgresql":
+            if self.postgres_adapter is None:
+                raise ValueError("PostgreSQL source is not configured")
+            return self.postgres_adapter.query(source, sql, row_limit=row_limit)
         source = self._ensure_materialized(source)
         if source.status != "available":
             raise ValueError("Source is not ready for analytics")

@@ -1,3 +1,5 @@
+import pytest
+
 from app.config import Settings
 from app.models import DataSource
 
@@ -141,3 +143,59 @@ def test_postgresql_executor_rejects_write_multistatement_and_external_functions
             adapter.query(source, statement)
         assert caught.value.code == "QUERY_REJECTED"
         assert "secret" not in str(caught.value)
+
+
+def test_source_service_dispatches_live_postgresql_without_changing_csv(tmp_path):
+    from app.models import SchemaObject, SourceSchema
+    from app.schema_catalog import SchemaCatalog
+    from app.source_service import SourceService
+
+    remote = DataSource(
+        source_id="postgresql:public:orders",
+        name="public.orders",
+        source_type="postgresql",
+        schema_name="public",
+        table_name="orders",
+        status="available",
+    )
+
+    class RemoteAdapter:
+        def discover(self):
+            return [remote]
+
+        def introspect_schema(self, source):
+            return SourceSchema(
+                source_id=source.source_id,
+                objects=[SchemaObject(object_id=f"{source.source_id}:table", name="public.orders")],
+            )
+
+        def preview(self, source, _object_name=None, limit=10):
+            assert source.source_id == remote.source_id
+            return [{"id": 1, "amount": 10}][:limit]
+
+        def profile(self, source, _object_name=None):
+            assert source.source_id == remote.source_id
+            return {"sample_size": 1, "sample_limit": 1, "columns": {}, "note": "bounded sample"}
+
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    try:
+        service = SourceService(tmp_path / "data", catalog, postgres_adapter=RemoteAdapter())
+        assert service.register_postgresql_sources() == [remote]
+        assert service.preview(remote.source_id) == [{"id": 1, "amount": 10}]
+        assert service.profile(remote.source_id)["note"] == "bounded sample"
+        assert service.register_csv("sales.csv", b"id\n001\n").source_type == "csv"
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
+async def test_postgresql_status_endpoint_is_secret_free_when_unconfigured():
+    from httpx import ASGITransport, AsyncClient
+    from app.main import app
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/sources/postgresql/status")
+
+    assert response.status_code == 200
+    assert response.json() == {"configured": False, "connected": False}
+    assert "postgresql://" not in response.text

@@ -124,6 +124,15 @@ class PostgreSQLAdapter(DataSourceAdapter):
         except PostgresSourceError as exc:
             return False, exc.code
 
+    def connection_status(self) -> bool:
+        """Probe the configured database without exposing connection details."""
+        try:
+            with self._session() as connection:
+                connection.execute("SELECT 1")
+            return True
+        except PostgresSourceError:
+            return False
+
     def introspect_schema(self, source: DataSource) -> SourceSchema:
         schema_name, table_name = self._source_parts(source)
         query = """
