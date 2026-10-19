@@ -17,6 +17,10 @@ class DataSource(BaseModel):
     snapshot_id: str | None = None
     name: str
     source_type: str
+    # Remote source metadata is safe to persist. Connection credentials remain
+    # process configuration and never belong in this model or catalog payload.
+    schema_name: str | None = None
+    table_name: str | None = None
     status: str = "registered"
     created_at: datetime = Field(default_factory=utc_now)
     schema_version: int = 1
