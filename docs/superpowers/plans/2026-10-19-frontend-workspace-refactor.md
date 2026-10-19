@@ -157,5 +157,5 @@ Start the app with the existing local launcher. Check 1440px desktop: persistent
 ```bash
 git status --short
 git add <changed-files>
-git commit -m "test(frontend): cover workspace navigation" 
+git commit -m "test(frontend): cover workspace navigation"
 ```
