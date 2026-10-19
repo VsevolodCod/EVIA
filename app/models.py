@@ -11,6 +11,10 @@ def utc_now() -> datetime:
 
 class DataSource(BaseModel):
     source_id: str
+    # A source can later receive a new immutable snapshot without changing the
+    # public source identifier.  CSV imports create their first snapshot at
+    # registration time.
+    snapshot_id: str | None = None
     name: str
     source_type: str
     status: str = "registered"
