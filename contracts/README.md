@@ -6,7 +6,7 @@
 
 Текущие `/sources`, `/sources/{id}/schema`, `/preview`, `/profile`, `/agent/ask`, `/agent/chat`, `/chats` остаются совместимы с `app/models.py` и `frontend/src/api.ts`. `/agent/ask` по-прежнему возвращает `answer`, `steps`, `tool_results`, необязательный `chat_id`; источник передаётся в `source_ids`. `Source`, `SourceSchema` используют действующие модели, `Profile` отражает действующий payload. Fixtures `source`, `profile`, `success` проверяются также настоящим frontend API parser.
 
-`DatasetSnapshot`, `QueryResult`, расширенный `AgentResponse` и `Error` — **целевой контракт для следующих задач**, а не объявление реализованного SQL, графиков, задач или `/v1` endpoints. Текущие ошибки FastAPI имеют `{detail}` и HTTP status; они не выдаются за уже внедрённый Error 1.0. Внедрение request_id/error envelope в runtime выполняется явно в следующих интеграционных задачах. SQL-строка в fixture — текст примера, её наличие не означает выполненный запрос.
+`DatasetSnapshot`, расширенный `AgentResponse` и `Error` — **целевой контракт для следующих задач**, а не объявление графиков, задач или `/v1` endpoints. `QueryResult` уже возвращает инструмент `query_data` после guarded DuckDB-запроса; отдельного SQL HTTP API нет. Текущие ошибки FastAPI имеют `{detail}` и HTTP status; они не выдаются за уже внедрённый Error 1.0. Внедрение request_id/error envelope в runtime выполняется явно в следующих интеграционных задачах. SQL-строка в fixture — текст примера, её наличие не означает выполненный запрос.
 
 ## Идентификаторы и версии
 

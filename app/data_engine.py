@@ -1,9 +1,8 @@
 """Persistent analytical representation for uploaded CSV sources.
 
 The CSV file remains the immutable uploaded artifact.  This module materializes
-the same rows in a local DuckDB file, keyed only by an opaque source id.  It is
-intentionally small: SQL policy belongs to issue #9; callers here are trusted
-application code and never accept table names from a request.
+the same rows in a local DuckDB file, keyed only by an opaque source id. SQL is
+executed only through :mod:`app.safe_sql`; callers here never accept SQL text.
 """
 
 from __future__ import annotations
@@ -138,15 +137,3 @@ class DuckDBDataEngine:
         table = self._quote_identifier(self.table_name(source))
         with self._connect() as connection:
             return [row[0] for row in connection.execute(f"DESCRIBE {table}").fetchall()]
-
-    def query(self, source: DataSource, sql: str) -> list[dict[str, Any]]:
-        """Execute trusted internal analytics SQL against a materialized table.
-
-        A guarded public executor is deliberately deferred to #9.
-        """
-        with self._connect() as connection:
-            cursor = connection.execute(sql)
-            if cursor.description is None:
-                raise ValueError("Analytical query must return rows")
-            names = [column[0] for column in cursor.description]
-            return [dict(zip(names, row)) for row in cursor.fetchall()]

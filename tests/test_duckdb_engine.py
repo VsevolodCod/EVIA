@@ -20,17 +20,15 @@ def test_imported_csv_is_available_for_analytics_and_survives_reopen(tmp_path):
     engine = DuckDBDataEngine(tmp_path / "analytics.duckdb")
     engine.import_csv(source, csv_path, delimiter=";")
 
-    table = engine.table_name(source)
     assert engine.preview(source, 2) == [
         {"Код товара": "001", "Сумма, руб.": "10,50"},
         {"Код товара": "002", "Сумма, руб.": "20,00"},
     ]
-    assert engine.query(source, f'''SELECT COUNT(*) AS "count", SUM(TRY_CAST(REPLACE("Сумма, руб.", ',', '.') AS DOUBLE)) AS "total" FROM "{table}"''') == [
-        {"count": 2, "total": 30.5},
-    ]
-
     reopened = DuckDBDataEngine(tmp_path / "analytics.duckdb")
-    assert reopened.query(source, f'SELECT COUNT(*) AS "count" FROM "{table}"') == [{"count": 2}]
+    assert reopened.preview(source, 2) == [
+        {"Код товара": "001", "Сумма, руб.": "10,50"},
+        {"Код товара": "002", "Сумма, руб.": "20,00"},
+    ]
 
 
 def test_source_service_publishes_only_ready_duckdb_snapshot(tmp_path):
@@ -54,7 +52,7 @@ def test_source_service_publishes_only_ready_duckdb_snapshot(tmp_path):
             source.source_id,
             f'SELECT COUNT(*) AS "count", SUM(TRY_CAST("revenue" AS BIGINT)) AS "total" '
             f'FROM "{service.data_engine.table_name(source)}"',
-        ) == [{"count": 2, "total": 30}]
+        ).rows == [[2, 30]]
     finally:
         catalog.close()
 
@@ -64,7 +62,7 @@ def test_source_service_publishes_only_ready_duckdb_snapshot(tmp_path):
         assert reopened.query(
             source.source_id,
             f'SELECT COUNT(*) AS "count" FROM "{reopened.data_engine.table_name(source)}"',
-        ) == [{"count": 2}]
+        ).rows == [[2]]
     finally:
         reopened_catalog.close()
 
@@ -107,8 +105,8 @@ def test_snapshots_with_one_source_id_are_immutable_and_isolated(tmp_path):
     engine.import_csv(second, csv_path, delimiter=",")
 
     assert engine.table_name(first) != engine.table_name(second)
-    assert engine.query(first, f'SELECT "value" FROM "{engine.table_name(first)}"') == [{"value": "1"}]
-    assert engine.query(second, f'SELECT "value" FROM "{engine.table_name(second)}"') == [{"value": "2"}]
+    assert engine.preview(first, 1) == [{"value": "1"}]
+    assert engine.preview(second, 1) == [{"value": "2"}]
 
     csv_path.write_text("id,value\n1\n", encoding="utf-8")
     failed = first.model_copy(update={"snapshot_id": "failed"})
@@ -116,7 +114,7 @@ def test_snapshots_with_one_source_id_are_immutable_and_isolated(tmp_path):
         engine.import_csv(failed, csv_path, delimiter=",")
 
     assert not engine.has_table(failed)
-    assert engine.query(first, f'SELECT "value" FROM "{engine.table_name(first)}"') == [{"value": "1"}]
+    assert engine.preview(first, 1) == [{"value": "1"}]
 
 
 def test_legacy_catalog_source_receives_snapshot_before_materialization(tmp_path):
