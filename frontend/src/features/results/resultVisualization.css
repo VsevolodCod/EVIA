@@ -1,0 +1,94 @@
+.result-visualization {
+  display: grid;
+  gap: 12px;
+}
+
+.result-view-toggle {
+  display: inline-flex;
+  width: fit-content;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #f6f8f7;
+}
+
+.result-view-toggle button {
+  min-height: 32px;
+  padding: 6px 10px;
+  border-radius: 7px;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.result-view-toggle button[aria-pressed="true"] {
+  background: #186b4c;
+  color: #fff;
+  box-shadow: 0 2px 0 #104b35;
+}
+
+.result-visualization-note,
+.result-chart-meta {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.result-chart {
+  padding: 13px 14px 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.result-chart svg {
+  display: block;
+  width: 100%;
+  height: 240px;
+  margin-top: 5px;
+  overflow: visible;
+}
+
+.result-chart line {
+  stroke: #e4ebe7;
+}
+
+.result-chart text {
+  fill: #718178;
+  font: 10px Inter, sans-serif;
+}
+
+.result-chart rect,
+.result-chart polyline,
+.result-chart circle {
+  fill: #518ed5;
+  stroke: #518ed5;
+}
+
+.result-chart polyline {
+  fill: none;
+  stroke-width: 3;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.result-chart circle {
+  stroke: #fff;
+  stroke-width: 2;
+}
+
+@media (max-width: 680px) {
+  .result-chart {
+    padding-inline: 8px;
+  }
+
+  .result-chart svg {
+    height: 205px;
+  }
+
+  .result-view-toggle button {
+    padding-inline: 8px;
+  }
+}
