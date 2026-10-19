@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+import json
 from typing import Any, Callable, Iterator
 
 import psycopg
@@ -42,10 +43,12 @@ class PostgreSQLAdapter(DataSourceAdapter):
         *,
         connect: ConnectionFactory = psycopg.connect,
         sample_size: int = 500,
+        max_preview_bytes: int = 1 * 1024 * 1024,
     ) -> None:
         self.settings = settings
         self._connect = connect
         self.sample_size = sample_size
+        self.max_preview_bytes = max_preview_bytes
         self.sql_executor = PostgresQueryExecutor(self._session)
 
     @contextmanager
@@ -189,7 +192,21 @@ class PostgreSQLAdapter(DataSourceAdapter):
             with connection.cursor() as cursor:
                 cursor.execute(query, (limit,))
                 columns = [column.name for column in cursor.description]
-                return [dict(zip(columns, row)) for row in cursor.fetchall()]
+                rows: list[dict[str, Any]] = []
+                result_bytes = 2  # JSON array brackets
+                while len(rows) < limit:
+                    raw_row = cursor.fetchone()
+                    if raw_row is None:
+                        break
+                    row = dict(zip(columns, raw_row))
+                    row_bytes = len(json.dumps(row, ensure_ascii=False, default=str, separators=(",", ":")).encode("utf-8"))
+                    if rows:
+                        row_bytes += 1
+                    if result_bytes + row_bytes > self.max_preview_bytes:
+                        raise PostgresSourceError("INTERNAL_ERROR")
+                    rows.append(row)
+                    result_bytes += row_bytes
+                return rows
 
     def query(
         self,

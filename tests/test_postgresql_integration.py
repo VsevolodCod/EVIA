@@ -88,10 +88,13 @@ def test_bad_password_and_timeout_do_not_leak_details_or_poison_next_query(postg
             statement_timeout_ms=1,
         )
     )
-    with pytest.raises(Exception) as caught:
+    from app.postgresql_sql import PostgresQueryError
+
+    with pytest.raises(PostgresQueryError) as caught:
         timeout_adapter.query(
             source,
             "SELECT COUNT(*) FROM source a CROSS JOIN source b CROSS JOIN source c",
         )
+    assert caught.value.code == "QUERY_TIMEOUT"
     assert "postgresql://" not in str(caught.value)
     assert service.query(source.source_id, "SELECT COUNT(*) AS count FROM source").rows == [[500]]

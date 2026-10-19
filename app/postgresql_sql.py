@@ -38,7 +38,7 @@ _SELECT_ROOTS = (exp.Select, exp.Union, exp.Intersect, exp.Except)
 _BLOCKED_NODE_NAMES = {
     "ALTER", "ANALYZE", "ATTACH", "CACHE", "COMMAND", "COPY", "CREATE",
     "DELETE", "DESCRIBE", "DETACH", "DROP", "GRANT", "INSERT", "INSTALL",
-    "LOAD", "MERGE", "PRAGMA", "REPLACE", "REVOKE", "TRANSACTION", "TRUNCATE",
+    "LOAD", "LOCK", "MERGE", "PRAGMA", "REPLACE", "REVOKE", "TRANSACTION", "TRUNCATE",
     "UNLOAD", "UPDATE", "USE", "VACUUM",
 }
 
@@ -102,6 +102,8 @@ class PostgresQueryExecutor:
         except PostgresQueryError:
             raise
         except Exception as exc:
+            if getattr(exc, "code", None) == "QUERY_TIMEOUT":
+                raise PostgresQueryError("QUERY_TIMEOUT") from None
             if "timeout" in type(exc).__name__.lower() or "cancel" in type(exc).__name__.lower():
                 raise PostgresQueryError("QUERY_TIMEOUT") from None
             raise PostgresQueryError("INTERNAL_ERROR") from None
@@ -133,6 +135,7 @@ class PostgresQueryExecutor:
             if function.sql_name().upper() not in _SAFE_FUNCTIONS:
                 raise PostgresQueryError("QUERY_REJECTED")
         cte_names = {cte.alias_or_name for cte in statement.find_all(exp.CTE)}
+        has_source_table = False
         for table in statement.find_all(exp.Table):
             if not isinstance(table.this, exp.Identifier) or table.args.get("db") is not None or table.args.get("catalog") is not None:
                 raise PostgresQueryError("QUERY_REJECTED")
@@ -142,6 +145,9 @@ class PostgresQueryExecutor:
                 raise PostgresQueryError("QUERY_REJECTED")
             table.set("this", exp.to_identifier(table_name, quoted=True))
             table.set("db", exp.to_identifier(schema_name, quoted=True))
+            has_source_table = True
+        if not has_source_table:
+            raise PostgresQueryError("QUERY_REJECTED")
         return statement
 
 

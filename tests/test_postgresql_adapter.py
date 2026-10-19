@@ -140,6 +140,10 @@ def test_postgresql_executor_rejects_write_multistatement_and_external_functions
         "SELECT 1; DROP TABLE source",
         "SELECT pg_read_file('/etc/passwd') FROM source",
         "SELECT * FROM private.payroll",
+        "SELECT session_user",
+        "SELECT current_catalog",
+        "SELECT 1",
+        "SELECT * FROM source FOR UPDATE",
     ):
         with pytest.raises(PostgresQueryError) as caught:
             adapter.query(source, statement)
@@ -236,3 +240,62 @@ def test_query_tool_returns_only_postgresql_stable_error_code(tmp_path):
         assert result.error == "QUERY_REJECTED"
     finally:
         catalog.close()
+
+
+def test_preview_rejects_oversized_row_before_returning_it():
+    import pytest
+
+    from app.config import PostgresSettings
+    from app.data_sources.postgresql_adapter import PostgresSourceError, PostgreSQLAdapter
+
+    class Column:
+        name = "payload"
+
+    class Cursor:
+        description = [Column()]
+
+        def __init__(self):
+            self.rows = iter([("x" * 128,)])
+
+        def execute(self, _query, _params=None):
+            pass
+
+        def fetchone(self):
+            return next(self.rows, None)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    class Connection:
+        read_only = False
+
+        def __init__(self):
+            self.cursor_instance = Cursor()
+
+        def execute(self, _query, _params=None):
+            pass
+
+        def cursor(self):
+            return self.cursor_instance
+
+        def close(self):
+            pass
+
+    adapter = PostgreSQLAdapter(
+        PostgresSettings(
+            dsn="postgresql://reader:secret@db.example/analytics",
+            allowed_tables=frozenset({("public", "orders")}),
+            connect_timeout_seconds=5,
+            statement_timeout_ms=10_000,
+        ),
+        connect=lambda *_args, **_kwargs: Connection(),
+        max_preview_bytes=32,
+    )
+
+    with pytest.raises(PostgresSourceError) as caught:
+        adapter.preview("public.orders", limit=1)
+
+    assert caught.value.code == "INTERNAL_ERROR"
