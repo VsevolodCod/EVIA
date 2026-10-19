@@ -62,4 +62,4 @@
 - [x] **Step 2: Run** the focused test and verify it fails for the missing dashboard result.
 - [x] **Step 3: Implement** result selection without merging unrelated tool outputs, document the proposed non-executable `DashboardSpecV1` contract, and keep current safe markdown/table behavior.
 - [ ] **Step 4: Run** all frontend tests and build. Inspect 1440 px, 900 px, 390 px, palette import and a generated print PDF manually.
-- [ ] **Step 5: Commit**, request review, and update the draft PR without merging or closing #58.
+- [x] **Step 5: Commit**, request review, and update the draft PR without merging or closing #58.
