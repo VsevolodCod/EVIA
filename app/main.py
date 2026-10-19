@@ -13,6 +13,7 @@ from fastapi import (
 
 from app.agent import AgentRuntime
 from app.config import PROJECT_ROOT, get_settings
+from app.data_sources.postgresql_adapter import PostgreSQLAdapter
 from app.db import create_chat_database, initialize_chat_database
 from app.llm.factory import create_llm_provider
 from app.models import AskRequest, AskResponse, ChatMessage, DataSource, Chat, ChatCreateRequest, ChatSummary, \
@@ -36,9 +37,12 @@ settings = get_settings()
 # SchemaCatalog самостоятельно создаёт синхронный SQLAlchemy engine.
 catalog = SchemaCatalog(settings.catalog_db_path)
 
+postgres_adapter = PostgreSQLAdapter(settings.postgres) if settings.postgres.enabled else None
+
 source_service = SourceService(
     settings.data_dir,
     catalog,
+    postgres_adapter=postgres_adapter,
 )
 
 tool_registry = build_tool_registry(
@@ -66,6 +70,13 @@ async def lifespan(app: FastAPI):
 
     try:
         await initialize_chat_database(chat_engine)
+
+        if postgres_adapter is not None:
+            try:
+                source_service.register_postgresql_sources()
+            except Exception as exc:
+                # Keep CSV usable when the optional remote source is offline.
+                logger.warning("PostgreSQL source registration failed: %s", type(exc).__name__)
 
         # Менеджер получает фабрику асинхронных сессий.
         app.state.chat_manager = ChatManager(chat_sessions)
@@ -126,6 +137,13 @@ async def upload_csv(
 @app.get("/sources", response_model=list[DataSource])
 def list_sources():
     return catalog.list_sources()
+
+
+@app.get("/sources/postgresql/status")
+def postgresql_status():
+    if postgres_adapter is None:
+        return {"configured": False, "connected": False}
+    return {"configured": True, "connected": postgres_adapter.connection_status()}
 
 
 @app.get("/sources/{source_id}/schema")

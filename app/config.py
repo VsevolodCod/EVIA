@@ -1,4 +1,5 @@
 import os
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
@@ -8,6 +9,32 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
 load_dotenv(dotenv_path=PROJECT_ROOT / ".env")
+
+
+@dataclass(frozen=True)
+class PostgresSettings:
+    """Optional deployment-only configuration for one PostgreSQL source."""
+
+    dsn: str
+    allowed_tables: frozenset[tuple[str, str]]
+    connect_timeout_seconds: int
+    statement_timeout_ms: int
+
+    @property
+    def enabled(self) -> bool:
+        return bool(self.dsn and self.allowed_tables)
+
+
+def _parse_allowed_tables(value: str) -> frozenset[tuple[str, str]]:
+    if not value.strip():
+        return frozenset()
+    tables: set[tuple[str, str]] = set()
+    for item in value.split(","):
+        schema_name, separator, table_name = item.strip().partition(".")
+        if not separator or not schema_name or not table_name or "." in table_name:
+            raise ValueError("POSTGRES_ALLOWED_TABLES entries must use schema.table")
+        tables.add((schema_name, table_name))
+    return frozenset(tables)
 
 
 class Settings:
@@ -38,6 +65,13 @@ class Settings:
             or str(self.data_dir / "catalog.db")
         ).resolve()
 
+        self.postgres = PostgresSettings(
+            dsn=os.getenv("POSTGRES_DSN", ""),
+            allowed_tables=_parse_allowed_tables(os.getenv("POSTGRES_ALLOWED_TABLES", "")),
+            connect_timeout_seconds=max(1, int(os.getenv("POSTGRES_CONNECT_TIMEOUT_SECONDS", "5"))),
+            statement_timeout_ms=max(1, int(os.getenv("POSTGRES_STATEMENT_TIMEOUT_MS", "10000"))),
+        )
+
         self.agent_max_steps = max(
             1, int(os.getenv("AGENT_MAX_STEPS", "5"))
         )
@@ -46,6 +80,13 @@ class Settings:
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.catalog_db_path.parent.mkdir(parents=True, exist_ok=True)
         self.chat_db_path.parent.mkdir(parents=True, exist_ok=True)
+
+    def public_settings(self) -> dict[str, object]:
+        """Expose only settings that are safe to return in diagnostics."""
+        return {
+            "postgres_configured": self.postgres.enabled,
+            "postgres_table_count": len(self.postgres.allowed_tables),
+        }
 
 
 # @lru_cache

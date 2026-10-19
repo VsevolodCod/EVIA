@@ -2,6 +2,7 @@ from collections.abc import Callable
 from typing import Any
 
 from app.models import ToolResult
+from app.postgresql_sql import PostgresQueryError
 from app.safe_sql import SafeQueryError
 from app.schema_catalog import SchemaCatalog
 from app.source_service import SourceService
@@ -117,7 +118,7 @@ class ToolRegistry:
                 ok=True,
                 data=result,
             )
-        except SafeQueryError as exc:
+        except (SafeQueryError, PostgresQueryError) as exc:
             return ToolResult(
                 tool_name=name,
                 ok=False,

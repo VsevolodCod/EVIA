@@ -11,6 +11,18 @@
       "title": "Name",
       "type": "string"
     },
+    "schema_name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Schema Name"
+    },
     "schema_version": {
       "default": 1,
       "title": "Schema Version",
@@ -40,6 +52,18 @@
       "default": "registered",
       "title": "Status",
       "type": "string"
+    },
+    "table_name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Table Name"
     }
   },
   "required": [
