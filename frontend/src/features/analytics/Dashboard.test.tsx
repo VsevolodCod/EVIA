@@ -35,6 +35,7 @@ it("shows compact factual metrics and charts from source rows", () => {
 it("applies a valid custom palette, rejects bad input and opens the print dialog", () => {
   const print = vi.spyOn(window, "print").mockImplementation(() => undefined);
   render(<Dashboard title="Поездки" sourceLabel="Поездки.csv" scope="palette-test" schema={schema} rows={rows} />);
+  expect(screen.getByTestId("print-report")).toHaveAttribute("data-print-report", "true");
 
   fireEvent.click(screen.getByRole("button", { name: "Цвета" }));
   const input = screen.getByLabelText("Своя палитра");
@@ -47,8 +48,12 @@ it("applies a valid custom palette, rejects bad input and opens the print dialog
   expect(screen.getByRole("alert")).toHaveTextContent("#RRGGBB");
   expect(screen.getByTestId("chart-color-0")).toHaveAttribute("data-color", "#2563eb");
 
+  const pageTitle = document.title;
   fireEvent.click(screen.getByRole("button", { name: "Экспорт PDF" }));
   expect(print).toHaveBeenCalledOnce();
+  expect(document.title).toBe("EVIA — Поездки");
+  window.dispatchEvent(new Event("afterprint"));
+  expect(document.title).toBe(pageTitle);
 });
 
 it("imports a palette file and applies the optional line gradient", async () => {

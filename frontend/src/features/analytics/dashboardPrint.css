@@ -7,21 +7,116 @@
   stroke-width: 2;
 }
 
+@page {
+  size: A4 landscape;
+  margin: 10mm;
+}
+
 @media print {
+  html,
+  body {
+    width: auto !important;
+    min-width: 0 !important;
+    height: auto !important;
+    margin: 0 !important;
+    background: #fff !important;
+  }
+
+  body,
+  .dashboard,
+  .dashboard * {
+    print-color-adjust: exact !important;
+    -webkit-print-color-adjust: exact !important;
+  }
+
   .topbar,
   .sidebar,
   .chat-panel,
   .analytics-tabs,
-  .skip-link {
+  .analysis-heading,
+  .analytics-metrics,
+  .skip-link,
+  .dashboard-actions,
+  .palette-editor {
     display: none !important;
   }
 
-  .workspace {
+  .workspace,
+  .analytics-workspace,
+  .analytics-report {
     display: block !important;
-    min-height: auto !important;
+    width: auto !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    background: transparent !important;
   }
 
-  .analytics-workspace {
+  .dashboard {
+    display: grid !important;
+    gap: 8px !important;
+    padding: 0 !important;
+    color: #292e36 !important;
+  }
+
+  .dashboard-top {
     display: block !important;
+    padding-bottom: 7px;
+    border-bottom: 1px solid #dce1e7;
+  }
+
+  .dashboard-top h2 {
+    font-size: 22px !important;
+  }
+
+  .dashboard-scope {
+    margin: 0 !important;
+  }
+
+  .kpi-grid,
+  .dashboard-grid {
+    gap: 8px !important;
+  }
+
+  .dashboard-card {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    border-color: #dce1e7 !important;
+    box-shadow: none !important;
+  }
+
+  .dashboard-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .chart-card,
+  .chart-card:first-child:nth-last-child(1) {
+    grid-column: span 1 !important;
+  }
+
+  .line-chart {
+    height: 155px !important;
+  }
+
+  .bar-chart {
+    min-height: 155px !important;
+  }
+
+  .histogram {
+    height: 132px !important;
+  }
+
+  .bar-row > div {
+    background-color: #f1f3f6 !important;
+  }
+
+  .line-chart,
+  .line-chart *,
+  .bar-chart i,
+  .histogram i {
+    print-color-adjust: exact !important;
+    -webkit-print-color-adjust: exact !important;
   }
 }
