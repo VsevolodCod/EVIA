@@ -63,11 +63,17 @@ export function Dashboard({ title, sourceLabel, scope, schema, rows }: { title: 
   const { colors, gradient } = preference;
   const primary = colors[0]; const secondary = colors[1];
   const hasCharts = Boolean(model.category || model.numeric || model.timeline);
+  const exportPdf = () => {
+    const previousTitle = document.title;
+    document.title = `EVIA — ${title}`;
+    window.addEventListener("afterprint", () => { document.title = previousTitle; }, { once: true });
+    window.print();
+  };
 
-  return <div className="dashboard" style={{ "--dashboard-primary": primary, "--dashboard-secondary": secondary } as React.CSSProperties}>
+  return <div className="dashboard" data-testid="print-report" data-print-report="true" style={{ "--dashboard-primary": primary, "--dashboard-secondary": secondary } as React.CSSProperties}>
     <div className="dashboard-top">
       <div><h2>{title}</h2><p>{sourceLabel}</p></div>
-      <div className="dashboard-actions"><button onClick={() => setShowPalette((open) => !open)} aria-expanded={showPalette}>Цвета</button><button onClick={() => window.print()}>Экспорт PDF</button></div>
+      <div className="dashboard-actions"><button onClick={() => setShowPalette((open) => !open)} aria-expanded={showPalette}>Цвета</button><button onClick={exportPdf}>Экспорт PDF</button></div>
     </div>
     {showPalette && <PaletteEditor colors={colors} gradient={gradient} onChange={updateColors} onClose={() => setShowPalette(false)} />}
     <p className="dashboard-scope">{model.rowCount ? previewRowsText(model.rowCount) : "В предпросмотре нет строк"}</p>
