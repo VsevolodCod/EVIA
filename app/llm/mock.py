@@ -5,9 +5,6 @@ from app.models import LLMMessage, LLMResponse, ToolCall
 class MockLLMProvider(LLMProvider):
     """Демонстрационный провайдер для тестов без реальной модели"""
 
-    def __init__(self) -> None:
-        self._called_tool = False
-
     async def chat(
         self,
         messages: list[LLMMessage],
@@ -19,9 +16,21 @@ class MockLLMProvider(LLMProvider):
             for message in messages
         )
 
-        if not self._called_tool and tools:
-            self._called_tool = True
-
+        if not has_tool_result and tools:
+            question = messages[-1].content if messages else ""
+            marker = "Источники, указанные пользователем:"
+            if marker in question:
+                source_id = question.split(marker, 1)[1].split(",", 1)[0].strip()
+                if source_id:
+                    return LLMResponse(
+                        tool_calls=[
+                            ToolCall(
+                                name="preview_data",
+                                arguments={"source_id": source_id, "limit": 12},
+                                call_id="mock-preview-source",
+                            )
+                        ],
+                    )
             return LLMResponse(
                 tool_calls=[
                     ToolCall(
@@ -35,10 +44,9 @@ class MockLLMProvider(LLMProvider):
         if has_tool_result:
             return LLMResponse(
                 content=(
-                    "Это демонстрационный ответ тестовой модели. "
-                    "Инструмент был вызван, его результат передан "
-                    "обратно в контекст. Для интеллектуального "
-                    "анализа необходимо подключить настоящую LLM."
+                    "Тестовый режим показал первые строки выбранного источника. "
+                    "Это предпросмотр фактических данных, а не аналитический "
+                    "ответ на вопрос. Для группировок и расчётов подключите настоящую LLM."
                 )
             )
 
