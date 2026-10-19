@@ -6,6 +6,7 @@ import { defaultPalette, loadPalette, savePalette, seriesColor, type PalettePref
 import { PaletteEditor } from "./PaletteEditor";
 import "./dashboard.css";
 import "./dashboardPrint.css";
+import "./dashboardControls.css";
 
 function ChartCard({ title, unit, children }: { title: string; unit?: string; children: React.ReactNode }) {
   return <section className="dashboard-card chart-card"><div className="chart-heading"><h3>{title}</h3>{unit && <small>{unit}</small>}</div>{children}</section>;
