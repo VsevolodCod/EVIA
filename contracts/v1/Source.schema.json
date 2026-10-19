@@ -16,6 +16,18 @@
       "title": "Schema Version",
       "type": "integer"
     },
+    "snapshot_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Snapshot Id"
+    },
     "source_id": {
       "title": "Source Id",
       "type": "string"
