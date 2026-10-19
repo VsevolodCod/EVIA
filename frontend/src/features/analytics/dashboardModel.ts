@@ -20,6 +20,8 @@ export type DashboardModel = {
 
 const numericTypes = new Set(["number", "integer", "float"]);
 const dateTypes = new Set(["date", "datetime"]);
+const identifierName = /(^|[_\-\s])(id|uuid|guid|code|key|номер|идентификатор)($|[_\-\s])/i;
+const dateName = /(date|time|дата|время)/i;
 const isMissing = (value: unknown) =>
   value === null || value === undefined || value === "";
 
@@ -52,12 +54,14 @@ function histogram(values: number[]): ChartValue[] {
   return buckets;
 }
 
-function formatDate(date: Date) {
-  return new Intl.DateTimeFormat("ru-RU", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  }).format(date);
+const monthNames = ["Янв", "Фев", "Мар", "Апр", "Май", "Июн", "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек"];
+
+function formatMonth(date: Date) {
+  return `${monthNames[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
+}
+
+function isIsoDate(value: unknown) {
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}(?:[T\s].*)?$/.test(value) && !Number.isNaN(new Date(value).getTime());
 }
 
 export function buildDashboardModel(schema: SourceSchema, rows: Row[]): DashboardModel {
@@ -70,7 +74,7 @@ export function buildDashboardModel(schema: SourceSchema, rows: Row[]): Dashboar
     0,
   );
   const completeness = totalCells ? (presentCells / totalCells) * 100 : null;
-  const analyticalFields = fields.filter((field) => !field.is_identifier_candidate);
+  const analyticalFields = fields.filter((field) => !(field.is_identifier_candidate && identifierName.test(field.name)));
 
   const numericField = analyticalFields.find((field) => numericTypes.has(field.inferred_type));
   const numericValues = numericField
@@ -87,7 +91,11 @@ export function buildDashboardModel(schema: SourceSchema, rows: Row[]): Dashboar
       }
     : null;
 
-  const categoryField = analyticalFields.find((field) => field.inferred_type === "string");
+  const categoryField = analyticalFields.find((field) =>
+    field.inferred_type === "string" &&
+    !dateTypes.has(field.inferred_type) &&
+    !(dateName.test(field.name) && rows.some((row) => isIsoDate(row[field.name]))),
+  );
   const category = categoryField
     ? (() => {
         const counts = new Map<string, number>();
@@ -105,7 +113,10 @@ export function buildDashboardModel(schema: SourceSchema, rows: Row[]): Dashboar
       })()
     : null;
 
-  const dateField = analyticalFields.find((field) => dateTypes.has(field.inferred_type));
+  const dateField = analyticalFields.find((field) =>
+    dateTypes.has(field.inferred_type) ||
+    (dateName.test(field.name) && rows.some((row) => isIsoDate(row[field.name]))),
+  );
   const timeline = dateField
     ? (() => {
         const counts = new Map<number, number>();
@@ -114,13 +125,13 @@ export function buildDashboardModel(schema: SourceSchema, rows: Row[]): Dashboar
           if (typeof value !== "string" && !(value instanceof Date)) return;
           const date = new Date(value);
           if (Number.isNaN(date.getTime())) return;
-          const key = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+          const key = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1);
           counts.set(key, (counts.get(key) ?? 0) + 1);
         });
         const values = [...counts]
           .sort(([left], [right]) => left - right)
           .slice(-24)
-          .map(([time, value]) => ({ label: formatDate(new Date(time)), value }));
+          .map(([time, value]) => ({ label: formatMonth(new Date(time)), value }));
         return values.length ? { field: dateField.name, values } : null;
       })()
     : null;

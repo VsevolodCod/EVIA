@@ -15,10 +15,12 @@ export const defaultPalette = palettes[0];
 const hex = /^#[a-f\d]{6}$/i;
 
 export function validatePalette(colors: unknown): string[] {
-  if (!Array.isArray(colors) || colors.length < 2 || colors.length > 12)
+  if (!Array.isArray(colors))
     throw new Error("Палитра должна содержать от 2 до 12 цветов.");
   if (!colors.every((color) => typeof color === "string" && hex.test(color)))
     throw new Error("Используйте цвета в формате #RRGGBB.");
+  if (colors.length < 2 || colors.length > 12)
+    throw new Error("Палитра должна содержать от 2 до 12 цветов.");
   return colors.map((color) => color.toLowerCase());
 }
 

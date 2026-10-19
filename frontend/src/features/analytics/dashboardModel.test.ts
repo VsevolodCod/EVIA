@@ -37,7 +37,7 @@ describe("buildDashboardModel", () => {
     });
     expect(model.timeline).toEqual({
       field: "created_at",
-      values: [{ label: "02.01.2026", value: 2 }, { label: "01.02.2026", value: 2 }],
+      values: [{ label: "Янв 2026", value: 2 }, { label: "Фев 2026", value: 2 }],
     });
     expect(model.numeric?.field).not.toBe("id");
   });
@@ -60,6 +60,25 @@ describe("buildDashboardModel", () => {
       { revenue: 30, created_at: "2026-02-01" },
     ]);
 
-    expect(model.timeline?.values.map((value) => value.label)).toEqual(["01.02.2026", "01.10.2026"]);
+    expect(model.timeline?.values.map((value) => value.label)).toEqual(["Фев 2026", "Окт 2026"]);
+  });
+
+  it("keeps uniquely-valued revenue and ISO dates when their field names are not identifiers", () => {
+    const sourceLikeProfile = buildDashboardModel({
+      ...schema,
+      objects: [{ ...schema.objects[0], fields: [
+        { name: "order_id", inferred_type: "string", nullable: false, is_identifier_candidate: true },
+        { name: "date", inferred_type: "string", nullable: false, is_identifier_candidate: true },
+        { name: "revenue", inferred_type: "number", nullable: false, is_identifier_candidate: true },
+      ] }],
+    }, [
+      { order_id: "0001", date: "2026-01-05", revenue: 1200.5 },
+      { order_id: "0002", date: "2026-02-01", revenue: 2490 },
+    ]);
+
+    expect(sourceLikeProfile.numeric?.field).toBe("revenue");
+    expect(sourceLikeProfile.timeline?.field).toBe("date");
+    expect(sourceLikeProfile.category?.field).not.toBe("date");
+    expect(sourceLikeProfile.numeric?.field).not.toBe("order_id");
   });
 });

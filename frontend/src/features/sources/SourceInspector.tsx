@@ -11,7 +11,7 @@ import { DataTable, ErrorNotice, Icon } from "../../components";
 import type { Entry, View } from "../chat/types";
 import { EviaMascot } from "../../components/EviaMascot";
 import { AnalysisResult } from "../results/AnalysisResult";
-import { ProfileOverview } from "./ProfileOverview";
+import { Dashboard } from "../analytics/Dashboard";
 import { ProfileColumns } from "./ProfileColumns";
 import { ProfileQuality } from "./ProfileQuality";
 import {
@@ -36,6 +36,13 @@ const views: [View, string][] = [
   ["schema", "Схема"],
   ["results", "Результат"],
 ];
+
+function previewLabel(type: string, count: number) {
+  const remainder = Math.abs(count) % 100;
+  const lastDigit = remainder % 10;
+  const noun = remainder > 10 && remainder < 20 ? "строк" : lastDigit === 1 ? "строка" : lastDigit > 1 && lastDigit < 5 ? "строки" : "строк";
+  return `${type.toUpperCase()} · ${numberText(count)} ${noun}`;
+}
 
 export function SourceInspector({
   source,
@@ -92,7 +99,7 @@ export function SourceInspector({
 
   return (
     <div className="analytics-workspace">
-      <div className="analysis-heading">
+      {view !== "overview" && <div className="analysis-heading">
         <div>
           <p className="analytics-kicker">ИССЛЕДОВАНИЕ ДАННЫХ</p>
           <h1>{source.name}</h1>
@@ -109,8 +116,8 @@ export function SourceInspector({
         >
           <Icon name="refresh" />
         </button>
-      </div>
-      <div className="analytics-metrics" aria-label="Сведения об источнике">
+      </div>}
+      {view !== "overview" && <div className="analytics-metrics" aria-label="Сведения об источнике">
         <div>
           <span>Строк в источнике</span>
           <strong>
@@ -130,7 +137,7 @@ export function SourceInspector({
           </strong>
           <small>Для профиля выборки</small>
         </div>
-      </div>
+      </div>}
       <section className="analytics-report" aria-label="Исследование данных">
         <nav className="analytics-tabs" aria-label="Разделы источника">
           {views.map(([id, label]) => (
@@ -166,7 +173,7 @@ export function SourceInspector({
           </div>
         ) : (
           <>
-            {["overview", "profile", "quality"].includes(view) && (
+            {["profile", "quality"].includes(view) && (
               <div className="profile-scope">
                 <span className="scope-dot" aria-hidden="true" />
                 <p>
@@ -178,12 +185,12 @@ export function SourceInspector({
               </div>
             )}
             {view === "overview" ? (
-              <ProfileOverview
-                model={model}
-                profile={current.profile}
-                onColumn={openColumn}
-                onQuality={() => setView("quality")}
-                onColumns={() => openColumn("")}
+              <Dashboard
+                title={source.name}
+                sourceLabel={previewLabel(source.source_type, current.rows.length)}
+                scope={source.source_id}
+                schema={current.schema}
+                rows={current.rows}
               />
             ) : view === "profile" ? (
               <ProfileColumns
@@ -267,7 +274,7 @@ export function SourceInspector({
                 )}
               </div>
             )}
-            {["overview", "profile", "quality"].includes(view) && (
+            {["profile", "quality"].includes(view) && (
               <details className="profile-method">
                 <summary>Как рассчитан профиль</summary>
                 <p>
