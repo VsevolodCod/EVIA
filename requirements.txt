@@ -11,3 +11,5 @@ aiosqlite>=0.20,<1.0
 duckdb>=1.2,<2.0
 sqlglot>=27,<28
 jsonschema>=4.23,<5.0
+
+psycopg[binary]>=3.2,<4.0
