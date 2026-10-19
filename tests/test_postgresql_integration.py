@@ -45,7 +45,9 @@ def test_readonly_source_reflects_external_update_and_rejects_forbidden_table(po
     service, admin_dsn = postgres_service
     source = service.register_postgresql_sources()[0]
 
-    assert service.query(source.source_id, "SELECT id, amount FROM source ORDER BY id", row_limit=1).rows == [[1, 10]]
+    initial = service.query(source.source_id, "SELECT id, amount FROM source ORDER BY id", row_limit=1)
+    assert initial.rows == [[1, 10]]
+    assert [column.data_type for column in initial.columns] == ["integer", "integer"]
     with psycopg.connect(admin_dsn) as admin:
         admin.execute("UPDATE public.orders SET amount = 20 WHERE id = 1")
         admin.commit()

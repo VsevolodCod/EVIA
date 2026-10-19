@@ -146,6 +146,20 @@ class PostgresQueryExecutor:
 
 
 def _contract_type(type_code: Any) -> str:
+    postgres_type_codes = {
+        16: "boolean",
+        20: "integer",
+        21: "integer",
+        23: "integer",
+        700: "number",
+        701: "number",
+        1082: "date",
+        1114: "datetime",
+        1184: "datetime",
+        1700: "decimal",
+    }
+    if type_code in postgres_type_codes:
+        return postgres_type_codes[type_code]
     name = str(type_code).upper()
     if "INT" in name:
         return "integer"
