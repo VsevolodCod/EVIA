@@ -10,7 +10,9 @@ from psycopg import sql
 
 from app.config import PostgresSettings
 from app.data_sources.base import DataSourceAdapter
-from app.models import DataSource, SchemaField, SchemaObject, SourceSchema
+from app.contracts.v1 import Provenance, QueryResult
+from app.models import DataSource, SchemaField, SchemaObject, SourceSchema, utc_now
+from app.postgresql_sql import PostgresQueryExecutor
 
 
 class PostgresSourceError(Exception):
@@ -44,6 +46,7 @@ class PostgreSQLAdapter(DataSourceAdapter):
         self.settings = settings
         self._connect = connect
         self.sample_size = sample_size
+        self.sql_executor = PostgresQueryExecutor(self._session)
 
     @contextmanager
     def _session(self) -> Iterator[Any]:
@@ -172,6 +175,28 @@ class PostgreSQLAdapter(DataSourceAdapter):
                 cursor.execute(query, (limit,))
                 columns = [column.name for column in cursor.description]
                 return [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+    def query(
+        self,
+        source: DataSource,
+        sql_text: str,
+        *,
+        row_limit: int | None = None,
+    ) -> QueryResult:
+        schema_name, table_name = self._source_parts(source)
+        return self.sql_executor.execute(
+            sql_text,
+            schema_name=schema_name,
+            table_name=table_name,
+            provenance=Provenance(
+                source_id=source.source_id,
+                snapshot_id=source.snapshot_id or "live",
+                schema_version=source.schema_version,
+                tool_name="query_data",
+                executed_at=utc_now(),
+            ),
+            row_limit=row_limit,
+        )
 
     def profile(
         self,

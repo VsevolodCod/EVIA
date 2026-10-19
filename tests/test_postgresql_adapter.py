@@ -111,3 +111,33 @@ def test_forbidden_object_never_reaches_the_driver():
 
     assert caught.value.code == "SOURCE_FORBIDDEN"
     assert called is False
+
+
+def test_postgresql_executor_rejects_write_multistatement_and_external_functions_before_connection():
+    import pytest
+
+    from app.config import PostgresSettings
+    from app.data_sources.postgresql_adapter import PostgreSQLAdapter
+    from app.postgresql_sql import PostgresQueryError
+
+    adapter = PostgreSQLAdapter(
+        PostgresSettings(
+            dsn="postgresql://reader:secret@db.example/analytics",
+            allowed_tables=frozenset({("public", "orders")}),
+            connect_timeout_seconds=5,
+            statement_timeout_ms=10_000,
+        ),
+        connect=lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("unsafe SQL must not connect")),
+    )
+    source = adapter._source("public", "orders")
+
+    for statement in (
+        "DELETE FROM source",
+        "SELECT 1; DROP TABLE source",
+        "SELECT pg_read_file('/etc/passwd') FROM source",
+        "SELECT * FROM private.payroll",
+    ):
+        with pytest.raises(PostgresQueryError) as caught:
+            adapter.query(source, statement)
+        assert caught.value.code == "QUERY_REJECTED"
+        assert "secret" not in str(caught.value)
