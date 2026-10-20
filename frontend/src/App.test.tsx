@@ -319,6 +319,59 @@ it("returns to the CSV start screen without removing connected sources", async (
   expect(screen.getByRole("button", { name: "Источник A" })).toBeInTheDocument();
   expect(screen.getByRole("textbox", { name: "Ваш вопрос" })).toBeDisabled();
 });
+
+it("provides mobile navigation for sources, analytics, and chat", async () => {
+  setup();
+  render(<App />);
+
+  expect(await screen.findByRole("navigation", { name: "Мобильная навигация" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Главная" })).toHaveAttribute("aria-pressed", "true");
+
+  fireEvent.click(screen.getByRole("button", { name: "Аналитика" }));
+  expect(screen.getByRole("button", { name: "Аналитика" })).toHaveAttribute("aria-pressed", "true");
+
+  fireEvent.click(screen.getByRole("button", { name: "Чат" }));
+  expect(screen.getByRole("button", { name: "Чат" })).toHaveAttribute("aria-pressed", "true");
+
+  fireEvent.click(screen.getByRole("button", { name: "Профиль" }));
+  expect(screen.getByRole("button", { name: "Профиль" })).toHaveAttribute("aria-pressed", "true");
+});
+
+it("opens the analysis from a source and returns to the mobile home", async () => {
+  setup();
+  render(<App />);
+
+  await select("A");
+  expect(screen.getByRole("button", { name: "Аналитика" })).toHaveAttribute("aria-pressed", "true");
+  fireEvent.click(within(screen.getByRole("main")).getByRole("button", { name: "Назад к источникам" }));
+  expect(screen.getByRole("button", { name: "Главная" })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("button", { name: "Источник A" })).toBeInTheDocument();
+});
+
+it("opens a separate CSV upload screen from the home action", async () => {
+  setup();
+  render(<App />);
+  fireEvent.click(screen.getByRole("button", { name: "Новый анализ" }));
+
+  expect(screen.getByRole("button", { name: "Аналитика" })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("heading", { name: "Добавьте CSV" })).toBeInTheDocument();
+});
+
+it("previews a selected mobile CSV before uploading it", async () => {
+  setup();
+  vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true }));
+  render(<App />);
+  fireEvent.click(screen.getByRole("button", { name: "Новый анализ" }));
+
+  fireEvent.change(screen.getByLabelText("Загрузить CSV"), {
+    target: { files: [new File(["id\n1"], "orders.csv", { type: "text/csv" })] },
+  });
+
+  expect(screen.getByText("orders.csv")).toBeInTheDocument();
+  expect(vi.mocked(fetch).mock.calls.some(([url]) => url === "/sources/csv")).toBe(false);
+  fireEvent.click(screen.getByRole("button", { name: "Загрузить файл" }));
+  await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url]) => url === "/sources/csv")).toBe(true));
+});
 it("explains the safe Railway setup instead of asking for a database password", async () => {
   setup();
   render(<App />);

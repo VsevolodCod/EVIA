@@ -10,7 +10,10 @@ type IconName =
   | "grid"
   | "upload"
   | "chevron"
-  | "close";
+  | "close"
+  | "home"
+  | "user"
+  | "back";
 const paths: Record<IconName, ReactNode> = {
   plus: <path d="M12 5v14M5 12h14" />,
   file: (
@@ -40,6 +43,9 @@ const paths: Record<IconName, ReactNode> = {
   ),
   chevron: <path d="m9 5 7 7-7 7" />,
   close: <path d="m6 6 12 12M6 18 18 6" />,
+  home: <path d="m3 10 9-7 9 7v10h-6v-6H9v6H3z" />,
+  user: <><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>,
+  back: <path d="m15 18-6-6 6-6" />,
 };
 export function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
   return (
