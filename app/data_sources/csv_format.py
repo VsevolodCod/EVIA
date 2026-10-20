@@ -5,7 +5,7 @@ import io
 from itertools import islice
 from typing import TextIO
 
-PARSER_VERSION = 4
+PARSER_VERSION = 5
 SAMPLE_CHARS = 65536
 
 

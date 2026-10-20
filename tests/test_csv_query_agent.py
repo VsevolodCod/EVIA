@@ -271,3 +271,26 @@ async def test_invented_column_is_repaired_against_current_schema(tmp_path):
         assert answer.results[0].rows == [[300.0]]
     finally:
         catalog.close()
+
+
+@pytest.mark.asyncio
+async def test_average_datetime_rejects_numeric_cast_and_uses_timestamp(tmp_path):
+    provider = ScriptedProvider(
+        {"intent": "average", "sql": 'SELECT AVG(TRY_CAST("Первый ответ (МСК)" AS DOUBLE)) AS avg_first_answer FROM source', "explanation": ""},
+        {"intent": "average", "sql": 'SELECT AVG(TRY_CAST("Первый ответ (МСК)" AS TIMESTAMP)) AS avg_first_answer FROM source', "explanation": ""},
+    )
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    sources = SourceService(tmp_path / "data", catalog)
+    source = sources.register_csv(
+        "support.csv", 'Первый ответ (МСК)\n2024-10-01 01:00:00\n2024-10-01 03:00:00\n'.encode(),
+    )
+    agent = AgentRuntime(provider, build_tool_registry(catalog, sources), sources=sources)
+    try:
+        answer = await agent.ask("Какое среднее значение в столбце первый ответ?", [source.source_id])
+        assert "datetime" in provider.messages[0][0][0].content
+        assert [tool.ok for tool in answer.tool_results] == [False, True]
+        assert answer.results[0].rows == [["2024-10-01T02:00:00"]]
+        assert "Средняя дата/время: 01.10.2024 02:00:00" in answer.answer
+        assert "avg_first_answer" not in answer.answer
+    finally:
+        catalog.close()

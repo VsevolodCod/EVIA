@@ -78,6 +78,26 @@ it("distinguishes computed SQL from a demo answer", () => {
   expect(screen.getByText("Рассчитано по данным")).toBeInTheDocument();
 });
 
+it("shows a single computed timestamp as a result instead of an empty dashboard", () => {
+  render(<AnalysisResult entry={{
+    id: "average-date", question: "Среднее первого ответа?", state: "success",
+    answer: {
+      answer: "Средняя дата/время: 07.10.2025 01:36:06", steps: 1,
+      answer_kind: "computed", status: "answered",
+      analysis: { intent: "average", sql: 'SELECT AVG(TRY_CAST("Первый ответ (МСК)" AS TIMESTAMP)) AS avg_first_answer FROM source', explanation: "" },
+      tool_results: [{ tool_name: "query_data", ok: true, data: {
+        columns: [{ name: "avg_first_answer", data_type: "datetime" }],
+        rows: [["2025-10-07T01:36:06"]],
+      } }],
+    },
+  }} />);
+
+  expect(screen.getByText("Средняя дата/время", { selector: ".analysis-scalar span" })).toBeInTheDocument();
+  expect(screen.getByText("07.10.2025 01:36:06", { selector: ".analysis-scalar strong" })).toBeInTheDocument();
+  expect(screen.queryByText("Строк в результате")).not.toBeInTheDocument();
+  expect(screen.queryByText("Заполнено ячеек")).not.toBeInTheDocument();
+});
+
 it("keeps the regular tool result for failed or non-tabular outputs", () => {
   render(<AnalysisResult entry={{
     id: "answer-2",
