@@ -30,6 +30,10 @@
   }
 
   .topbar,
+  .mobile-nav,
+  .mobile-page-header,
+  .mobile-profile,
+  .mobile-source-context,
   .sidebar,
   .chat-panel,
   .analytics-tabs,
@@ -37,6 +41,8 @@
   .analytics-metrics,
   .skip-link,
   .dashboard-actions,
+  .chart-expand,
+  .mobile-export-backdrop,
   .palette-editor {
     display: none !important;
   }
@@ -85,6 +91,12 @@
     page-break-inside: avoid;
     border-color: #dce1e7 !important;
     box-shadow: none !important;
+  }
+
+  .chart-card-expanded {
+    position: static !important;
+    overflow: visible !important;
+    padding: 19px 20px !important;
   }
 
   .dashboard-grid {

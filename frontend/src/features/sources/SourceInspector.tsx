@@ -125,6 +125,10 @@ export function SourceInspector({
 
   return (
     <div className="analytics-workspace">
+      <div className="mobile-source-context">
+        <strong>{source.name}</strong>
+        <span>{source.source_type.toUpperCase()} · {current ? numberText(sourceRowCount(current.schema) ?? current.rows.length) : "…"} строк</span>
+      </div>
       <nav className="analytics-tabs" aria-label="Разделы источника">
         {views.map(([id, label]) => (
           <button

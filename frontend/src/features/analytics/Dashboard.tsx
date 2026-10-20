@@ -9,7 +9,11 @@ import "./dashboardPrint.css";
 import "./dashboardControls.css";
 
 function ChartCard({ title, unit, children }: { title: string; unit?: string; children: React.ReactNode }) {
-  return <section className="dashboard-card chart-card"><div className="chart-heading"><h3>{title}</h3>{unit && <small>{unit}</small>}</div>{children}</section>;
+  const [expanded, setExpanded] = useState(false);
+  return <section className={`dashboard-card chart-card ${expanded ? "chart-card-expanded" : ""}`}>
+    <div className="chart-heading"><h3>{title}</h3><div className="chart-heading-actions">{unit && <small>{unit}</small>}<button type="button" className="chart-expand" aria-label={expanded ? "Закрыть график" : `Развернуть график ${title}`} onClick={() => setExpanded(!expanded)}>{expanded ? "✕" : "↗"}</button></div></div>
+    {children}
+  </section>;
 }
 
 function HorizontalBars({ values, color, label }: { values: ChartValue[]; color: string; label: string }) {
@@ -97,6 +101,7 @@ export function Dashboard({
 }) {
   const model = useMemo(() => buildDashboardModel(schema, rows), [schema, rows]);
   const [showPalette, setShowPalette] = useState(false);
+  const [showMobileExport, setShowMobileExport] = useState(false);
   const fallbackPreference: PalettePreference = { colors: defaultPalette.colors, gradient: false };
   const [preference, setPreference] = useState<PalettePreference>(() => loadPalette(scope) ?? fallbackPreference);
   useEffect(() => setPreference(loadPalette(scope) ?? fallbackPreference), [scope]);
@@ -150,17 +155,38 @@ export function Dashboard({
       ? previewRowsText(model.rowCount)
       : "В предпросмотре нет строк";
   const exportPdf = () => {
+    setShowMobileExport(false);
     const previousTitle = document.title;
     document.title = `EVIA — ${title}`;
     window.addEventListener("afterprint", () => { document.title = previousTitle; }, { once: true });
     window.print();
   };
+  const exportCsv = () => {
+    const columns = [...new Set(schema.objects.flatMap((object) => object.fields.map((field) => field.name)))];
+    const headers = columns.length ? columns : Object.keys(rows[0] ?? {});
+    const cell = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
+    const csv = [headers.map(cell).join(","), ...rows.map((row) => headers.map((header) => cell(row[header])).join(","))].join("\r\n");
+    const url = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${title.replace(/[\\/:*?"<>|]/g, "_")}.csv`;
+    anchor.click();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+    setShowMobileExport(false);
+  };
 
   return <div className="dashboard" data-testid="print-report" data-print-report="true" style={{ "--dashboard-primary": primary, "--dashboard-secondary": secondary } as React.CSSProperties}>
     <div className="dashboard-top">
       <div><h2>{title}</h2><p>{sourceLabel}</p></div>
-      <div className="dashboard-actions"><button onClick={() => setShowPalette((open) => !open)} aria-expanded={showPalette}>Цвета</button><button onClick={exportPdf}>Экспорт PDF</button></div>
+      <div className="dashboard-actions"><button onClick={() => setShowPalette((open) => !open)} aria-expanded={showPalette}>Цвета</button><button className="desktop-export" onClick={exportPdf}>Экспорт PDF</button><button className="mobile-export-trigger" onClick={() => setShowMobileExport(true)}>Экспорт</button></div>
     </div>
+    {showMobileExport && <div className="mobile-export-backdrop" onClick={() => setShowMobileExport(false)}>
+      <section className="mobile-export-sheet" aria-label="Экспорт результатов" onClick={(event) => event.stopPropagation()}>
+        <div className="mobile-export-heading"><h2>Экспорт результатов</h2><button aria-label="Закрыть экспорт" onClick={() => setShowMobileExport(false)}>✕</button></div>
+        <button className="mobile-export-option" onClick={exportCsv}><span>CSV</span><span><strong>Скачать CSV</strong><small>Строки из предпросмотра</small></span><b>↓</b></button>
+        <button className="mobile-export-option" onClick={exportPdf}><span>PDF</span><span><strong>Скачать PDF</strong><small>Отчёт с графиками</small></span><b>↓</b></button>
+      </section>
+    </div>}
     {showPalette && <PaletteEditor colors={colors} gradient={gradient} onChange={updateColors} onClose={() => setShowPalette(false)} />}
     <p className="dashboard-scope">{scopeDescription}</p>
     <div className="kpi-grid" aria-label="Ключевые показатели">

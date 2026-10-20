@@ -89,6 +89,7 @@ export default function App() {
   const [postgresLoading, setPostgresLoading] = useState(false);
   const [postgresError, setPostgresError] = useState("");
   const [sourceSetup, setSourceSetup] = useState<"csv" | "postgres">("csv");
+  const [mobilePanel, setMobilePanel] = useState<"home" | "analytics" | "chat" | "profile">("home");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [histories, setHistories] = useState<Record<string, Entry[]>>({});
   const [chatSummaries, setChatSummaries] = useState<ChatSummary[]>([]);
@@ -106,6 +107,7 @@ export default function App() {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const [failedFile, setFailedFile] = useState<File | null>(null);
+  const [selectedUploadFile, setSelectedUploadFile] = useState<File | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const composer = useRef<HTMLTextAreaElement>(null);
@@ -312,6 +314,7 @@ export default function App() {
   function selectSource(id: string) {
     setSelectedId(id);
     setSourceSetup("csv");
+    setMobilePanel("analytics");
     setUploadFailure(null);
     setUploadError("");
     setView("overview");
@@ -332,13 +335,16 @@ export default function App() {
     setUploadFailure(null);
     setUploadError("");
     setFailedFile(null);
+    setSelectedUploadFile(null);
     setDragOver(false);
     setSourceSetup("csv");
+    setMobilePanel("analytics");
     setView("overview");
   }
   function openPostgresSetup() {
     setSelectedId(null);
     setSourceSetup("postgres");
+    setMobilePanel("analytics");
     void loadPostgresStatus();
   }
   async function upload(file: File) {
@@ -371,6 +377,7 @@ export default function App() {
       ]);
       selectSource(created.source_id);
       setUploadedId(created.source_id);
+      setSelectedUploadFile(null);
     } catch (error) {
       if (!controller.signal.aborted) {
         setUploadError(errorMessage(error));
@@ -475,7 +482,7 @@ export default function App() {
   }
 
   return (
-    <div className="app">
+    <div className={`app mobile-panel-${mobilePanel}`}>
       <a className="skip-link" href="#analysis">
         Перейти к данным
       </a>
@@ -484,9 +491,14 @@ export default function App() {
           className="brand"
           href="#analysis"
           aria-label="EVIA, рабочее пространство"
+          onClick={(event) => {
+            if (window.matchMedia?.("(max-width: 640px)").matches) event.preventDefault();
+            setMobilePanel("home");
+          }}
         >
           EVIA
         </a>
+        <button className="mobile-profile-entry" aria-label="Открыть профиль" onClick={() => setMobilePanel("profile")}><Icon name="user" size={18} /></button>
       </header>
       <div className="workspace">
         <aside className="sidebar" aria-label="Навигация рабочего пространства">
@@ -539,12 +551,16 @@ export default function App() {
                   {selectedId === item.source_id && (
                     <span className="selection-dot" />
                   )}
+                  <span className="mobile-source-chevron"><Icon name="chevron" size={15} /></span>
                 </button>
               ))}
             </div>
             <button
               className="upload-nav"
-              onClick={chooseFile}
+              onClick={() => {
+                if (window.matchMedia?.("(max-width: 640px)").matches) newAnalysis();
+                else chooseFile();
+              }}
               title="CSV · UTF-8 · запятая или точка с запятой"
               disabled={uploading}
             >
@@ -569,7 +585,12 @@ export default function App() {
               tabIndex={-1}
               onChange={(event) => {
                 const file = event.target.files?.[0];
-                if (file) void upload(file);
+                if (file) {
+                  if (window.matchMedia?.("(max-width: 640px)").matches) {
+                    setSelectedUploadFile(file);
+                    setMobilePanel("analytics");
+                  } else void upload(file);
+                }
                 event.target.value = "";
               }}
             />
@@ -622,6 +643,7 @@ export default function App() {
                         }));
                       }
                       setView("results");
+                      setMobilePanel("analytics");
                     }}
                   >
                     <Icon name="chat" size={16} />
@@ -642,6 +664,13 @@ export default function App() {
           id="analysis"
           tabIndex={-1}
         >
+          <div className="mobile-page-header">
+            <button aria-label="Назад к источникам" onClick={() => setMobilePanel("home")}>
+              <Icon name="back" size={22} />
+            </button>
+            <strong>{source ? "Анализ данных" : sourceSetup === "postgres" ? "PostgreSQL" : "Загрузка CSV"}</strong>
+            <span aria-hidden="true" />
+          </div>
           {source ? (
             <SourceInspector
               source={source}
@@ -671,7 +700,10 @@ export default function App() {
                   event.preventDefault();
                   setDragOver(false);
                   const file = event.dataTransfer.files[0];
-                  if (file) void upload(file);
+                  if (file) {
+                    if (window.matchMedia?.("(max-width: 640px)").matches) setSelectedUploadFile(file);
+                    else void upload(file);
+                  }
                 }}
                 aria-label="Добавление источника"
               >
@@ -694,14 +726,24 @@ export default function App() {
                   <span className="paper-plus">+</span>
                 </div>
                 <h1>{uploading ? "Загрузка CSV…" : "Добавьте CSV"}</h1>
-                <p>Перетащите файл сюда</p>
+                <p>Перетащите файл сюда или выберите его с устройства</p>
+                {selectedUploadFile && <div className="upload-selected-file">
+                  <Icon name="file" size={18} />
+                  <span>{selectedUploadFile.name}<small>{(selectedUploadFile.size / 1024).toFixed(1)} КБ</small></span>
+                  <Icon name="check" size={16} />
+                </div>}
+                {uploadError && window.matchMedia?.("(max-width: 640px)").matches && <div className="mobile-upload-error"><ErrorNotice
+                  message={uploadError}
+                  onRetry={failedFile ? () => void upload(failedFile) : chooseFile}
+                  label={failedFile ? "Повторить загрузку CSV" : "Выбрать файл"}
+                /></div>}
                 <button
                   className="primary"
-                  onClick={chooseFile}
+                  onClick={() => selectedUploadFile ? void upload(selectedUploadFile) : chooseFile()}
                   disabled={uploading}
                 >
                   <Icon name="upload" />
-                  {uploading ? "Загружаем…" : "Выбрать CSV"}
+                  {uploading ? "Загружаем…" : selectedUploadFile ? "Загрузить файл" : "Выбрать CSV"}
                 </button>
                 <small>UTF-8 · запятая или ; · первая строка — заголовки</small>
               </section>
@@ -711,10 +753,6 @@ export default function App() {
         <aside className="chat-panel" aria-label="Чат с EVIA">
           <header className="chat-header">
             <h2>Чат</h2>
-            <span
-              className="chat-status"
-              aria-label={pending ? "Обрабатывает вопрос" : "Ожидает вопроса"}
-            />
           </header>
           <div className="chat-content">
             {activeEntry ? (
@@ -771,6 +809,7 @@ export default function App() {
                         onClick={() => {
                           if (selectedId) setActiveIds((previous) => ({ ...previous, [selectedId]: message.id }));
                           setView("results");
+                          setMobilePanel("analytics");
                         }}
                       >
                         <Icon name="grid" />
@@ -786,6 +825,7 @@ export default function App() {
             ) : (
               <div className="chat-welcome">
                 <Evia large state={mascotState} />
+                {source && <p className="mobile-chat-intro">Источник подключён. Можно исследовать данные.</p>}
                 <p
                   className={`evia-live-status ${["welcome", "waiting", "listening", "explaining"].includes(mascotState) ? "visually-hidden" : ""}`}
                   role="status"
@@ -798,6 +838,7 @@ export default function App() {
                       "Какие есть столбцы?",
                       "Покажи первые строки",
                       "Есть ли пропуски?",
+                      "Построй график распределения",
                     ].map((question) => (
                       <button
                         key={question}
@@ -904,6 +945,57 @@ export default function App() {
           </div>
         </aside>
       </div>
+      <section className="mobile-profile" aria-label="Профиль и настройки">
+        <header className="mobile-page-header">
+          <button aria-label="Назад к источникам" onClick={() => setMobilePanel("home")}>
+            <Icon name="back" size={22} />
+          </button>
+          <strong>Профиль</strong>
+          <span aria-hidden="true" />
+        </header>
+        <div className="mobile-profile-card">
+          <span className="mobile-profile-avatar"><Icon name="user" size={24} /></span>
+          <div><strong>Гостевой доступ</strong><small>Ваши источники доступны в этом рабочем пространстве</small></div>
+        </div>
+        <div className="mobile-profile-list">
+          <div><strong>Язык</strong><span>Русский</span></div>
+          <div><strong>О приложении</strong><span>EVIA</span></div>
+        </div>
+      </section>
+      <nav className="mobile-nav" aria-label="Мобильная навигация">
+        <button
+          aria-label="Главная"
+          aria-pressed={mobilePanel === "home"}
+          onClick={() => setMobilePanel("home")}
+        >
+          <Icon name="home" size={18} />
+          <span>Главная</span>
+        </button>
+        <button
+          aria-label="Аналитика"
+          aria-pressed={mobilePanel === "analytics"}
+          onClick={() => setMobilePanel("analytics")}
+        >
+          <Icon name="file" size={18} />
+          <span>Аналитика</span>
+        </button>
+        <button
+          aria-label="Чат"
+          aria-pressed={mobilePanel === "chat"}
+          onClick={() => setMobilePanel("chat")}
+        >
+          <Icon name="chat" size={18} />
+          <span>Чат</span>
+        </button>
+        <button
+          aria-label="Профиль"
+          aria-pressed={mobilePanel === "profile"}
+          onClick={() => setMobilePanel("profile")}
+        >
+          <Icon name="user" size={18} />
+          <span>Профиль</span>
+        </button>
+      </nav>
     </div>
   );
 }

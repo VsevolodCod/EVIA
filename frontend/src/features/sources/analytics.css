@@ -5,6 +5,7 @@
   --chart-green: #518ed5;
   --chart-amber: #ddaa65;
 }
+.mobile-source-context { display: none; }
 .analytics-workspace .analysis-heading h1 {
   font-weight: 700;
   font-size: 27px;
@@ -838,4 +839,38 @@
   .analysis-answer {
     padding: 18px;
   }
+}
+
+@media (max-width: 640px) {
+  .analytics-workspace { gap: 13px; }
+  .mobile-source-context { display: grid; gap: 4px; padding: 0 4px; min-width: 0; }
+  .mobile-source-context strong { overflow: hidden; color: #17252b; font-size: 17px; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
+  .mobile-source-context span { color: #81908c; font-size: 11px; }
+  .analytics-tabs { position: sticky; top: 0; z-index: 5; gap: 5px; margin: 0 -16px; padding: 7px 16px 9px; border: 0; background: #fff; scrollbar-width: none; }
+  .analytics-tabs::-webkit-scrollbar { display: none; }
+  .analytics-workspace:has(.dashboard) .analytics-tabs { padding-right: 16px; }
+  .analytics-tabs button { min-height: 34px; padding: 7px 10px; border-radius: 8px; font-size: 11px; }
+  .analytics-tabs button[aria-pressed="true"] { background: #176d51; box-shadow: 0 2px 0 #0c4c39; }
+  .analytics-workspace .analysis-heading, .analytics-metrics, .profile-scope { display: none; }
+  .analytics-section { padding-top: 4px; gap: 12px; }
+  .analytics-title h2 { font-size: 17px; }
+  .analytics-kicker, .analytics-section > .analytics-caption { display: none; }
+  .column-toolbar { gap: 8px; }
+  .column-search { min-width: 0; flex-basis: 100%; }
+  .column-search input { padding: 10px 0; }
+  .filter-chip { padding: 9px 11px; }
+  .column-cards { gap: 0; overflow: hidden; border: 1px solid #e5ede9; border-radius: 12px; background: #fff; }
+  .column-card { border: 0; border-radius: 0; box-shadow: none; }
+  .column-card + .column-card { border-top: 1px solid #ecf1ee; }
+  .column-card summary { padding: 11px 12px; }
+  .column-card summary::after { content: "›"; font-size: 20px; }
+  .column-card details[open] > summary::after { content: "⌄"; }
+  .column-card-title strong { font-size: 12px; }
+  .quality-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .quality-summary > div:last-child { grid-column: span 2; }
+  .quality-summary > div { background: #fff; border-color: #e5ede9; }
+  .insight-card { padding: 15px; }
+  .missing-columns { gap: 8px; margin-top: 12px; }
+  .missing-columns button { padding: 11px 0; border-bottom: 1px solid #eef1ef; }
+  .analytics-report > .data-table { overflow-x: auto; }
 }

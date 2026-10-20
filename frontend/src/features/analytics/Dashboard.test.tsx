@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { vi } from "vitest";
+import { afterEach, vi } from "vitest";
 import type { Profile, SourceSchema } from "../../api";
 import { Dashboard } from "./Dashboard";
 
@@ -187,4 +187,31 @@ it("imports a palette file and applies the optional line gradient", async () => 
 it("explains the absence of charts without inventing analytics", () => {
   render(<Dashboard title="Идентификаторы" sourceLabel="ids.csv" scope="ids" schema={{ ...schema, objects: [{ ...schema.objects[0], fields: [{ name: "id", inferred_type: "integer", nullable: false, is_identifier_candidate: true }] }] }} rows={[{ id: 1 }]} />);
   expect(screen.getByText("Для графиков нужны числовые, текстовые или временные поля.")).toBeInTheDocument();
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
+
+it("opens and closes a chart detail without losing its values", () => {
+  render(<Dashboard title="Поездки" sourceLabel="Поездки.csv" scope="mobile-chart" schema={schema} rows={rows} />);
+  fireEvent.click(screen.getByRole("button", { name: "Развернуть график Частые значения: city" }));
+  expect(screen.getByRole("button", { name: "Закрыть график" })).toBeInTheDocument();
+  expect(screen.getByRole("img", { name: "Частые значения поля city" })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Закрыть график" }));
+  expect(screen.getByRole("button", { name: "Развернуть график Частые значения: city" })).toBeInTheDocument();
+});
+
+it("exports preview rows as a CSV from the mobile export sheet", () => {
+  const createObjectURL = vi.fn(() => "blob:trips");
+  vi.stubGlobal("URL", { ...URL, createObjectURL, revokeObjectURL: vi.fn() });
+  const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+  render(<Dashboard title="Поездки" sourceLabel="Поездки.csv" scope="mobile-export" schema={schema} rows={rows} />);
+  fireEvent.click(screen.getByRole("button", { name: "Экспорт" }));
+  expect(screen.getByRole("region", { name: "Экспорт результатов" })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: /Скачать CSV/ }));
+  expect(createObjectURL).toHaveBeenCalledTimes(1);
+  expect(click).toHaveBeenCalledTimes(1);
+  expect(screen.queryByRole("region", { name: "Экспорт результатов" })).not.toBeInTheDocument();
 });
