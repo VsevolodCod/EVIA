@@ -753,10 +753,6 @@ export default function App() {
         <aside className="chat-panel" aria-label="Чат с EVIA">
           <header className="chat-header">
             <h2>Чат</h2>
-            <span
-              className="chat-status"
-              aria-label={pending ? "Обрабатывает вопрос" : "Ожидает вопроса"}
-            />
           </header>
           <div className="chat-content">
             {activeEntry ? (
