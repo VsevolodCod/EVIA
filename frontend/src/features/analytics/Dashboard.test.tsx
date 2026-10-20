@@ -61,6 +61,17 @@ it("shows compact factual metrics and charts from source rows", () => {
   expect(screen.getByText(/3 строки в предпросмотре источника/)).toBeInTheDocument();
 });
 
+it("opens a numerical distribution detail with statistics and a way back", () => {
+  render(<Dashboard title="Поездки" sourceLabel="Поездки.csv" scope="details" schema={schema} rows={rows} profile={profile} />);
+  fireEvent.click(screen.getByRole("button", { name: "Развернуть график Распределение: distance" }));
+  expect(screen.getByRole("region", { name: "Детали распределения distance" })).toBeInTheDocument();
+  expect(screen.getByText("Статистика распределения")).toBeInTheDocument();
+  expect(screen.getByText("Стандартное отклонение")).toBeInTheDocument();
+  expect(screen.getByRole("region", { name: "Детали распределения distance" })).toHaveTextContent("Пропуски по столбцам");
+  fireEvent.click(screen.getByRole("button", { name: "Закрыть график" }));
+  expect(screen.queryByRole("region", { name: "Детали распределения distance" })).not.toBeInTheDocument();
+});
+
 it("separates the full source from profile coverage and highlights data quality", () => {
   render(
     <Dashboard

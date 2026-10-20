@@ -8,11 +8,13 @@ import "./dashboard.css";
 import "./dashboardPrint.css";
 import "./dashboardControls.css";
 
-function ChartCard({ title, unit, children }: { title: string; unit?: string; children: React.ReactNode }) {
+function ChartCard({ title, unit, children, detail, detailLabel, footer }: { title: string; unit?: string; children: React.ReactNode; detail?: React.ReactNode; detailLabel?: string; footer?: React.ReactNode }) {
   const [expanded, setExpanded] = useState(false);
-  return <section className={`dashboard-card chart-card ${expanded ? "chart-card-expanded" : ""}`}>
+  return <section className={`dashboard-card chart-card ${expanded ? "chart-card-expanded" : ""}`} aria-label={expanded ? detailLabel : undefined}>
     <div className="chart-heading"><h3>{title}</h3><div className="chart-heading-actions">{unit && <small>{unit}</small>}<button type="button" className="chart-expand" aria-label={expanded ? "Закрыть график" : `Развернуть график ${title}`} onClick={() => setExpanded(!expanded)}>{expanded ? "✕" : "↗"}</button></div></div>
+    {expanded && detail && <div className="chart-detail">{detail}</div>}
     {children}
+    {expanded && footer && <div className="chart-detail-footer">{footer}</div>}
   </section>;
 }
 
@@ -113,6 +115,14 @@ export function Dashboard({
   const { colors, gradient } = preference;
   const primary = colors[0]; const secondary = colors[1];
   const hasCharts = Boolean(model.category || model.numeric || model.timeline);
+  const sortedNumeric = model.numeric ? [...model.numeric.values].sort((left, right) => left - right) : [];
+  const middle = Math.floor(sortedNumeric.length / 2);
+  const median = sortedNumeric.length % 2
+    ? sortedNumeric[middle]
+    : (sortedNumeric[middle - 1] + sortedNumeric[middle]) / 2;
+  const standardDeviation = model.numeric
+    ? Math.sqrt(model.numeric.values.reduce((sum, value) => sum + (value - model.numeric!.mean) ** 2, 0) / model.numeric.values.length)
+    : 0;
   const profiledRows = profile?.sample_size ?? 0;
   const profileLimit = profile?.sample_limit ?? 0;
   const missingFields = Object.values(profile?.columns ?? {}).filter(
@@ -198,7 +208,16 @@ export function Dashboard({
     {hasCharts || missingColumns.length > 0 ? <div className="dashboard-grid">
       {model.timeline && <ChartCard title={`Динамика по полю ${model.timeline.field}`} unit="строки"><LineChart values={model.timeline.values} color={primary} gradient={gradient} label={`Динамика по полю ${model.timeline.field}`} /><p className="visually-hidden">{model.timeline.values.map((point) => `${point.label}: ${numberText(point.value)}`).join("; ")}</p></ChartCard>}
       {model.category && <ChartCard title={`Частые значения: ${model.category.field}`} unit="строки"><HorizontalBars values={model.category.values} color={model.timeline ? secondary : primary} label={`Частые значения поля ${model.category.field}`} /></ChartCard>}
-      {model.numeric && <ChartCard title={`Распределение: ${model.numeric.field}`} unit="строки"><Histogram values={model.numeric.histogram} color={seriesColor(model.numeric.field, colors)} field={model.numeric.field} /><div className="numeric-summary"><span>Мин. <b>{model.numeric.min.toLocaleString("ru-RU")}</b></span><span>Среднее <b>{model.numeric.mean.toLocaleString("ru-RU", { maximumFractionDigits: 2 })}</b></span><span>Макс. <b>{model.numeric.max.toLocaleString("ru-RU")}</b></span></div></ChartCard>}
+      {model.numeric && <ChartCard title={`Распределение: ${model.numeric.field}`} unit="строки" detailLabel={`Детали распределения ${model.numeric.field}`} detail={<>
+        <h4>Статистика распределения</h4>
+        <dl className="chart-detail-stats">
+          <div><dt>Минимум</dt><dd>{numberText(model.numeric.min)}</dd></div>
+          <div><dt>Максимум</dt><dd>{numberText(model.numeric.max)}</dd></div>
+          <div><dt>Среднее</dt><dd>{numberText(Number(model.numeric.mean.toFixed(2)))}</dd></div>
+          <div><dt>Медиана</dt><dd>{numberText(median)}</dd></div>
+          <div><dt>Стандартное отклонение</dt><dd>{numberText(Number(standardDeviation.toFixed(2)))}</dd></div>
+        </dl>
+      </>} footer={<><h4>Пропуски по столбцам</h4>{missingColumns.length ? <MissingBars values={missingColumns} color={secondary} /> : <p>{profile ? "В профиле пропусков нет" : "Профиль источника ещё не загружен"}</p>}</>}><Histogram values={model.numeric.histogram} color={seriesColor(model.numeric.field, colors)} field={model.numeric.field} /><div className="numeric-summary"><span>Мин. <b>{model.numeric.min.toLocaleString("ru-RU")}</b></span><span>Среднее <b>{model.numeric.mean.toLocaleString("ru-RU", { maximumFractionDigits: 2 })}</b></span><span>Макс. <b>{model.numeric.max.toLocaleString("ru-RU")}</b></span></div></ChartCard>}
       {missingColumns.length > 0 && <ChartCard title="Пропуски по столбцам" unit="доля"><MissingBars values={missingColumns} color={secondary} /></ChartCard>}
     </div> : <div className="dashboard-empty">Для графиков нужны числовые, текстовые или временные поля.</div>}
   </div>;

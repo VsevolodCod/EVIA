@@ -104,8 +104,8 @@ function ColumnCard({
     <section className="column-card" aria-label={`Столбец ${field.name}`}>
       <details open={initialOpen || undefined}>
         <summary>
-          <span className="column-type-icon" aria-hidden="true">
-            {field.type === "string" ? "Aa" : "#"}
+          <span className={`column-type-icon column-type-${field.type.replaceAll(" ", "-")}`} aria-hidden="true">
+            {field.type === "string" ? "Aa" : field.type.includes("date") || field.type.includes("time") ? "▣" : "#"}
           </span>
           <span className="column-card-title">
             <strong>{field.name}</strong>
@@ -117,9 +117,7 @@ function ColumnCard({
           <span
             className={`column-status ${stats?.sample_null_count ? "has-missing" : ""}`}
           >
-            {stats
-              ? `${numberText(stats.distinct_sample_values)} уникальных`
-              : "Нет профиля"}
+            {stats ? percentText(ratio(stats.sample_null_count, total)) : "Нет профиля"}
           </span>
         </summary>
         {stats ? (

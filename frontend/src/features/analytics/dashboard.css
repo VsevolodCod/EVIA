@@ -308,3 +308,28 @@
   .dashboard-grid { gap: 8px; }
   .line-chart { height: 175px; }
 }
+
+.chart-detail,.chart-detail-footer { display: none; }
+@media (max-width: 640px) {
+  .dashboard-grid .chart-card:has(.histogram) { order: -2; }
+  .dashboard-grid .chart-card:has(.quality-chart) { order: 2; }
+  .dashboard-grid .chart-card:has(.histogram) { min-height: 265px; }
+  .dashboard-grid .chart-card:has(.histogram) .histogram { height: 175px; }
+  .chart-card-expanded { inset: 0 0 calc(64px + env(safe-area-inset-bottom)); padding-top: calc(26px + env(safe-area-inset-top)) !important; background: #f8fbfa; }
+  .chart-card-expanded .chart-heading { position: sticky; top: 0; z-index: 1; margin: -4px -5px 17px; padding: 6px 5px 13px; background: #f8fbfa; }
+  .chart-card-expanded .chart-heading h3 { font-size: 16px; }
+  .chart-card-expanded .chart-detail { display: block; order: 1; margin-top: 16px; padding: 14px; border: 1px solid #e4ece9; border-radius: 13px; background: #fff; }
+  .chart-card-expanded .chart-detail h4 { margin: 0 0 11px; font-size: 12px; }
+  .chart-card-expanded .chart-detail-stats { margin: 0; }
+  .chart-card-expanded .chart-detail-stats > div { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px solid #edf1ef; font-size: 11px; }
+  .chart-card-expanded .chart-detail-stats > div:last-child { border: 0; }
+  .chart-card-expanded .chart-detail-stats dt { color: #6e828a; }
+  .chart-card-expanded .chart-detail-stats dd { margin: 0; font-weight: 700; }
+  .chart-card-expanded .histogram { order: 2; width: 100%; min-height: 250px; margin-top: 12px; padding: 14px 6px 0; border: 1px solid #e4ece9; border-radius: 13px; background: #fff; }
+  .chart-card-expanded .numeric-summary { order: 3; padding: 14px; border: 1px solid #e4ece9; border-radius: 13px; background: #fff; }
+  .chart-card-expanded .chart-detail-footer { display: block; order: 4; margin-top: 12px; padding: 14px; border: 1px solid #e4ece9; border-radius: 13px; background: #fff; }
+  .chart-card-expanded .chart-detail-footer h4 { margin: 0 0 13px; font-size: 12px; }
+  .chart-card-expanded .chart-detail-footer p { margin: 0; color: #698079; font-size: 11px; }
+  .chart-card-expanded .chart-detail-footer .quality-chart { min-height: 0; padding: 0; border: 0; }
+  .chart-card-expanded .bar-chart,.chart-card-expanded .quality-chart,.chart-card-expanded .line-chart { padding: 14px; border: 1px solid #e4ece9; border-radius: 13px; background: #fff; }
+}

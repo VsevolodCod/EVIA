@@ -90,6 +90,12 @@ export default function App() {
   const [postgresError, setPostgresError] = useState("");
   const [sourceSetup, setSourceSetup] = useState<"csv" | "postgres">("csv");
   const [mobilePanel, setMobilePanel] = useState<"home" | "analytics" | "chat" | "profile">("home");
+  const [mobileOverlay, setMobileOverlay] = useState<"wizard" | "upload" | "settings" | null>(null);
+  const [theme, setTheme] = useState<"light" | "dark" | "system">(() => {
+    const saved = localStorage.getItem("evia.theme");
+    return saved === "dark" || saved === "system" ? saved : "light";
+  });
+  const [systemDark, setSystemDark] = useState(() => window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [histories, setHistories] = useState<Record<string, Entry[]>>({});
   const [chatSummaries, setChatSummaries] = useState<ChatSummary[]>([]);
@@ -300,6 +306,13 @@ export default function App() {
       historyControllers.current.forEach((controller) => controller.abort());
     };
   }, []);
+  useEffect(() => {
+    const media = window.matchMedia?.("(prefers-color-scheme: dark)");
+    if (!media) return;
+    const onChange = (event: MediaQueryListEvent) => setSystemDark(event.matches);
+    media.addEventListener?.("change", onChange);
+    return () => media.removeEventListener?.("change", onChange);
+  }, []);
 
   useEffect(() => {
     if (!selectedId || historyListLoading) return;
@@ -315,6 +328,7 @@ export default function App() {
     setSelectedId(id);
     setSourceSetup("csv");
     setMobilePanel("analytics");
+    setMobileOverlay(null);
     setUploadFailure(null);
     setUploadError("");
     setView("overview");
@@ -323,7 +337,7 @@ export default function App() {
     if (selectedId)
       setDrafts((previous) => ({ ...previous, [selectedId]: value }));
   }
-  function newAnalysis() {
+  function resetAnalysis() {
     if (selectedId) {
       setActiveIds((previous) => ({ ...previous, [selectedId]: undefined }));
       activeConversations.current.delete(selectedId);
@@ -340,6 +354,22 @@ export default function App() {
     setSourceSetup("csv");
     setMobilePanel("analytics");
     setView("overview");
+  }
+  function newAnalysis() {
+    if (window.matchMedia?.("(max-width: 640px)").matches) {
+      setMobilePanel("home");
+      setMobileOverlay("wizard");
+      return;
+    }
+    resetAnalysis();
+  }
+  function openMobileUpload() {
+    resetAnalysis();
+    setMobileOverlay("upload");
+  }
+  function chooseTheme(value: "light" | "dark" | "system") {
+    setTheme(value);
+    localStorage.setItem("evia.theme", value);
   }
   function openPostgresSetup() {
     setSelectedId(null);
@@ -482,7 +512,7 @@ export default function App() {
   }
 
   return (
-    <div className={`app mobile-panel-${mobilePanel}`}>
+    <div className={`app mobile-panel-${mobilePanel} ${mobileOverlay === "upload" ? "mobile-upload-overlay" : ""}`} data-testid="app-shell" data-theme={theme === "system" ? systemDark ? "dark" : "light" : theme}>
       <a className="skip-link" href="#analysis">
         Перейти к данным
       </a>
@@ -558,7 +588,7 @@ export default function App() {
             <button
               className="upload-nav"
               onClick={() => {
-                if (window.matchMedia?.("(max-width: 640px)").matches) newAnalysis();
+                if (window.matchMedia?.("(max-width: 640px)").matches) openMobileUpload();
                 else chooseFile();
               }}
               title="CSV · UTF-8 · запятая или точка с запятой"
@@ -665,7 +695,7 @@ export default function App() {
           tabIndex={-1}
         >
           <div className="mobile-page-header">
-            <button aria-label="Назад к источникам" onClick={() => setMobilePanel("home")}>
+            <button aria-label={mobileOverlay === "upload" ? "Закрыть загрузку CSV" : "Назад к источникам"} onClick={() => { setMobileOverlay(null); setMobilePanel("home"); }}>
               <Icon name="back" size={22} />
             </button>
             <strong>{source ? "Анализ данных" : sourceSetup === "postgres" ? "PostgreSQL" : "Загрузка CSV"}</strong>
@@ -690,6 +720,7 @@ export default function App() {
           ) : (
             <>
               <section
+                role={mobileOverlay === "upload" ? "dialog" : undefined}
                 className={`upload-card ${dragOver ? "drag-over" : ""}`}
                 onDragOver={(event) => {
                   event.preventDefault();
@@ -705,7 +736,7 @@ export default function App() {
                     else void upload(file);
                   }
                 }}
-                aria-label="Добавление источника"
+                aria-label={mobileOverlay === "upload" ? "Загрузка CSV" : "Добавление источника"}
               >
                 <div className="upload-illustration" aria-hidden="true">
                   <div className="paper-sheet paper-back" />
@@ -747,12 +778,13 @@ export default function App() {
                 </button>
                 <small>UTF-8 · запятая или ; · первая строка — заголовки</small>
               </section>
+              <details className="upload-advanced"><summary>Дополнительно</summary><p>Файл должен быть в кодировке UTF-8. Разделитель — запятая или точка с запятой; первая строка содержит названия столбцов.</p></details>
             </>
           )}
         </main>
         <aside className="chat-panel" aria-label="Чат с EVIA">
           <header className="chat-header">
-            <h2>Чат</h2>
+            <h2>Чат</h2><strong className="mobile-chat-brand">EVIA</strong>
           </header>
           <div className="chat-content">
             {activeEntry ? (
@@ -929,6 +961,7 @@ export default function App() {
                 )}
               </div>
             </form>
+            {source && <div className="mobile-chat-source" aria-label="Прикреплённый источник"><Icon name="file" size={14} /><span>{source.name}{source.source_type === "csv" && !source.name.toLowerCase().endsWith(".csv") ? ".csv" : ""}</span><button type="button" aria-label="Убрать источник из чата" onClick={() => setSelectedId(null)}><Icon name="close" size={14} /></button></div>}
             <div className="composer-hint">
               <span>Ctrl / ⌘ + Enter — отправить</span>
               {draft.length > 3500 && <span>{draft.length}/4000</span>}
@@ -958,10 +991,30 @@ export default function App() {
           <div><strong>Гостевой доступ</strong><small>Ваши источники доступны в этом рабочем пространстве</small></div>
         </div>
         <div className="mobile-profile-list">
+          <button type="button" onClick={() => setMobileOverlay("settings")} aria-label="Открыть настройки"><strong>Настройки</strong><Icon name="chevron" size={16} /></button>
           <div><strong>Язык</strong><span>Русский</span></div>
           <div><strong>О приложении</strong><span>EVIA</span></div>
         </div>
       </section>
+      {mobileOverlay === "wizard" && <section className="mobile-fullscreen mobile-wizard" role="dialog" aria-label="Новый анализ" aria-modal="true">
+        <header><h2>Новый анализ</h2><button aria-label="Закрыть новый анализ" onClick={() => setMobileOverlay(null)}><Icon name="close" size={19} /></button></header>
+        <ol className="wizard-steps">
+          <li className="active"><b>1</b><span>Загрузка данных</span></li>
+          <li><b>2</b><span>Настройка</span></li>
+          <li><b>3</b><span>Анализ</span></li>
+          <li><b>4</b><span>Результат</span></li>
+        </ol>
+        {sources.length > 0 && <div className="wizard-existing"><h3>Или выберите источник</h3>{sources.slice(0, 3).map((item) => <button key={item.source_id} aria-label={`Использовать ${item.name}`} onClick={() => { resetAnalysis(); selectSource(item.source_id); }}><Icon name="file" size={18} /><span><strong>{item.name}</strong><small>{item.source_type.toUpperCase()}</small></span><Icon name="chevron" size={15} /></button>)}</div>}
+        <div className="wizard-bottom"><button className="primary" aria-label="Загрузить CSV в новом анализе" onClick={openMobileUpload}>Загрузить CSV <Icon name="arrow" size={17} /></button><button className="wizard-postgres" onClick={() => { setMobileOverlay(null); openPostgresSetup(); }}>Подключить PostgreSQL</button></div>
+      </section>}
+      {mobileOverlay === "settings" && <section className="mobile-fullscreen mobile-settings" role="dialog" aria-label="Настройки" aria-modal="true">
+        <header><h2>Настройки</h2><button aria-label="Закрыть настройки" onClick={() => setMobileOverlay(null)}><Icon name="close" size={19} /></button></header>
+        <h3>Тема</h3>
+        <div className="settings-options">
+          {([ ["light", "Светлая"], ["dark", "Тёмная"], ["system", "Системная"] ] as const).map(([value, label]) => <button key={value} aria-label={`${label} тема`} aria-pressed={theme === value} onClick={() => chooseTheme(value)}><span>{label}</span>{theme === value && <Icon name="check" size={16} />}</button>)}
+        </div>
+        <div className="settings-info"><span>Язык</span><strong>Русский</strong></div>
+      </section>}
       <nav className="mobile-nav" aria-label="Мобильная навигация">
         <button
           aria-label="Главная"
