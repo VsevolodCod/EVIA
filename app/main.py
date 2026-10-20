@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 import logging
+from uuid import uuid4
 
 from fastapi import (
     FastAPI,
@@ -12,11 +13,12 @@ from fastapi import (
 )
 
 from app.agent import AgentRuntime
+from app.contracts.v1 import AgentResponse
 from app.config import PROJECT_ROOT, get_settings
 from app.data_sources.postgresql_adapter import PostgreSQLAdapter
 from app.db import create_chat_database, initialize_chat_database
 from app.llm.factory import create_llm_provider
-from app.models import AskRequest, AskResponse, ChatMessage, DataSource, Chat, ChatCreateRequest, ChatSummary, \
+from app.models import AskRequest, ChatMessage, DataSource, Chat, ChatCreateRequest, ChatSummary, \
     ChatHistoryResponse
 from app.schema_catalog import SchemaCatalog
 from app.source_service import SourceService
@@ -58,6 +60,7 @@ agent = AgentRuntime(
     llm=llm_provider,
     tools=tool_registry,
     max_steps=settings.agent_max_steps,
+    sources=source_service,
 )
 
 
@@ -188,7 +191,7 @@ def profile_source(source_id: str):
         ) from exc
 
 
-@app.post("/agent/ask", response_model=AskResponse)
+@app.post("/agent/ask", response_model=AgentResponse)
 async def ask_agent(body: AskRequest):
     try:
         return await agent.ask(
@@ -204,7 +207,7 @@ async def ask_agent(body: AskRequest):
         ) from exc
 
 
-@app.post("/agent/chat", response_model=AskResponse)
+@app.post("/agent/chat", response_model=AgentResponse)
 async def chat_agent(
     body: AskRequest,
     http_request: Request,
@@ -254,7 +257,9 @@ async def chat_agent(
         # Возвращаем обычный ответ агента вместе с идентификатором чата.
         response_data = answer.model_dump()
         response_data["chat_id"] = chat.chat_id
-        return AskResponse.model_validate(response_data)
+        response_data.setdefault("request_id", uuid4().hex)
+        response_data.setdefault("status", "answered")
+        return AgentResponse.model_validate(response_data)
 
     except ChatNotFoundError as exc:
         raise HTTPException(

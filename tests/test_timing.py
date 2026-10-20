@@ -70,3 +70,34 @@ async def test_keep_alive_is_sent_without_changing_context_or_token_limit(monkey
         return httpx.Response(200, json={'done': True})
     monkeypatch.setattr(httpx, 'AsyncClient', lambda **kwargs: original(transport=httpx.MockTransport(handle), **kwargs))
     assert (await OllamaModel(Settings()).generate({'messages': []}))['done']
+
+
+@pytest.mark.asyncio
+async def test_ollama_structured_chat_sends_json_schema_to_local_model():
+    class RecordingModel:
+        async def generate(self, payload):
+            assert payload["format"]["type"] == "object"
+            assert payload["format"]["required"] == ["intent", "sql", "explanation"]
+            assert payload["messages"][0]["role"] == "system"
+            return {"message": {"content": '{"intent":"count","sql":"SELECT 1","explanation":""}'}}
+
+    from app.models import LLMMessage
+    provider = OllamaProvider(RecordingModel())
+    response = await provider.chat_structured(
+        [LLMMessage(role="system", content="plan")],
+        {"type": "object", "required": ["intent", "sql", "explanation"]},
+    )
+    assert response.content.startswith('{"intent"')
+
+
+@pytest.mark.asyncio
+async def test_ollama_http_error_does_not_print_response_body(monkeypatch, capsys):
+    monkeypatch.setenv("LLM_MODEL", "missing")
+    original = httpx.AsyncClient
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: original(
+        transport=httpx.MockTransport(lambda _request: httpx.Response(404, text="private response body")),
+        **kwargs,
+    ))
+    with pytest.raises(httpx.HTTPStatusError):
+        await OllamaModel(Settings()).generate({"messages": []})
+    assert "private response body" not in capsys.readouterr().out

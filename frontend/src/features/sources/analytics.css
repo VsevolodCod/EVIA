@@ -733,6 +733,32 @@
   color: #496556;
   overflow-wrap: anywhere;
 }
+.analysis-provenance {
+  width: fit-content;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+.analysis-sql {
+  max-width: 100%;
+  color: var(--muted);
+  font-size: 12px;
+}
+.analysis-sql summary { cursor: pointer; }
+.analysis-sql code {
+  display: block;
+  margin-top: 8px;
+  padding: 12px;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--ink);
+}
 .analysis-answer {
   padding: 24px;
   border: 1px solid #cde4d6;

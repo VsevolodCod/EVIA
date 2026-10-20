@@ -386,6 +386,16 @@
       "title": "Answer",
       "type": "string"
     },
+    "answer_kind": {
+      "default": "model",
+      "enum": [
+        "demo",
+        "model",
+        "computed"
+      ],
+      "title": "Answer Kind",
+      "type": "string"
+    },
     "artifact_ids": {
       "items": {
         "maxLength": 200,

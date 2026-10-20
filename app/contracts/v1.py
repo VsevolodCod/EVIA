@@ -97,6 +97,7 @@ class AgentResponse(AskResponse):
     contract_version: Literal['1.0'] = '1.0'
     request_id: Identifier
     status: Literal['answered', 'clarification', 'error']
+    answer_kind: Literal['demo', 'model', 'computed'] = 'model'
     analysis: AnalysisPlan | None = None
     results: list[QueryResult] = Field(default_factory=list)
     error: Error | None = None

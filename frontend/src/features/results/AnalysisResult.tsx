@@ -92,6 +92,15 @@ export function AnalysisResult({ entry }: { entry?: Entry }) {
       </div>}
       {entry?.answer ? (
         <>
+          <div className="analysis-provenance">
+            {entry.answer.status === "error" ? "Запрос не выполнен"
+              : entry.answer.status === "clarification" ? "Нужно уточнение"
+              : entry.answer.answer_kind === "computed" ? "Рассчитано по CSV"
+              : entry.answer.answer_kind === "demo" ? "Демо-ответ"
+              : entry.answer.tool_results.some((item) => item.tool_name === "query_data" && item.ok)
+                ? "Рассчитано по данным"
+                : entry.answer.answer_kind === "model" ? "Ответ модели" : "Ответ из истории"}
+          </div>
           {result && <Dashboard
             title="Результат анализа"
             sourceLabel="Таблица, полученная инструментом EVIA"
@@ -107,6 +116,10 @@ export function AnalysisResult({ entry }: { entry?: Entry }) {
               {entry.answer.answer || "Модель вернула пустой ответ."}
             </SafeMarkdown>
           </section>
+          {entry.answer.analysis?.sql && <details className="analysis-sql">
+            <summary>Показать SQL</summary>
+            <code>{entry.answer.analysis.sql}</code>
+          </details>}
           {entry.answer.tool_results.length > 0 && (
             <ToolResults results={entry.answer.tool_results} />
           )}

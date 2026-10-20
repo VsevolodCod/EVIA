@@ -110,22 +110,22 @@ python scripts/run.py --dev --port 8100 --ui-port 5200
 | `BI_CATALOG_DB` | Прежнее имя настройки каталога; используется, если не задан `CATALOG_DB_PATH` |
 | `CHAT_DB_PATH` | База серверных диалогов (по умолчанию `BI_DATA_DIR/chats.db`) |
 
-Для установленной локально `gemma4:12b` запустите Ollama и сохраните в игнорируемом `.env`:
+Для уже установленной локальной модели запустите Ollama и сохраните в игнорируемом `.env` (точный тег проверьте через `ollama list`):
 
 ```dotenv
 LLM_PROVIDER=ollama
-LLM_MODEL=gemma4:12b
+LLM_MODEL=qwen2.5-coder:7b
 OLLAMA_BASE_URL=http://127.0.0.1:11434
-OLLAMA_KEEP_ALIVE=60m
+OLLAMA_KEEP_ALIVE=10m
 THINKING=0
-TIMEOUT=300
-MAX_TOKENS_G=768
+TIMEOUT=120
+MAX_TOKENS_G=256
 AGENT_MAX_STEPS=5
 ```
 
-Если ранее в PowerShell задан `$env:LLM_PROVIDER='mock'`, удалите эту переменную (`Remove-Item Env:LLM_PROVIDER -ErrorAction SilentlyContinue`) либо поменяйте её на `ollama`: переменные процесса имеют приоритет над `.env`. Перезапустите `scripts/run.py` и обновите страницу; метка должна стать «Модель: ollama». Проверить наличие модели можно через `http://127.0.0.1:11434/api/tags`, выбранного провайдера — через `/health`. Health приложения не подтверждает готовность модели: первый запрос может долго загружать веса и прогревать Ollama.
+Если ранее в PowerShell задан `$env:LLM_PROVIDER='mock'`, удалите эту переменную (`Remove-Item Env:LLM_PROVIDER -ErrorAction SilentlyContinue`) либо поменяйте её на `ollama`: переменные процесса имеют приоритет над `.env`. Перезапустите `scripts/run.py` и обновите страницу. Проверить наличие модели можно через `http://127.0.0.1:11434/api/tags`, выбранного провайдера — через `/health`. Health приложения не подтверждает готовность модели: первый запрос может долго загружать веса и прогревать Ollama.
 
-`TIMEOUT` действует на один вызов модели, `MAX_TOKENS_G` ограничивает его генерацию. Провайдер использует контекст 4096 токенов. В примере модель остаётся в памяти 60 минут после запроса; это занимает RAM/VRAM, но уменьшает число холодных запусков во время тестирования. Проверочный вопрос на `sample-data/sales.csv`: «Какие столбцы есть в выбранном источнике?». В результатах ожидается успешный `get_source_schema`, а не только текст модели. Подключение Ollama даёт реальные ответы и вызовы существующих инструментов, включая ограниченный `query_data`; политика SQL описана в [docs/safe-sql-executor.md](docs/safe-sql-executor.md).
+`TIMEOUT` действует на один вызов модели, `MAX_TOKENS_G` ограничивает его генерацию. Провайдер использует контекст 4096 токенов. В примере модель остаётся в памяти 10 минут после запроса; это занимает RAM/VRAM, но уменьшает число холодных запусков во время тестирования. Для выбранного CSV настоящий провайдер сначала генерирует структурированный SQL по схеме, затем `query_data` вычисляет ответ. Числа ответа строятся из `QueryResult`; пустая выборка не подменяется выдуманными значениями. Ошибочный SQL допускает одно исправление. Политика SQL описана в [docs/safe-sql-executor.md](docs/safe-sql-executor.md), сравнение локальных моделей — в [docs/local-llm-evaluation-2026-10-20.md](docs/local-llm-evaluation-2026-10-20.md).
 
 Проверены реальные вызовы схемы и предпросмотра через Gemma, в том числе отображение ответа в Edge: [локальный отчёт Ollama](docs/ollama-local-verification.md).
 
@@ -149,7 +149,7 @@ CSV и каталог сохраняются backend на локальном д�
 | `GET /sources/{id}/schema` | `SourceSchema` с `objects[].fields`, `row_count`, `relations` |
 | `GET /sources/{id}/preview?limit=100` | Массив строк; допустимый limit 1–100 |
 | `GET /sources/{id}/profile` | `sample_size`, `sample_limit`, `columns`, `note` |
-| `POST /agent/ask` | `{question, source_ids: [id]}` → `{answer, steps, tool_results}` |
+| `POST /agent/ask` | `{question, source_ids: [id]}` → `AgentResponse`: `answer`, `request_id`, `status`, `answer_kind` (`demo`, `model`, `computed`), `analysis.sql`, `results`, `tool_results`, `timing` |
 | `POST /chats` | `{title}` → `{chat_id, title, created_at, updated_at}`; создаётся перед первым вопросом диалога |
 | `POST /agent/chat?chat_id=...` | `{question, source_ids: [id]}` → ответ с `chat_id` и `timing`; продолжает диалог |
 

@@ -64,7 +64,7 @@ def stop_processes(processes: list[subprocess.Popen]) -> None:
                 try:
                     os.killpg(process.pid, 0)
                     alive.append(process)
-                except ProcessLookupError:
+                except (ProcessLookupError, PermissionError):
                     pass
             remaining = alive
             if remaining:
@@ -72,7 +72,7 @@ def stop_processes(processes: list[subprocess.Popen]) -> None:
         for process in remaining:
             try:
                 os.killpg(process.pid, signal.SIGKILL)
-            except ProcessLookupError:
+            except (ProcessLookupError, PermissionError):
                 pass
     for process in reversed(processes):
         try:
