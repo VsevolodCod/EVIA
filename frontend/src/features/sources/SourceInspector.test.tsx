@@ -118,7 +118,7 @@ it("drills down from missing cells to a column and searches columns", async () =
   fireEvent.click(screen.getByRole("button", { name: "Качество" }));
   fireEvent.click(screen.getByRole("button", { name: "Изучить region" }));
   const column = await screen.findByRole("region", { name: "Столбец region" });
-  expect(within(column).getByText("25%")).toBeInTheDocument();
+  expect(within(column).getAllByText("25%")).toHaveLength(2);
   expect(within(column).getByText("Север")).toBeInTheDocument();
   fireEvent.change(screen.getByRole("searchbox", { name: "Поиск столбца" }), {
     target: { value: "REVENUE" },
