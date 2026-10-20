@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { vi } from "vitest";
-import type { SourceSchema } from "../../api";
+import type { Profile, SourceSchema } from "../../api";
 import { Dashboard } from "./Dashboard";
 
 const schema: SourceSchema = {
@@ -21,15 +21,129 @@ const rows = [
   { city: "Новосибирск", distance: 4.4, day: "2026-01-02" },
 ];
 
+const profile: Profile = {
+  sample_size: 3,
+  sample_limit: 500,
+  note: "Профиль построен по выборке",
+  columns: {
+    city: {
+      sample_non_null_count: 2,
+      sample_null_count: 1,
+      distinct_sample_values: 2,
+      top_values: [
+        { value: "Новосибирск", count: 1 },
+        { value: "Томск", count: 1 },
+      ],
+    },
+    distance: {
+      sample_non_null_count: 3,
+      sample_null_count: 0,
+      distinct_sample_values: 3,
+      top_values: [],
+    },
+    day: {
+      sample_non_null_count: 3,
+      sample_null_count: 0,
+      distinct_sample_values: 2,
+      top_values: [],
+    },
+  },
+};
+
 it("shows compact factual metrics and charts from source rows", () => {
-  render(<Dashboard title="Поездки" sourceLabel="Поездки.csv" scope="trips" schema={schema} rows={rows} />);
+  render(<Dashboard title="Поездки" sourceLabel="Поездки.csv" scope="trips" schema={schema} rows={rows} fullSourceRows={3} />);
 
   expect(screen.getByRole("heading", { name: "Поездки" })).toBeInTheDocument();
-  expect(screen.getByText("Строк в выборке")).toBeInTheDocument();
+  expect(screen.getByText("Строк в источнике")).toBeInTheDocument();
   expect(screen.getByRole("img", { name: /Динамика по полю day/ })).toBeInTheDocument();
   expect(screen.getByRole("img", { name: /Распределение поля distance/ })).toBeInTheDocument();
   expect(screen.getByRole("img", { name: /Частые значения поля city/ })).toBeInTheDocument();
   expect(screen.getByText(/3 строки в предпросмотре источника/)).toBeInTheDocument();
+});
+
+it("separates the full source from profile coverage and highlights data quality", () => {
+  render(
+    <Dashboard
+      title="Поездки"
+      sourceLabel="Поездки.csv"
+      scope="trips"
+      schema={{
+        ...schema,
+        objects: [{ ...schema.objects[0], row_count: 2_000 }],
+      }}
+      rows={rows}
+      profile={profile}
+      fullSourceRows={2_000}
+    />,
+  );
+
+  expect(screen.getByText("Строк в источнике")).toBeInTheDocument();
+  expect(screen.getByText("2 000")).toBeInTheDocument();
+  expect(screen.getByText("Профиль покрывает")).toBeInTheDocument();
+  expect(screen.getByText("3 строки")).toBeInTheDocument();
+  expect(screen.getByText("выборка до 500 строк")).toBeInTheDocument();
+  expect(screen.getByText("Нужна проверка")).toBeInTheDocument();
+  expect(screen.getByText("1 поле с пропусками")).toBeInTheDocument();
+  expect(
+    screen.getByRole("img", { name: /Пропуски по столбцам: city: 33,3%/ }),
+  ).toBeInTheDocument();
+});
+
+it("uses a readable plural form for several fields with missing values", () => {
+  render(
+    <Dashboard
+      title="Поездки"
+      sourceLabel="Поездки.csv"
+      scope="plural-quality"
+      schema={schema}
+      rows={rows}
+      profile={{
+        ...profile,
+        columns: {
+          ...profile.columns,
+          distance: { ...profile.columns.distance, sample_null_count: 1 },
+        },
+      }}
+      fullSourceRows={3}
+    />,
+  );
+
+  expect(screen.getByText("2 поля с пропусками")).toBeInTheDocument();
+});
+
+it("does not present a preview as the full source when its row count is unavailable", () => {
+  render(
+    <Dashboard
+      title="Поездки"
+      sourceLabel="Поездки.csv"
+      scope="unknown-row-count"
+      schema={{ ...schema, objects: [{ ...schema.objects[0], row_count: null }] }}
+      rows={rows}
+      profile={profile}
+      fullSourceRows={null}
+    />,
+  );
+
+  expect(screen.getByText("Строк в предпросмотре")).toBeInTheDocument();
+  expect(screen.getByText("Полный объём неизвестен")).toBeInTheDocument();
+});
+
+it("does not call an empty profile clean data", () => {
+  render(
+    <Dashboard
+      title="Поездки"
+      sourceLabel="Поездки.csv"
+      scope="empty-profile"
+      schema={schema}
+      rows={[]}
+      profile={{ ...profile, sample_size: 0, columns: {} }}
+      fullSourceRows={3}
+    />,
+  );
+
+  expect(screen.getByText("Нет профиля")).toBeInTheDocument();
+  expect(screen.getByText("Нет строк для проверки")).toBeInTheDocument();
+  expect(screen.queryByText("Без пропусков")).not.toBeInTheDocument();
 });
 
 it("applies a valid custom palette, rejects bad input and opens the print dialog", () => {

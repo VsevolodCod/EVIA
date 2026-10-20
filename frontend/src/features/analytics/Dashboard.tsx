@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { Row, SourceSchema } from "../../api";
+import type { Profile, Row, SourceSchema } from "../../api";
 import { numberText, percentText } from "../sources/profileModel";
 import { buildDashboardModel, type ChartValue } from "./dashboardModel";
 import { defaultPalette, loadPalette, savePalette, seriesColor, type PalettePreference } from "./palette";
@@ -42,6 +42,19 @@ function Histogram({ values, color, field }: { values: ChartValue[]; color: stri
   </div>;
 }
 
+function MissingBars({ values, color }: { values: ChartValue[]; color: string }) {
+  const description = values
+    .map((value) => `${value.label}: ${percentText(value.value)}`)
+    .join("; ");
+  return <div className="quality-chart" role="img" aria-label={`Пропуски по столбцам: ${description}`}>
+    {values.map((value) => <div className="quality-row" key={value.label}>
+      <span title={value.label}>{value.label}</span>
+      <div><i style={{ width: `${value.value}%`, backgroundColor: color }} /></div>
+      <b>{percentText(value.value)}</b>
+    </div>)}
+  </div>;
+}
+
 function previewRowsText(count: number) {
   const remainder = Math.abs(count) % 100;
   const lastDigit = remainder % 10;
@@ -49,7 +62,39 @@ function previewRowsText(count: number) {
   return `${numberText(count)} ${noun} в предпросмотре источника`;
 }
 
-export function Dashboard({ title, sourceLabel, scope, schema, rows }: { title: string; sourceLabel: string; scope: string; schema: SourceSchema; rows: Row[] }) {
+function rowsText(count: number) {
+  const remainder = Math.abs(count) % 100;
+  const lastDigit = remainder % 10;
+  const noun = remainder > 10 && remainder < 20 ? "строк" : lastDigit === 1 ? "строка" : lastDigit > 1 && lastDigit < 5 ? "строки" : "строк";
+  return `${numberText(count)} ${noun}`;
+}
+
+function fieldsText(count: number) {
+  const remainder = Math.abs(count) % 100;
+  const lastDigit = remainder % 10;
+  const noun = remainder > 10 && remainder < 20 ? "полей" : lastDigit === 1 ? "поле" : lastDigit > 1 && lastDigit < 5 ? "поля" : "полей";
+  return `${numberText(count)} ${noun}`;
+}
+
+export function Dashboard({
+  title,
+  sourceLabel,
+  scope,
+  schema,
+  rows,
+  profile,
+  context = "source",
+  fullSourceRows,
+}: {
+  title: string;
+  sourceLabel: string;
+  scope: string;
+  schema: SourceSchema;
+  rows: Row[];
+  profile?: Profile;
+  context?: "source" | "result";
+  fullSourceRows?: number | null;
+}) {
   const model = useMemo(() => buildDashboardModel(schema, rows), [schema, rows]);
   const [showPalette, setShowPalette] = useState(false);
   const fallbackPreference: PalettePreference = { colors: defaultPalette.colors, gradient: false };
@@ -63,6 +108,47 @@ export function Dashboard({ title, sourceLabel, scope, schema, rows }: { title: 
   const { colors, gradient } = preference;
   const primary = colors[0]; const secondary = colors[1];
   const hasCharts = Boolean(model.category || model.numeric || model.timeline);
+  const profiledRows = profile?.sample_size ?? 0;
+  const profileLimit = profile?.sample_limit ?? 0;
+  const missingFields = Object.values(profile?.columns ?? {}).filter(
+    (column) => column.sample_null_count > 0,
+  ).length;
+  const missingColumns = Object.entries(profile?.columns ?? {})
+    .map(([label, column]) => {
+      const total = column.sample_non_null_count + column.sample_null_count;
+      return {
+        label,
+        value: total ? (column.sample_null_count / total) * 100 : 0,
+      };
+    })
+    .filter((column) => column.value > 0)
+    .sort((left, right) => right.value - left.value)
+    .slice(0, 6);
+  const profileCompleteness = profile
+    ? (() => {
+        const columns = Object.values(profile.columns);
+        const cells = columns.reduce(
+          (total, column) => total + column.sample_non_null_count + column.sample_null_count,
+          0,
+        );
+        const filled = columns.reduce(
+          (total, column) => total + column.sample_non_null_count,
+          0,
+        );
+        return cells ? (filled / cells) * 100 : null;
+      })()
+    : model.completeness;
+  const hasSourceTotal = context === "source" && fullSourceRows != null;
+  const profileReady = Boolean(
+    profile && profile.sample_size > 0 && Object.keys(profile.columns).length > 0,
+  );
+  const scopeDescription = context === "result"
+    ? model.rowCount
+      ? `В ответе инструмента: ${rowsText(model.rowCount)}`
+      : "Инструмент не вернул строк"
+    : model.rowCount
+      ? previewRowsText(model.rowCount)
+      : "В предпросмотре нет строк";
   const exportPdf = () => {
     const previousTitle = document.title;
     document.title = `EVIA — ${title}`;
@@ -76,16 +162,18 @@ export function Dashboard({ title, sourceLabel, scope, schema, rows }: { title: 
       <div className="dashboard-actions"><button onClick={() => setShowPalette((open) => !open)} aria-expanded={showPalette}>Цвета</button><button onClick={exportPdf}>Экспорт PDF</button></div>
     </div>
     {showPalette && <PaletteEditor colors={colors} gradient={gradient} onChange={updateColors} onClose={() => setShowPalette(false)} />}
-    <p className="dashboard-scope">{model.rowCount ? previewRowsText(model.rowCount) : "В предпросмотре нет строк"}</p>
+    <p className="dashboard-scope">{scopeDescription}</p>
     <div className="kpi-grid" aria-label="Ключевые показатели">
-      <section className="dashboard-card"><span>Строк в выборке</span><strong>{numberText(model.rowCount)}</strong></section>
+      <section className="dashboard-card"><span>{context === "result" ? "Строк в результате" : hasSourceTotal ? "Строк в источнике" : "Строк в предпросмотре"}</span><strong>{numberText(hasSourceTotal ? fullSourceRows : model.rowCount)}</strong><small>{context === "result" ? "Ответ инструмента" : hasSourceTotal ? "Полный датасет" : "Полный объём неизвестен"}</small></section>
       <section className="dashboard-card"><span>Столбцов</span><strong>{numberText(model.columnCount)}</strong></section>
-      <section className="dashboard-card"><span>Заполнено ячеек</span><strong>{percentText(model.completeness)}</strong></section>
+      <section className="dashboard-card"><span>{profile ? "Профиль покрывает" : "Заполнено ячеек"}</span><strong>{profile ? (profileReady ? rowsText(profiledRows) : "Нет данных") : percentText(model.completeness)}</strong><small>{profile ? (profileReady ? `выборка до ${numberText(profileLimit)} строк` : "Нет строк для анализа") : "доступных ячеек"}</small></section>
+      {profile && <section className={`dashboard-card quality-kpi ${profileReady && missingFields ? "needs-attention" : ""}`}><span>Качество данных</span><strong>{!profileReady ? "Нет профиля" : missingFields ? "Нужна проверка" : "Без пропусков"}</strong><small>{!profileReady ? "Нет строк для проверки" : missingFields ? `${fieldsText(missingFields)} с пропусками` : `${percentText(profileCompleteness)} заполнено`}</small></section>}
     </div>
-    {hasCharts ? <div className="dashboard-grid">
+    {hasCharts || missingColumns.length > 0 ? <div className="dashboard-grid">
       {model.timeline && <ChartCard title={`Динамика по полю ${model.timeline.field}`} unit="строки"><LineChart values={model.timeline.values} color={primary} gradient={gradient} label={`Динамика по полю ${model.timeline.field}`} /><p className="visually-hidden">{model.timeline.values.map((point) => `${point.label}: ${numberText(point.value)}`).join("; ")}</p></ChartCard>}
       {model.category && <ChartCard title={`Частые значения: ${model.category.field}`} unit="строки"><HorizontalBars values={model.category.values} color={model.timeline ? secondary : primary} label={`Частые значения поля ${model.category.field}`} /></ChartCard>}
       {model.numeric && <ChartCard title={`Распределение: ${model.numeric.field}`} unit="строки"><Histogram values={model.numeric.histogram} color={seriesColor(model.numeric.field, colors)} field={model.numeric.field} /><div className="numeric-summary"><span>Мин. <b>{model.numeric.min.toLocaleString("ru-RU")}</b></span><span>Среднее <b>{model.numeric.mean.toLocaleString("ru-RU", { maximumFractionDigits: 2 })}</b></span><span>Макс. <b>{model.numeric.max.toLocaleString("ru-RU")}</b></span></div></ChartCard>}
+      {missingColumns.length > 0 && <ChartCard title="Пропуски по столбцам" unit="доля"><MissingBars values={missingColumns} color={secondary} /></ChartCard>}
     </div> : <div className="dashboard-empty">Для графиков нужны числовые, текстовые или временные поля.</div>}
   </div>;
 }
