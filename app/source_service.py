@@ -48,6 +48,20 @@ class SourceService:
             self.catalog.save_schema(self.postgres_adapter.introspect_schema(source))
         return sources
 
+    def list_sources(self) -> list[DataSource]:
+        """Return catalog sources that are usable under the current configuration."""
+        sources = self.catalog.list_sources()
+        if self.postgres_adapter is None:
+            return [source for source in sources if source.source_type != "postgresql"]
+
+        allowed_tables = self.postgres_adapter.settings.allowed_tables
+        return [
+            source
+            for source in sources
+            if source.source_type != "postgresql"
+            or (source.schema_name, source.table_name) in allowed_tables
+        ]
+
     def register_csv(
         self,
         filename: str,

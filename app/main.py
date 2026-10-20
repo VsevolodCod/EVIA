@@ -136,7 +136,7 @@ async def upload_csv(
 
 @app.get("/sources", response_model=list[DataSource])
 def list_sources():
-    return catalog.list_sources()
+    return source_service.list_sources()
 
 
 @app.get("/sources/postgresql/status")
