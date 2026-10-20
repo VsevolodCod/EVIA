@@ -73,6 +73,10 @@ const answerSchema = z.object({
   ),
 });
 const healthSchema = z.object({ status: z.string(), llm_provider: z.string() });
+const postgresStatusSchema = z.object({
+  configured: z.boolean(),
+  connected: z.boolean(),
+});
 const rowsSchema = z.array(z.record(z.string(), z.unknown()));
 const chatSummarySchema = z.object({
   chat_id: z.string().min(1),
@@ -100,6 +104,7 @@ export type SourceSchema = z.infer<typeof schemaSchema>;
 export type Profile = z.infer<typeof profileSchema>;
 export type Answer = z.infer<typeof answerSchema>;
 export type Health = z.infer<typeof healthSchema>;
+export type PostgresStatus = z.infer<typeof postgresStatusSchema>;
 export type ChatSummary = z.infer<typeof chatSummarySchema>;
 export type ChatHistory = z.infer<typeof chatHistorySchema>;
 export type ChatMessage = z.infer<typeof chatMessageSchema>;
@@ -210,6 +215,8 @@ export const api = {
     request("/health", healthSchema, { signal }),
   sources: (signal?: AbortSignal) =>
     request("/sources", z.array(sourceSchema), { signal }),
+  postgresStatus: (signal?: AbortSignal) =>
+    request("/sources/postgresql/status", postgresStatusSchema, { signal }),
   schema: async (id: string, signal?: AbortSignal) => {
     const schema = await request(`${path(id)}/schema`, schemaSchema, {
       signal,

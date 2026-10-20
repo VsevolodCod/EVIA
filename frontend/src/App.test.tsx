@@ -62,6 +62,8 @@ function setup(
         );
       if (url === "/sources")
         return Promise.resolve(Response.json([source("A"), source("B")]));
+      if (url === "/sources/postgresql/status")
+        return Promise.resolve(Response.json({ configured: false, connected: false }));
       if (url === "/chats?limit=100") return Promise.resolve(Response.json([]));
       if (url === "/chats") return Promise.resolve(Response.json({
         chat_id: `chat-${++nextChat}`,
@@ -316,6 +318,76 @@ it("returns to the CSV start screen without removing connected sources", async (
   ).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Источник A" })).toBeInTheDocument();
   expect(screen.getByRole("textbox", { name: "Ваш вопрос" })).toBeDisabled();
+});
+it("explains the safe Railway setup instead of asking for a database password", async () => {
+  setup();
+  render(<App />);
+
+  const postgresButton = await screen.findByRole("button", { name: "Подключить PostgreSQL" });
+  expect(
+    vi.mocked(fetch).mock.calls.filter(([url]) => url === "/sources/postgresql/status"),
+  ).toHaveLength(0);
+
+  fireEvent.click(postgresButton);
+
+  expect(await screen.findByRole("heading", { name: "Подключите PostgreSQL" })).toBeInTheDocument();
+  expect(screen.getByText("POSTGRES_DSN")).toBeInTheDocument();
+  expect(screen.queryByLabelText(/пароль/i)).not.toBeInTheDocument();
+});
+
+it("lets the user select an available PostgreSQL table after a successful check", async () => {
+  const postgres = {
+    ...source("postgresql:public:orders"),
+    name: "public.orders",
+    source_type: "postgresql",
+  };
+  const fetcher = vi.fn((url: string) => {
+    if (url === "/health") return Promise.resolve(Response.json({ status: "ok", llm_provider: "mock" }));
+    if (url === "/sources") return Promise.resolve(Response.json([postgres]));
+    if (url === "/sources/postgresql/status") return Promise.resolve(Response.json({ configured: true, connected: true }));
+    if (url === "/chats?limit=100") return Promise.resolve(Response.json([]));
+    if (url.endsWith("/schema")) return Promise.resolve(Response.json(schema("postgresql:public:orders")));
+    if (url.includes("/preview")) return Promise.resolve(Response.json([{ product: "Заказ" }]));
+    if (url.endsWith("/profile")) return Promise.resolve(Response.json(profile));
+    return Promise.reject(new Error("Unexpected route " + url));
+  });
+  vi.stubGlobal("fetch", fetcher);
+  render(<App />);
+
+  fireEvent.click(await screen.findByRole("button", { name: "Подключить PostgreSQL" }));
+  expect(await screen.findByRole("heading", { name: "PostgreSQL подключён" })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Выбрать public.orders" }));
+
+  expect(await screen.findByRole("heading", { name: "public.orders" })).toBeInTheDocument();
+  expect(screen.getByRole("textbox", { name: "Ваш вопрос" })).toBeEnabled();
+});
+
+it("rechecks PostgreSQL after a temporary connection failure", async () => {
+  const postgres = {
+    ...source("postgresql:public:orders"),
+    name: "public.orders",
+    source_type: "postgresql",
+  };
+  let attempts = 0;
+  const fetcher = vi.fn((url: string) => {
+    if (url === "/health") return Promise.resolve(Response.json({ status: "ok", llm_provider: "mock" }));
+    if (url === "/sources") return Promise.resolve(Response.json([postgres]));
+    if (url === "/sources/postgresql/status") {
+      attempts += 1;
+      return Promise.resolve(Response.json({ configured: true, connected: attempts > 1 }));
+    }
+    if (url === "/chats?limit=100") return Promise.resolve(Response.json([]));
+    return Promise.reject(new Error("Unexpected route " + url));
+  });
+  vi.stubGlobal("fetch", fetcher);
+  render(<App />);
+
+  fireEvent.click(await screen.findByRole("button", { name: "Подключить PostgreSQL" }));
+  expect(await screen.findByRole("heading", { name: "PostgreSQL пока недоступен" })).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole("button", { name: "Повторить проверку" }));
+
+  expect(await screen.findByRole("heading", { name: "PostgreSQL подключён" })).toBeInTheDocument();
 });
 
 it("does not switch back to an older conversation when its answer arrives late", async () => {

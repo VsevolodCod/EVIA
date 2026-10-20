@@ -53,6 +53,21 @@ it("accepts valid source responses and rejects an invalid response shape", async
   expect(await api.sources()).toEqual([source]);
   await expect(api.sources()).rejects.toThrow("формат");
 });
+it("reads only the safe PostgreSQL connection status", async () => {
+  const fetcher = vi.fn().mockResolvedValue(
+    Response.json({ configured: true, connected: true }),
+  );
+  vi.stubGlobal("fetch", fetcher);
+
+  await expect(api.postgresStatus()).resolves.toEqual({
+    configured: true,
+    connected: true,
+  });
+  expect(fetcher).toHaveBeenCalledWith(
+    "/sources/postgresql/status",
+    expect.any(Object),
+  );
+});
 it("maps provider failure to an actionable message", async () => {
   vi.stubGlobal(
     "fetch",

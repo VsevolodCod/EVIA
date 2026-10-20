@@ -194,6 +194,35 @@ def test_source_service_dispatches_live_postgresql_without_changing_csv(tmp_path
         catalog.close()
 
 
+def test_source_service_hides_stale_postgresql_catalog_entries_after_allowlist_changes(tmp_path):
+    from app.config import PostgresSettings
+    from app.data_sources.postgresql_adapter import PostgreSQLAdapter
+    from app.schema_catalog import SchemaCatalog
+    from app.source_service import SourceService
+
+    adapter = PostgreSQLAdapter(
+        PostgresSettings(
+            dsn="postgresql://reader:secret@db.example/analytics",
+            allowed_tables=frozenset({("public", "orders")}),
+            connect_timeout_seconds=5,
+            statement_timeout_ms=10_000,
+        )
+    )
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    try:
+        service = SourceService(tmp_path / "data", catalog, postgres_adapter=adapter)
+        catalog.upsert_source(adapter._source("public", "orders"))
+        catalog.upsert_source(adapter._source("private", "payroll"))
+        csv = service.register_csv("sales.csv", b"id\n001\n")
+
+        assert {source.source_id for source in service.list_sources()} == {
+            csv.source_id,
+            "postgresql:public:orders",
+        }
+    finally:
+        catalog.close()
+
+
 @pytest.mark.asyncio
 async def test_postgresql_status_endpoint_is_secret_free_when_unconfigured():
     from httpx import ASGITransport, AsyncClient

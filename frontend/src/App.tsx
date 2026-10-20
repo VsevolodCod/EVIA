@@ -6,10 +6,12 @@ import {
   errorMessage,
   type ChatMessage,
   type ChatSummary,
+  type PostgresStatus,
   type Source,
 } from "./api";
 import { ErrorNotice, Evia, Icon, SafeMarkdown } from "./components";
 import { SourceInspector } from "./features/sources/SourceInspector";
+import { PostgresSetup } from "./features/sources/PostgresSetup";
 import type { Entry, View } from "./features/chat/types";
 import { ResponseTiming } from "./features/chat/ResponseTiming";
 import "./styles.css";
@@ -83,6 +85,10 @@ export default function App() {
   const [sources, setSources] = useState<Source[]>([]);
   const [sourcesLoading, setSourcesLoading] = useState(true);
   const [sourcesError, setSourcesError] = useState("");
+  const [postgresStatus, setPostgresStatus] = useState<PostgresStatus | null>(null);
+  const [postgresLoading, setPostgresLoading] = useState(false);
+  const [postgresError, setPostgresError] = useState("");
+  const [sourceSetup, setSourceSetup] = useState<"csv" | "postgres">("csv");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [histories, setHistories] = useState<Record<string, Entry[]>>({});
   const [chatSummaries, setChatSummaries] = useState<ChatSummary[]>([]);
@@ -104,6 +110,7 @@ export default function App() {
   const fileInput = useRef<HTMLInputElement>(null);
   const composer = useRef<HTMLTextAreaElement>(null);
   const sourceController = useRef<AbortController | null>(null);
+  const postgresController = useRef<AbortController | null>(null);
   const uploadController = useRef<AbortController | null>(null);
   const askControllers = useRef(new Map<string, AbortController>());
   const historyControllers = useRef(new Map<string, AbortController>());
@@ -113,6 +120,7 @@ export default function App() {
   const sequence = useRef(0);
   const mounted = useRef(true);
   const source = sources.find((item) => item.source_id === selectedId);
+  const postgresSources = sources.filter((item) => item.source_type === "postgresql");
   const history = selectedId ? (histories[selectedId] ?? []) : [];
   const activeEntry = history.find(
     (entry) => entry.id === (selectedId ? activeIds[selectedId] : undefined),
@@ -161,6 +169,24 @@ export default function App() {
     } finally {
       if (!controller.signal.aborted) setSourcesLoading(false);
     }
+  }
+  async function loadPostgresStatus() {
+    postgresController.current?.abort();
+    const controller = new AbortController();
+    postgresController.current = controller;
+    setPostgresLoading(true);
+    setPostgresError("");
+    try {
+      const status = await api.postgresStatus(controller.signal);
+      if (!controller.signal.aborted) setPostgresStatus(status);
+    } catch (error) {
+      if (!controller.signal.aborted) setPostgresError(errorMessage(error));
+    } finally {
+      if (!controller.signal.aborted) setPostgresLoading(false);
+    }
+  }
+  async function refreshPostgres() {
+    await Promise.all([loadPostgresStatus(), loadSources()]);
   }
   async function loadChatList() {
     setHistoryListLoading(true);
@@ -266,6 +292,7 @@ export default function App() {
     return () => {
       mounted.current = false;
       sourceController.current?.abort();
+      postgresController.current?.abort();
       uploadController.current?.abort();
       askControllers.current.forEach((controller) => controller.abort());
       historyControllers.current.forEach((controller) => controller.abort());
@@ -284,6 +311,7 @@ export default function App() {
 
   function selectSource(id: string) {
     setSelectedId(id);
+    setSourceSetup("csv");
     setUploadFailure(null);
     setUploadError("");
     setView("overview");
@@ -305,7 +333,13 @@ export default function App() {
     setUploadError("");
     setFailedFile(null);
     setDragOver(false);
+    setSourceSetup("csv");
     setView("overview");
+  }
+  function openPostgresSetup() {
+    setSelectedId(null);
+    setSourceSetup("postgres");
+    void loadPostgresStatus();
   }
   async function upload(file: File) {
     if (uploading) return;
@@ -517,6 +551,15 @@ export default function App() {
               <Icon name="plus" size={16} />
               {uploading ? "Загружаем CSV…" : "Добавить CSV"}
             </button>
+            <button
+              className="postgres-nav"
+              onClick={openPostgresSetup}
+              aria-pressed={!source && sourceSetup === "postgres"}
+            >
+              <Icon name="grid" size={16} />
+              Подключить PostgreSQL
+              {postgresStatus?.connected && <span aria-label="PostgreSQL доступен" />}
+            </button>
             <input
               className="visually-hidden"
               type="file"
@@ -605,6 +648,15 @@ export default function App() {
               entry={activeEntry}
               view={view}
               setView={setView}
+            />
+          ) : sourceSetup === "postgres" ? (
+            <PostgresSetup
+              status={postgresStatus}
+              loading={postgresLoading}
+              error={postgresError}
+              sources={postgresSources}
+              onRetry={() => void refreshPostgres()}
+              onSelect={selectSource}
             />
           ) : (
             <>
