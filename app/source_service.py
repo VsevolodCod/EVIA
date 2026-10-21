@@ -16,7 +16,7 @@ from app.data_sources.postgresql_adapter import PostgreSQLAdapter
 from app.contracts.v1 import Provenance, QueryResult
 from app.models import CSVVersion, DataSource, SourceSchema, utc_now
 from app.safe_sql import SafeQueryExecutor
-from app.schema_catalog import SchemaCatalog
+from app.schema_catalog import CatalogConflictError, SchemaCatalog
 
 
 class SourceService:
@@ -116,6 +116,7 @@ class SourceService:
         target = self.data_dir / raw_filename
         normalized = self.data_dir / normalized_filename
 
+        report: ImportReport | None = None
         try:
             report = scan_csv(target, normalized, copy_original(stream, target))
             source.import_report = report
@@ -137,12 +138,17 @@ class SourceService:
             source.schema_version = schema.version
             source.status = "available"
 
-            self.catalog.save_source_and_schema(source, schema)
+            self.catalog.save_source_and_schema(
+                source, schema, expected_snapshot_id=previous.snapshot_id if previous else None,
+            )
 
-        except Exception:
+        except Exception as exc:
             self.data_engine.discard(source)
             target.unlink(missing_ok=True)
             normalized.unlink(missing_ok=True)
+            if isinstance(exc, CatalogConflictError):
+                raise CSVImportError("CSV source changed during import; retry with the latest version",
+                                     report or ImportReport(), status_code=409) from exc
             raise
 
         return source
@@ -273,6 +279,9 @@ class SourceService:
             return source
         if source.status != "available":
             raise ValueError("Source is not ready for analytics")
+        if raw_ready and source.import_report:
+            self.data_engine.repair_typed_table(source, source.import_report.typed_sql_types)
+            return source
 
         path = self.csv_adapter._path(source)
         if not path.is_file():
@@ -286,8 +295,6 @@ class SourceService:
                 text = csv_file.read(SAMPLE_CHARS)
             import_path = path
             delimiter = detect_delimiter(text)
-        if raw_ready:
-            self.data_engine.discard(source)
         assigned_snapshot = source.snapshot_id is None
         if assigned_snapshot:
             # The physical table is keyed by snapshot_id, so legacy records

@@ -61,7 +61,7 @@ def read_header(reader) -> list[str]:
     header = next(reader, None)
     if not header or any(not name.strip() for name in header):
         raise ValueError('CSV must contain non-empty column names')
-    if len(set(header)) != len(header):
+    if len({name.casefold() for name in header}) != len(header):
         raise ValueError('CSV contains duplicate column names')
     return header
 

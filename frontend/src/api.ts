@@ -161,6 +161,8 @@ const knownErrors: Record<string, string> = {
     "Первая строка CSV должна содержать названия столбцов.",
   "CSV contains invalid encoding": "Не удалось прочитать кодировку CSV. Проверьте файл.",
   "CSV exceeds the 512 MiB upload limit": "Файл превышает лимит 512 МиБ.",
+  "CSV source changed during import; retry with the latest version":
+    "Источник уже обновили. Обновите страницу и повторите импорт.",
 };
 function readableImportError(message: string): string {
   if (knownErrors[message]) return knownErrors[message];

@@ -17,7 +17,9 @@ from app.models import ImportReport
 
 MAX_CSV_BYTES = 512 * 1024 * 1024
 CHUNK_BYTES = 1024 * 1024
-_INTEGER = re.compile(r"^[+-]?\d+$")
+_INTEGER = re.compile(r"^[+-]?[0-9]+$")
+_DECIMAL = re.compile(r"^[+-]?(?:[0-9]+(?:[.,][0-9]+)?|[.,][0-9]+)$")
+_CALENDAR_DATE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
 _AMBIGUOUS_DATE = re.compile(r"^\d{1,2}[./-]\d{1,2}[./-]\d{2,4}$")
 _SEP = re.compile(r"^sep=([,;\t|])\s*$", re.IGNORECASE)
 
@@ -56,7 +58,19 @@ def detect_encoding(path: Path) -> str:
     if b"\x00" in sample:
         even_nuls = sample[0::2].count(0)
         odd_nuls = sample[1::2].count(0)
-        return "utf-16-le" if odd_nuls > even_nuls else "utf-16-be"
+        even_ratio = even_nuls / max(1, len(sample[0::2]))
+        odd_ratio = odd_nuls / max(1, len(sample[1::2]))
+        for encoding, count, ratio, opposite in (
+            ("utf-16-le", odd_nuls, odd_ratio, even_ratio),
+            ("utf-16-be", even_nuls, even_ratio, odd_ratio),
+        ):
+            if count < 2 or ratio < 0.1 or opposite >= 0.05:
+                continue
+            decoded = sample[:len(sample) - len(sample) % 2].decode(encoding, errors="ignore")
+            if any(ord(char) < 32 and char not in "\n\r\t" for char in decoded):
+                continue
+            if any(char in decoded for char in ",;\t|\n\r"):
+                return encoding
     try:
         codecs.getincrementaldecoder("utf-8")().decode(sample, final=False)
         return "utf-8"
@@ -66,10 +80,13 @@ def detect_encoding(path: Path) -> str:
 
 def _date_type(value: str) -> str | None:
     try:
-        if ("T" in value or " " in value) and datetime.fromisoformat(value.replace("Z", "+00:00")):
-            return "datetime"
-        date.fromisoformat(value)
-        return "date"
+        if "T" in value or " " in value:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            return "datetime" if parsed.tzinfo is None and _CALENDAR_DATE.fullmatch(value[:10]) else None
+        if _CALENDAR_DATE.fullmatch(value):
+            date.fromisoformat(value)
+            return "date"
+        return None
     except ValueError:
         return None
 
@@ -107,6 +124,8 @@ class _ColumnState:
         self.datetime &= parsed_date == "datetime"
         self.ambiguous_date |= bool(_AMBIGUOUS_DATE.fullmatch(stripped))
         try:
+            if not _DECIMAL.fullmatch(stripped):
+                raise InvalidOperation
             number = Decimal(stripped.replace(",", "."))
             if not number.is_finite():
                 raise InvalidOperation
@@ -146,6 +165,7 @@ class _ColumnState:
 
 def _scan_with_encoding(original: Path, normalized: Path, encoding: str, report: ImportReport) -> ImportReport:
     report.encoding = encoding
+    csv.field_size_limit(MAX_CSV_BYTES)
     with original.open("r", encoding=encoding, newline="") as source:
         first_line = source.readline()
         directive = _SEP.fullmatch(first_line.rstrip("\r\n"))
@@ -179,10 +199,14 @@ def _scan_with_encoding(original: Path, normalized: Path, encoding: str, report:
                                 f"CSV row ending at line {reader.line_num} has {len(row)} fields; expected {len(header)}"
                             )
                         continue
+                    for name, value in zip(header, row, strict=True):
+                        if value == null_marker(report.sha256):
+                            report.rejected_rows += 1
+                            report.errors.append(f"CSV value collides with reserved import marker at line {reader.line_num}")
+                            raise CSVImportError(report.errors[-1], report)
+                        states[name].add(value)
                     report.accepted_rows += 1
                     writer.writerow(row)
-                    for name, value in zip(header, row, strict=True):
-                        states[name].add(value)
             except csv.Error as exc:
                 report.rows_read += 1
                 report.rejected_rows += 1
@@ -212,6 +236,11 @@ def _sample_type(values: list[str]) -> str:
     for value in values:
         sample.add(value)
     return sample.inferred_type()
+
+
+def null_marker(original_sha256: str) -> str:
+    """A content-addressed marker cannot appear in its own file without a hash preimage."""
+    return f"__EVIA_NULL_{original_sha256}__"
 
 
 def scan_csv(original: Path, normalized: Path, report: ImportReport) -> ImportReport:
