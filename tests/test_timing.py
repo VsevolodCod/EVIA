@@ -12,7 +12,7 @@ from app.models import LLMResponse, ToolCall, ToolResult
 
 def test_ollama_nanoseconds_missing_metrics_and_zero_tokens():
     parsed = OllamaProvider._parse_response({'model': 'test', 'message': {'content': 'ok'},
-        'done_reason': 'length',
+        'done': True, 'done_reason': 'length',
         'load_duration': 2_500_000, 'prompt_eval_duration': 7_000_000,
         'eval_duration': 20_000_000, 'prompt_eval_count': 5, 'eval_count': 0})
     assert parsed.timing.load_ms == 2.5
@@ -55,7 +55,7 @@ async def test_agent_timings_accumulate_across_tool_rounds(monkeypatch):
         count = 0
         async def chat(self, *args):
             self.count += 1
-            return LLMResponse(tool_calls=[ToolCall(name='test')]) if self.count == 1 else LLMResponse(content='ok')
+            return LLMResponse(tool_calls=[ToolCall(name='test')], finish_reason='tool_calls') if self.count == 1 else LLMResponse(content='ok', finish_reason='stop')
     class Tools:
         def descriptions(self): return []
         def execute(self, *args): return ToolResult(tool_name='test', ok=True)

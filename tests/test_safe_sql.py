@@ -37,6 +37,14 @@ def test_readonly_query_returns_bounded_typed_result(service_and_source):
     assert result.provenance[0].snapshot_id == source.snapshot_id
 
 
+@pytest.mark.parametrize('name', ['source', 'SOURCE', '"Source"'])
+def test_cte_cannot_shadow_allowed_source(service_and_source, name):
+    from app.safe_sql import SafeQueryError
+    service, source = service_and_source
+    with pytest.raises(SafeQueryError, match='QUERY_REJECTED'):
+        service.query(source.source_id, f'WITH {name} AS (SELECT COUNT(*) AS n) SELECT n FROM {name}')
+
+
 @pytest.mark.parametrize(
     "sql",
     [

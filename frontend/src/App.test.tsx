@@ -204,6 +204,37 @@ it("silently forgets a stale local chat mapping when its server history is gone"
   );
   expect(screen.queryByText("Источник больше не доступен. Обновите список источников.")).not.toBeInTheDocument();
 });
+
+it("reopens an unanswered request as an error and retries in the same chat", async () => {
+  localStorage.setItem("evia.chat-sources.v1", JSON.stringify({ "chat-a": "A" }));
+  const fetcher = vi.fn((url: string) => {
+    if (url === "/health") return Promise.resolve(Response.json({ status: "ok", llm_provider: "mock" }));
+    if (url === "/sources") return Promise.resolve(Response.json([source("A")]));
+    if (url === "/chats?limit=100") return Promise.resolve(Response.json([
+      { chat_id: "chat-a", title: "Сколько строк?", created_at: "2026-10-18T08:00:00Z", updated_at: "2026-10-18T08:00:00Z" },
+    ]));
+    if (url === "/chats/chat-a?limit=50") return Promise.resolve(Response.json({
+      chat_id: "chat-a", title: "Сколько строк?",
+      messages: [{ message_id: "question-a", role: "user", content: "Сколько строк?", created_at: "2026-10-18T08:00:00Z" }],
+      total_messages: 1, next_offset: null, next_before: null, has_more: false,
+    }));
+    if (url === "/agent/chat?chat_id=chat-a") return Promise.resolve(Response.json({
+      answer: "Строк: 2", status: "answered", chat_id: "chat-a", steps: 1, tool_results: [],
+    }));
+    if (url.endsWith("/schema")) return Promise.resolve(Response.json(schema("A")));
+    if (url.includes("/preview")) return Promise.resolve(Response.json([{ product: "row" }]));
+    if (url.endsWith("/profile")) return Promise.resolve(Response.json(profile));
+    return Promise.reject(new Error("Unexpected route " + url));
+  });
+  vi.stubGlobal("fetch", fetcher);
+  render(<App />);
+  await select("A");
+  fireEvent.click(await screen.findByRole("button", { name: "Сколько строк?" }));
+  expect(await screen.findByText("Ответ для этого вопроса не сохранился. Повторите запрос.")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Повторить вопрос" }));
+  expect(await within(screen.getByRole("complementary", { name: "Чат с EVIA" })).findByText("Строк: 2")).toBeInTheDocument();
+  expect(fetcher.mock.calls.some(([url]) => url === "/chats")).toBe(false);
+});
 it("loads an older page of the reopened server conversation", async () => {
   localStorage.setItem("evia.chat-sources.v1", JSON.stringify({ "chat-a": "A" }));
   const fetcher = vi.fn((url: string) => {

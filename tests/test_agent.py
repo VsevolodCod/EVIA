@@ -69,7 +69,7 @@ async def test_history_is_optional_and_not_mutated(tmp_path):
 
         async def chat(self, messages, tools=None):
             self.messages = list(messages)
-            return LLMResponse(content='answer')
+            return LLMResponse(content='answer', finish_reason='stop')
 
     catalog = SchemaCatalog(tmp_path / 'catalog.db')
     try:
@@ -125,3 +125,38 @@ async def test_agent_does_not_return_partial_answer_when_token_limit_exhausted()
     assert result.error and result.error.code == 'MODEL_OUTPUT_INCOMPLETE'
     assert 'Обрыв' not in result.answer
     assert result.steps == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('continuation,reason', [('', 'stop'), ('   ', 'stop'), ('Оборвано', None)])
+async def test_empty_or_unconfirmed_continuation_never_completes_partial_answer(continuation, reason):
+    class LLM:
+        def __init__(self):
+            self.responses = iter([LLMResponse(content='За период с', finish_reason='length'),
+                                   LLMResponse(content=continuation, finish_reason=reason)])
+        async def chat(self, *args):
+            return next(self.responses)
+    class Tools:
+        def descriptions(self):
+            return []
+    result = await AgentRuntime(LLM(), Tools()).ask('Что есть в данных?')
+    assert result.status == 'error'
+    assert result.error.code == 'MODEL_OUTPUT_INCOMPLETE'
+    assert 'За период с' not in result.answer
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('provider', ['ollama', 'openai'])
+async def test_provider_without_completion_confirmation_is_not_successful(provider):
+    from app.llm.ollama_provider import OllamaProvider
+    from app.llm.openai_provider import OpenAIProvider
+    class Model:
+        async def generate(self, *args):
+            return {'message': {'content': 'Обрыв'}, 'done': False} if provider == 'ollama' else {
+                'choices': [{'message': {'content': 'Обрыв'}}]}
+    class Tools:
+        def descriptions(self):
+            return []
+    llm = OllamaProvider(Model()) if provider == 'ollama' else OpenAIProvider(Model(), 'test')
+    result = await AgentRuntime(llm, Tools()).ask('Вопрос')
+    assert result.status == 'error'

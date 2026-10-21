@@ -7,7 +7,7 @@ from time import perf_counter
 import httpx
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
-from sqlglot import exp, parse_one
+from sqlglot import exp, parse, parse_one
 
 from app.contracts.v1 import AgentResponse, AnalysisPlan, Error
 from app.llm.base import LLMProvider
@@ -55,6 +55,8 @@ def _reads_csv_values(sql: str) -> bool:
     """Reject result columns that are constants disguised as CSV calculations."""
     try:
         statement = parse_one(sql, read="duckdb")
+        if any(cte.alias_or_name.casefold() == "source" for cte in statement.find_all(exp.CTE)):
+            return False
         if not any(table.name == "source" for table in statement.find_all(exp.Table)):
             return False
         for select in statement.find_all(exp.Select):
@@ -84,6 +86,30 @@ def _numeric_cast_of_non_numeric_field(sql: str, field_types: dict[str, str]) ->
     except Exception:
         return None
     return None
+
+
+def _normalized_numeric_sql(sql: str) -> str:
+    """Keep raw CSV strings intact; normalize only explicit numeric casts.
+
+    Empty cells stay NULL. Invalid nonempty cells fail the query rather than
+    being silently dropped from SUM/AVG by TRY_CAST.
+    """
+    statements = [statement for statement in parse(sql, read="duckdb") if statement is not None]
+    if len(statements) != 1:
+        raise SafeQueryError("QUERY_REJECTED")
+    statement = statements[0]
+    numeric = {"DOUBLE", "FLOAT", "REAL", "DECIMAL", "NUMERIC", "INTEGER", "INT", "BIGINT", "SMALLINT", "TINYINT"}
+    for cast in reversed(list(statement.find_all(exp.Cast))):
+        if cast.to.sql(dialect="duckdb").upper().split("(", 1)[0] not in numeric:
+            continue
+        value = exp.Cast(this=cast.this.copy(), to=exp.DataType.build("VARCHAR"))
+        normalized = exp.Nullif(
+            this=exp.Replace(this=exp.Trim(this=value), expression=exp.Literal.string(","),
+                             replacement=exp.Literal.string(".")),
+            expression=exp.Literal.string(""),
+        )
+        cast.replace(exp.Cast(this=normalized, to=cast.to.copy()))
+    return statement.sql(dialect="duckdb")
 
 
 def _is_general_overview(question: str) -> bool:
@@ -157,7 +183,7 @@ class CSVQueryAgent:
                     ))
                     continue
                 return self._error(request_id, timing, attempt + 1, trace, "MODEL_OUTPUT_INCOMPLETE", last_plan)
-            if response.finish_reason not in (None, "stop"):
+            if response.finish_reason != "stop":
                 return self._error(request_id, timing, attempt + 1, trace, "MODEL_OUTPUT_INCOMPLETE", last_plan)
             try:
                 plan = ModelPlan.model_validate(json.loads(response.content))
@@ -227,6 +253,7 @@ class CSVQueryAgent:
                 return self._error(request_id, timing, attempt + 1, trace, "QUERY_REJECTED", plan)
             query_started = perf_counter()
             try:
+                plan = plan.model_copy(update={"sql": _normalized_numeric_sql(plan.sql)})
                 result = self.sources.query(source_id, plan.sql, row_limit=100)
             except SafeQueryError as exc:
                 timing.tools_ms += (perf_counter() - query_started) * 1000

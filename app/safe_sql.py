@@ -37,7 +37,7 @@ _SAFE_FUNCTIONS = {
     "COUNT", "DATE", "DATE_TRUNC", "EXTRACT", "FLOOR", "GREATEST",
     "LEAST", "LENGTH", "LOWER", "LPAD", "LTRIM", "MAX", "MIN",
     "NULLIF", "ROUND", "RPAD", "RTRIM", "STRFTIME", "SUBSTRING", "SUM",
-    "TRIM", "TRY_CAST", "UPPER",
+    "TRIM", "TRY_CAST", "UPPER", "REPLACE",
 }
 _SELECT_ROOTS = (exp.Select, exp.Union, exp.Intersect, exp.Except)
 _BLOCKED_NODE_NAMES = {
@@ -189,13 +189,15 @@ class SafeQueryExecutor:
             raise SafeQueryError("QUERY_REJECTED")
 
         statement = statements[0]
-        if any(type(node).__name__.upper() in _BLOCKED_NODE_NAMES for node in statement.walk()):
+        if any(not isinstance(node, exp.Func) and type(node).__name__.upper() in _BLOCKED_NODE_NAMES for node in statement.walk()):
             raise SafeQueryError("QUERY_REJECTED")
         for function in statement.find_all(exp.Func):
             if function.sql_name().upper() not in _SAFE_FUNCTIONS:
                 raise SafeQueryError("QUERY_REJECTED")
 
         cte_names = {cte.alias_or_name for cte in statement.find_all(exp.CTE)}
+        if {name.casefold() for name in cte_names} & {name.casefold() for name in allowed_tables}:
+            raise SafeQueryError("QUERY_REJECTED")
         for table in statement.find_all(exp.Table):
             if not isinstance(table.this, exp.Identifier):
                 # Table-valued functions (read_csv, parquet_scan, httpfs, …)

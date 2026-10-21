@@ -156,10 +156,12 @@ class AgentRuntime:
                 messages.append(LLMMessage(role="assistant", content=response.content))
                 messages.append(LLMMessage(role="user", content="Продолжи ответ точно с места обрыва, без повторения уже написанного."))
                 continue
-            if response.finish_reason not in (None, "stop", "tool_calls"):
+            if response.finish_reason not in ("stop", "tool_calls"):
                 raise IncompleteModelOutput(step, results)
 
             if not response.tool_calls:  # Если модель готова ответить пользователю
+                if not response.content.strip():
+                    raise IncompleteModelOutput(step, results)
                 answer = ("".join(answer_parts) + response.content).strip()
 
                 if not answer:

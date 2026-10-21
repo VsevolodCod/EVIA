@@ -253,6 +253,8 @@ export default function App() {
     try {
       const page = await api.chatHistory(chatId, before, controller.signal);
       if (controller.signal.aborted || !mounted.current) return;
+      // A loaded conversation already has a server ID; retry must reuse it.
+      pendingChats.current.set(chatId, Promise.resolve(chatId));
       const entries = entriesFromMessages(chatId, page.messages);
       setHistories((previous) => ({
         ...previous,

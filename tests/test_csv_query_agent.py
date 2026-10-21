@@ -19,7 +19,86 @@ class ScriptedProvider:
 
     async def chat(self, messages, tools=None):
         self.messages.append((messages, tools))
-        return LLMResponse(content=json.dumps(self.plans.pop(0), ensure_ascii=False))
+        return LLMResponse(content=json.dumps(self.plans.pop(0), ensure_ascii=False), finish_reason='stop')
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('aggregate,expected', [('SUM', 301.0), ('AVG', 150.5)])
+async def test_numeric_aggregate_preserves_comma_dot_empty_and_raw_ids(tmp_path, aggregate, expected):
+    catalog = SchemaCatalog(tmp_path / 'catalog.db')
+    sources = SourceService(tmp_path / 'data', catalog)
+    source = sources.register_csv('sales.csv', b'id;revenue\n001;120,5\n002;180.5\n003;\n004;  \n')
+    provider = ScriptedProvider({'intent': 'aggregate',
+        'sql': f'SELECT {aggregate}(TRY_CAST(revenue AS DOUBLE)) AS total FROM source', 'explanation': ''})
+    try:
+        answer = await AgentRuntime(provider, build_tool_registry(catalog, sources), sources=sources).ask('Посчитай', [source.source_id])
+        assert answer.status == 'answered'
+        assert answer.results[0].rows == [[expected]]
+        assert sources.query(source.source_id, answer.analysis.sql).rows == [[expected]]
+        preview = sources.preview(source.source_id)
+        assert preview[0] == {'id': '001', 'revenue': '120,5'}
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
+async def test_invalid_number_beyond_schema_sample_cannot_silently_disappear(tmp_path):
+    catalog = SchemaCatalog(tmp_path / 'catalog.db')
+    sources = SourceService(tmp_path / 'data', catalog)
+    source = sources.register_csv('sales.csv', b'revenue\n' + b'1\n' * 500 + b'not-a-number\n')
+    plan = {'intent': 'sum', 'sql': 'SELECT SUM(TRY_CAST(revenue AS DOUBLE)) AS total FROM source', 'explanation': ''}
+    try:
+        answer = await AgentRuntime(ScriptedProvider(plan, plan), build_tool_registry(catalog, sources), sources=sources).ask('Посчитай', [source.source_id])
+        assert answer.status == 'error'
+        assert answer.error.code == 'QUERY_REJECTED'
+        assert answer.results == []
+        assert [tool.ok for tool in answer.tool_results] == [False, False]
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('alias', ['source', 'SOURCE', '"Source"'])
+async def test_shadowed_source_is_rejected_but_real_source_cte_is_allowed(tmp_path, alias):
+    provider = ScriptedProvider(
+        {'intent': 'sum', 'sql': f'WITH {alias} AS (SELECT COUNT(*) AS revenue) SELECT SUM(revenue) AS total FROM {alias}', 'explanation': ''},
+        {'intent': 'sum', 'sql': 'WITH totals AS (SELECT SUM(TRY_CAST(revenue AS DOUBLE)) AS total FROM source) SELECT total FROM totals', 'explanation': ''},
+    )
+    agent, source, catalog = agent_with_csv(tmp_path, provider)
+    try:
+        result = await agent.ask('Сумма?', [source.source_id])
+        assert result.status == 'answered'
+        assert result.results[0].rows == [[300.0]]
+        assert [tool.ok for tool in result.tool_results] == [False, True]
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
+async def test_csv_plan_without_completion_metadata_never_executes(tmp_path):
+    class UnknownCompletion:
+        async def chat(self, *args):
+            return LLMResponse(content=json.dumps({'intent': 'count', 'sql': 'SELECT COUNT(*) FROM source', 'explanation': ''}))
+    agent, source, catalog = agent_with_csv(tmp_path, UnknownCompletion())
+    try:
+        result = await agent.ask('Сколько строк?', [source.source_id])
+        assert result.status == 'error'
+        assert result.tool_results == []
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
+async def test_numeric_normalization_cannot_discard_a_second_statement(tmp_path):
+    plan = {'intent': 'sum', 'sql': 'SELECT SUM(TRY_CAST(revenue AS DOUBLE)) FROM source; SELECT 1', 'explanation': ''}
+    agent, source, catalog = agent_with_csv(tmp_path, ScriptedProvider(plan, plan))
+    try:
+        result = await agent.ask('Сумма?', [source.source_id])
+        assert result.status == 'error'
+        assert result.error.code == 'QUERY_REJECTED'
+        assert result.results == []
+    finally:
+        catalog.close()
 
 
 def agent_with_csv(tmp_path, provider):
@@ -45,7 +124,9 @@ async def test_selected_csv_question_executes_model_sql_and_returns_typed_result
         assert answer.status == "answered"
         assert answer.answer_kind == "computed"
         assert answer.request_id
-        assert answer.analysis.sql == 'SELECT SUM(TRY_CAST("revenue" AS BIGINT)) AS "total" FROM source'
+        assert 'REPLACE' in answer.analysis.sql
+        assert 'TRY_CAST' not in answer.analysis.sql
+        assert agent.sources.query(source.source_id, answer.analysis.sql).rows == [[300]]
         assert answer.results[0].rows == [[300]]
         assert answer.results[0].columns[0].data_type == "integer"
         assert answer.tool_results[0].tool_name == "query_data"
@@ -174,6 +255,40 @@ async def test_http_csv_question_returns_sql_and_computed_table(tmp_path, monkey
 
 
 @pytest.mark.asyncio
+async def test_failed_chat_reply_is_not_persisted_as_success_and_retry_uses_same_chat(tmp_path, monkeypatch):
+    from app import main as module
+    class RecoveringProvider(ScriptedProvider):
+        failed = False
+        async def chat(self, *args):
+            if not self.failed:
+                self.failed = True
+                raise httpx.ConnectError('synthetic offline')
+            return await super().chat(*args)
+    agent, source, catalog = agent_with_csv(tmp_path, RecoveringProvider({
+        'intent': 'count', 'sql': 'SELECT COUNT(*) AS count FROM source', 'explanation': ''}))
+    monkeypatch.setattr(module, 'agent', agent)
+    monkeypatch.setattr(module.settings, 'chat_db_path', tmp_path / 'chat.db')
+    try:
+        async with module.app.router.lifespan_context(module.app):
+            async with AsyncClient(transport=ASGITransport(app=module.app), base_url='http://test') as client:
+                body = {'question': 'Сколько строк?', 'source_ids': [source.source_id]}
+                first = (await client.post('/agent/chat', json=body)).json()
+                assert first['status'] == 'error'
+                chat_id = first['chat_id']
+                saved = (await client.get(f'/chats/{chat_id}')).json()
+                assert [m['role'] for m in saved['messages']] == ['user']
+                retry = (await client.post('/agent/chat', params={'chat_id': chat_id}, json=body)).json()
+                assert retry['status'] == 'answered'
+                assert retry['chat_id'] == chat_id
+                saved = (await client.get(f'/chats/{chat_id}')).json()
+                assistants = [m for m in saved['messages'] if m['role'] == 'assistant']
+                assert [m['content'] for m in assistants] == [retry['answer']]
+                assert first['answer'] not in str(saved)
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
 async def test_followup_context_is_available_without_becoming_sql_or_data(tmp_path):
     provider = ScriptedProvider({
         "intent": "count", "sql": 'SELECT COUNT(*) AS "count" FROM source', "explanation": "",
@@ -267,7 +382,7 @@ async def test_malformed_json_never_reaches_sql_executor(tmp_path):
 
         async def chat(self, messages, tools=None):
             self.calls += 1
-            return LLMResponse(content="```json\nnot a plan\n```")
+            return LLMResponse(content="```json\nnot a plan\n```", finish_reason='stop')
 
     provider = BrokenProvider()
     agent, source, catalog = agent_with_csv(tmp_path, provider)

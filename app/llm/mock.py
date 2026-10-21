@@ -23,6 +23,7 @@ class MockLLMProvider(LLMProvider):
                 source_id = question.split(marker, 1)[1].split(",", 1)[0].strip()
                 if source_id:
                     return LLMResponse(
+                        finish_reason="tool_calls",
                         tool_calls=[
                             ToolCall(
                                 name="preview_data",
@@ -32,6 +33,7 @@ class MockLLMProvider(LLMProvider):
                         ],
                     )
             return LLMResponse(
+                finish_reason="tool_calls",
                 tool_calls=[
                     ToolCall(
                         name="list_sources",
@@ -43,6 +45,7 @@ class MockLLMProvider(LLMProvider):
 
         if has_tool_result:
             return LLMResponse(
+                finish_reason="stop",
                 content=(
                     "Тестовый режим показал первые строки выбранного источника. "
                     "Это предпросмотр фактических данных, а не аналитический "
@@ -53,5 +56,6 @@ class MockLLMProvider(LLMProvider):
         question = messages[-1].content if messages else ""
 
         return LLMResponse(
+            finish_reason="stop",
             content=f"Тестовая модель получила запрос: {question}"
         )

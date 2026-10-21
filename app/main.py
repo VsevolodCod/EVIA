@@ -244,13 +244,14 @@ async def chat_agent(
             history=chat.messages[:-1],
         )
 
-        # Сохраняем ответ ассистента в истории.
-        chat.messages.append(
-            ChatMessage(
-                role="assistant",
-                content=answer.answer,
+        # Failed requests remain unanswered so reopening history retains retry.
+        if getattr(answer, "status", "answered") != "error":
+            chat.messages.append(
+                ChatMessage(
+                    role="assistant",
+                    content=answer.answer,
+                )
             )
-        )
 
         await chat_manager.save(chat)
 
