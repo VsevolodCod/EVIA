@@ -12,7 +12,7 @@ from app.models import LLMResponse, ToolCall, ToolResult
 
 def test_ollama_nanoseconds_missing_metrics_and_zero_tokens():
     parsed = OllamaProvider._parse_response({'model': 'test', 'message': {'content': 'ok'},
-        'done_reason': 'length',
+        'done': True, 'done_reason': 'length',
         'load_duration': 2_500_000, 'prompt_eval_duration': 7_000_000,
         'eval_duration': 20_000_000, 'prompt_eval_count': 5, 'eval_count': 0})
     assert parsed.timing.load_ms == 2.5
@@ -28,6 +28,18 @@ def test_openai_finish_reason_is_preserved():
         'choices': [{'finish_reason': 'length', 'message': {'content': 'Оборванный ответ'}}],
     })
     assert parsed.finish_reason == 'length'
+
+
+def test_provider_missing_finish_metadata_never_looks_complete():
+    assert OllamaProvider._parse_response({
+        'message': {'content': 'Обрыв'}, 'done': True,
+    }).finish_reason not in (None, 'stop')
+    assert OllamaProvider._parse_response({
+        'message': {'content': 'Обрыв'}, 'done': False, 'done_reason': 'stop',
+    }).finish_reason not in (None, 'stop')
+    assert OpenAIProvider._parse_response({
+        'choices': [{'message': {'content': 'Обрыв'}}],
+    }).finish_reason not in (None, 'stop')
 
 
 @pytest.mark.asyncio

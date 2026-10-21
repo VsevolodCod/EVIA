@@ -125,3 +125,23 @@ async def test_agent_does_not_return_partial_answer_when_token_limit_exhausted()
     assert result.error and result.error.code == 'MODEL_OUTPUT_INCOMPLETE'
     assert 'Обрыв' not in result.answer
     assert result.steps == 2
+
+
+@pytest.mark.asyncio
+async def test_agent_rejects_empty_continuation_after_truncated_answer():
+    class LLM:
+        calls = 0
+
+        async def chat(self, messages, tools=None):
+            self.calls += 1
+            if self.calls == 1:
+                return LLMResponse(content="Период начинается с", finish_reason="length")
+            return LLMResponse(content="", finish_reason="stop")
+
+    class Tools:
+        def descriptions(self): return []
+
+    result = await AgentRuntime(LLM(), Tools(), max_steps=3).ask("Период?")
+    assert result.status == "error"
+    assert result.error and result.error.code == "MODEL_OUTPUT_INCOMPLETE"
+    assert "Период начинается с" not in result.answer

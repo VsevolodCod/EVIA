@@ -132,7 +132,7 @@ class OllamaProvider(LLMProvider):
             content=message.get("content") or "",
             tool_calls=calls,
             raw_tool_calls=raw_calls,
-            finish_reason=data.get("done_reason"),
+            finish_reason=data.get("done_reason") if data.get("done") is True and data.get("done_reason") else "incomplete",
             timing=ModelTiming(
                 model=data.get('model'),
                 load_ms=data['load_duration'] / 1_000_000 if data.get('load_duration') is not None else None,

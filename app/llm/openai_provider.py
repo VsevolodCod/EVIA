@@ -161,7 +161,7 @@ class OpenAIProvider(LLMProvider):
             content=message.get("content") or "",
             tool_calls=calls,
             raw_tool_calls=raw_calls,
-            finish_reason=choices[0].get("finish_reason"),
+            finish_reason=choices[0].get("finish_reason") or "incomplete",
         )
 
     async def chat(

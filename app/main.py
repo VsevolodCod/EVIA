@@ -244,15 +244,16 @@ async def chat_agent(
             history=chat.messages[:-1],
         )
 
-        # Сохраняем ответ ассистента в истории.
-        chat.messages.append(
-            ChatMessage(
-                role="assistant",
-                content=answer.answer,
+        # Не сохраняем текст ошибки как успешный ответ: незавершённый вопрос
+        # при повторном открытии чата остаётся доступным для повтора.
+        if getattr(answer, "status", "answered") != "error":
+            chat.messages.append(
+                ChatMessage(
+                    role="assistant",
+                    content=answer.answer,
+                )
             )
-        )
-
-        await chat_manager.save(chat)
+            await chat_manager.save(chat)
 
         # Возвращаем обычный ответ агента вместе с идентификатором чата.
         response_data = answer.model_dump()

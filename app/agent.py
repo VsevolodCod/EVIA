@@ -160,10 +160,9 @@ class AgentRuntime:
                 raise IncompleteModelOutput(step, results)
 
             if not response.tool_calls:  # Если модель готова ответить пользователю
+                if not response.content.strip():
+                    raise IncompleteModelOutput(step, results)
                 answer = ("".join(answer_parts) + response.content).strip()
-
-                if not answer:
-                    answer = "Модель вернула пустой ответ."
 
                 logger.info("Агент вернул итоговый ответ")
                 # Выход из цикла с итоговым ответом модели

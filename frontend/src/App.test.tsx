@@ -182,6 +182,32 @@ it("reopens a server conversation after reload without mixing it into another so
   expect(screen.queryByText("Продажи выросли.")).not.toBeInTheDocument();
 });
 
+it("reopens an unanswered question with retry instead of a successful answer", async () => {
+  localStorage.setItem("evia.chat-sources.v1", JSON.stringify({ "chat-a": "A" }));
+  const fetcher = vi.fn((url: string) => {
+    if (url === "/health") return Promise.resolve(Response.json({ status: "ok", llm_provider: "mock" }));
+    if (url === "/sources") return Promise.resolve(Response.json([source("A")]));
+    if (url === "/chats?limit=100") return Promise.resolve(Response.json([
+      { chat_id: "chat-a", title: "Вопрос о данных", created_at: "2026-10-18T08:00:00Z", updated_at: "2026-10-18T08:01:00Z" },
+    ]));
+    if (url === "/chats/chat-a?limit=50") return Promise.resolve(Response.json({
+      chat_id: "chat-a", title: "Вопрос о данных",
+      messages: [{ message_id: "question-a", role: "user", content: "Сколько строк?", created_at: "2026-10-18T08:00:00Z" }],
+      total_messages: 1, next_offset: null, next_before: null, has_more: false,
+    }));
+    if (url.endsWith("/schema")) return Promise.resolve(Response.json(schema("A")));
+    if (url.includes("/preview")) return Promise.resolve(Response.json([{ product: "row" }]));
+    if (url.endsWith("/profile")) return Promise.resolve(Response.json(profile));
+    return Promise.reject(new Error("Unexpected route " + url));
+  });
+  vi.stubGlobal("fetch", fetcher);
+  render(<App />);
+  await select("A");
+  fireEvent.click(await screen.findByRole("button", { name: "Сколько строк?" }));
+  expect(await screen.findByRole("button", { name: "Повторить вопрос" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /Результаты инструментов/ })).not.toBeInTheDocument();
+});
+
 it("silently forgets a stale local chat mapping when its server history is gone", async () => {
   localStorage.setItem("evia.chat-sources.v1", JSON.stringify({ "chat-a": "A" }));
   const fetcher = vi.fn((url: string) => {

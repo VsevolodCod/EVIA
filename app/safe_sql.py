@@ -36,14 +36,14 @@ _SAFE_FUNCTIONS = {
     "ABS", "AVG", "CAST", "CEIL", "CEILING", "COALESCE", "CONCAT",
     "COUNT", "DATE", "DATE_TRUNC", "EXTRACT", "FLOOR", "GREATEST",
     "LEAST", "LENGTH", "LOWER", "LPAD", "LTRIM", "MAX", "MIN",
-    "NULLIF", "ROUND", "RPAD", "RTRIM", "STRFTIME", "SUBSTRING", "SUM",
+    "NULLIF", "REPLACE", "ROUND", "RPAD", "RTRIM", "STRFTIME", "SUBSTRING", "SUM",
     "TRIM", "TRY_CAST", "UPPER",
 }
 _SELECT_ROOTS = (exp.Select, exp.Union, exp.Intersect, exp.Except)
 _BLOCKED_NODE_NAMES = {
     "ALTER", "ANALYZE", "ATTACH", "CACHE", "COMMAND", "COPY", "CREATE",
     "DELETE", "DESCRIBE", "DETACH", "DROP", "GRANT", "INSERT", "INSTALL",
-    "LOAD", "MERGE", "PRAGMA", "REPLACE", "REVOKE", "TRANSACTION", "TRUNCATE",
+    "LOAD", "MERGE", "PRAGMA", "REVOKE", "TRANSACTION", "TRUNCATE",
     "UNLOAD", "UPDATE", "USE", "VACUUM",
 }
 
@@ -196,6 +196,9 @@ class SafeQueryExecutor:
                 raise SafeQueryError("QUERY_REJECTED")
 
         cte_names = {cte.alias_or_name for cte in statement.find_all(exp.CTE)}
+        protected_names = {name.casefold() for name in (*allowed_tables, *allowed_tables.values())}
+        if any(name.casefold() in protected_names for name in cte_names):
+            raise SafeQueryError("QUERY_REJECTED")
         for table in statement.find_all(exp.Table):
             if not isinstance(table.this, exp.Identifier):
                 # Table-valued functions (read_csv, parquet_scan, httpfs, …)

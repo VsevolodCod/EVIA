@@ -45,7 +45,9 @@ async def test_selected_csv_question_executes_model_sql_and_returns_typed_result
         assert answer.status == "answered"
         assert answer.answer_kind == "computed"
         assert answer.request_id
-        assert answer.analysis.sql == 'SELECT SUM(TRY_CAST("revenue" AS BIGINT)) AS "total" FROM source'
+        assert answer.analysis.sql == (
+            'SELECT SUM(CAST(NULLIF(REPLACE(TRIM("revenue"), \',\', \'.\'), \'\') AS BIGINT)) AS "total" FROM source'
+        )
         assert answer.results[0].rows == [[300]]
         assert answer.results[0].columns[0].data_type == "integer"
         assert answer.tool_results[0].tool_name == "query_data"
@@ -54,6 +56,80 @@ async def test_selected_csv_question_executes_model_sql_and_returns_typed_result
         assert "revenue" in provider.messages[0][0][0].content
         assert answer.timing.llm_ms >= 0
         assert answer.timing.tools_ms >= 0
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("aggregate,expected", [("SUM", 301.0), ("AVG", 150.5)])
+async def test_decimal_comma_and_dot_are_both_counted_without_changing_raw_csv(tmp_path, aggregate, expected):
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    sources = SourceService(tmp_path / "data", catalog)
+    source = sources.register_csv("sales.csv", b"id;revenue\n001;120,5\n002;180.5\n003;\n")
+    provider = ScriptedProvider({
+        "intent": aggregate.lower(),
+        "sql": f'SELECT {aggregate}(TRY_CAST("revenue" AS DOUBLE)) AS total FROM source',
+        "explanation": "",
+    })
+    agent = AgentRuntime(provider, build_tool_registry(catalog, sources), sources=sources)
+    try:
+        answer = await agent.ask("Какая выручка?", [source.source_id])
+        assert answer.status == "answered"
+        assert answer.results[0].rows[0][0] == pytest.approx(expected)
+        assert sources.preview(source.source_id, limit=1)[0] == {"id": "001", "revenue": "120,5"}
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("aggregate", ["SUM", "AVG"])
+async def test_invalid_numeric_value_beyond_schema_sample_cannot_be_silently_skipped(tmp_path, aggregate):
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    sources = SourceService(tmp_path / "data", catalog)
+    content = "id;revenue\n" + "".join(f"{index:04d};1,5\n" for index in range(500)) + "0500;broken\n"
+    source = sources.register_csv("sales.csv", content.encode())
+    plan = {"intent": aggregate.lower(), "sql": f'SELECT {aggregate}(TRY_CAST("revenue" AS DOUBLE)) AS total FROM source', "explanation": ""}
+    provider = ScriptedProvider(plan, plan)
+    agent = AgentRuntime(provider, build_tool_registry(catalog, sources), sources=sources)
+    try:
+        answer = await agent.ask("Сумма выручки?", [source.source_id])
+        assert answer.status == "error"
+        assert answer.results == []
+        assert [item.ok for item in answer.tool_results] == [False, False]
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
+async def test_wrapped_numeric_try_cast_cannot_hide_invalid_values(tmp_path):
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    sources = SourceService(tmp_path / "data", catalog)
+    content = "id;revenue\n" + "001;1,5\n" * 500 + "501;broken\n"
+    source = sources.register_csv("sales.csv", content.encode())
+    plan = {"intent": "sum", "sql": 'SELECT SUM(TRY_CAST(TRIM("revenue") AS DOUBLE)) AS total FROM source', "explanation": ""}
+    provider = ScriptedProvider(plan, plan)
+    agent = AgentRuntime(provider, build_tool_registry(catalog, sources), sources=sources)
+    try:
+        answer = await agent.ask("Сумма выручки?", [source.source_id])
+        assert answer.status == "error"
+        assert answer.results == []
+        assert [item.ok for item in answer.tool_results] == [False, False]
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
+async def test_numeric_normalization_does_not_drop_a_second_sql_statement(tmp_path):
+    plan = {
+        "intent": "sum", "sql": 'SELECT SUM(TRY_CAST("revenue" AS DOUBLE)) FROM source; DROP TABLE source',
+        "explanation": "",
+    }
+    provider = ScriptedProvider(plan, plan)
+    agent, source, catalog = agent_with_csv(tmp_path, provider)
+    try:
+        answer = await agent.ask("Сумма выручки?", [source.source_id])
+        assert answer.status == "error"
+        assert answer.results == []
     finally:
         catalog.close()
 
