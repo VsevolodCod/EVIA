@@ -86,6 +86,21 @@ def _numeric_cast_of_non_numeric_field(sql: str, field_types: dict[str, str]) ->
     return None
 
 
+def _is_general_overview(question: str) -> bool:
+    words = question.casefold()
+    return (
+        any(phrase in words for phrase in ("что есть", "какие данные", "обзор данных", "о чём данные", "о чем данные"))
+        and any(phrase in words for phrase in ("данн", "источник"))
+    )
+
+
+def _russian_count(noun_forms: tuple[str, str, str], count: int) -> str:
+    form = noun_forms[2] if count % 100 in range(11, 15) else (
+        noun_forms[0] if count % 10 == 1 else noun_forms[1] if count % 10 in range(2, 5) else noun_forms[2]
+    )
+    return f"{count:,}".replace(",", " ") + " " + form
+
+
 class CSVQueryAgent:
     def __init__(self, llm: LLMProvider, sources: SourceService) -> None:
         self.llm = llm
@@ -154,6 +169,38 @@ class CSVQueryAgent:
                 return self._error(request_id, timing, attempt + 1, trace, "VALIDATION_ERROR", last_plan)
             last_plan = plan
             if plan.intent == "clarification":
+                if _is_general_overview(question):
+                    date_field = next((field.name for field in fields if field.inferred_type in {"date", "datetime"}), None)
+                    sql = "SELECT COUNT(*) AS row_count"
+                    if date_field:
+                        quoted = '"' + date_field.replace('"', '""') + '"'
+                        sql += (f", MIN(TRY_CAST({quoted} AS TIMESTAMP)) AS period_start, "
+                                f"MAX(TRY_CAST({quoted} AS TIMESTAMP)) AS period_end")
+                    sql += " FROM source"
+                    query_started = perf_counter()
+                    try:
+                        result = self.sources.query(source_id, sql, row_limit=1)
+                    except SafeQueryError as exc:
+                        timing.tools_ms += (perf_counter() - query_started) * 1000
+                        trace.append(ToolResult(tool_name="query_data", ok=False, error=exc.code))
+                        return self._error(request_id, timing, attempt + 1, trace, exc.code, plan)
+                    timing.tools_ms += (perf_counter() - query_started) * 1000
+                    trace.append(ToolResult(tool_name="query_data", ok=True, data=result))
+                    row = result.rows[0]
+                    answer = (
+                        f"В источнике {_russian_count(('строка', 'строки', 'строк'), int(row[0]))} "
+                        f"и {_russian_count(('столбец', 'столбца', 'столбцов'), len(fields))}."
+                    )
+                    if date_field and row[1] and row[2]:
+                        start = datetime.fromisoformat(str(row[1]))
+                        end = datetime.fromisoformat(str(row[2]))
+                        answer += f"\nПериод по полю «{date_field}»: {start:%d.%m.%Y} — {end:%d.%m.%Y}."
+                    return AgentResponse(
+                        request_id=request_id, status="answered", answer=answer,
+                        steps=attempt + 1,
+                        analysis=AnalysisPlan(intent="dataset_overview", sql=sql, explanation=answer),
+                        results=[result], tool_results=trace, timing=timing,
+                    )
                 return AgentResponse(
                     request_id=request_id, status="clarification",
                     answer="В выбранном источнике нет подходящих полей для этого вопроса. Уточните, какие данные нужно проанализировать.",

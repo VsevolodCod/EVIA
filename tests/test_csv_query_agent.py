@@ -205,6 +205,29 @@ async def test_out_of_schema_question_returns_clarification_without_query(tmp_pa
 
 
 @pytest.mark.asyncio
+async def test_general_dataset_question_gets_count_and_period_even_if_model_asks_to_clarify(tmp_path):
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    sources = SourceService(tmp_path / "data", catalog)
+    source = sources.register_csv(
+        "support.csv",
+        b"created_at,ticket\n2024-10-01T09:00:00,A\n2024-10-03T10:30:00,B\n",
+    )
+    provider = ScriptedProvider({"intent": "clarification", "sql": None, "explanation": ""})
+    agent = AgentRuntime(provider, build_tool_registry(catalog, sources), sources=sources)
+    try:
+        answer = await agent.ask("Что есть в этих данных? За какой период они и сколько их?", [source.source_id])
+        assert answer.status == "answered"
+        assert answer.answer_kind == "computed"
+        assert "2 строки" in answer.answer
+        assert "01.10.2024" in answer.answer
+        assert "03.10.2024" in answer.answer
+        assert answer.results[0].rows[0][0] == 2
+        assert answer.tool_results[0].ok
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("failure", [httpx.ConnectError("offline"), httpx.ReadTimeout("timeout")])
 async def test_unavailable_local_model_returns_request_id_and_timing(tmp_path, failure, caplog):
     class UnavailableProvider:
