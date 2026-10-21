@@ -87,7 +87,7 @@ class AnalysisPlan(BaseModel):
 
 
 class Error(BaseModel):
-    code: Literal['VALIDATION_ERROR', 'SOURCE_NOT_FOUND', 'IMPORT_FAILED', 'QUERY_REJECTED', 'QUERY_TIMEOUT', 'MODEL_UNAVAILABLE', 'INTERNAL_ERROR']
+    code: Literal['VALIDATION_ERROR', 'SOURCE_NOT_FOUND', 'IMPORT_FAILED', 'QUERY_REJECTED', 'QUERY_TIMEOUT', 'MODEL_UNAVAILABLE', 'MODEL_OUTPUT_INCOMPLETE', 'INTERNAL_ERROR']
     message: str
     request_id: Identifier
     retryable: bool = False

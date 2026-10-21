@@ -6,18 +6,45 @@ import pytest
 from app.agent import AgentRuntime
 from app.config import Settings
 from app.llm.ollama_provider import OllamaModel, OllamaProvider
+from app.llm.openai_provider import OpenAIModel, OpenAIProvider
 from app.models import LLMResponse, ToolCall, ToolResult
 
 
 def test_ollama_nanoseconds_missing_metrics_and_zero_tokens():
     parsed = OllamaProvider._parse_response({'model': 'test', 'message': {'content': 'ok'},
+        'done_reason': 'length',
         'load_duration': 2_500_000, 'prompt_eval_duration': 7_000_000,
         'eval_duration': 20_000_000, 'prompt_eval_count': 5, 'eval_count': 0})
     assert parsed.timing.load_ms == 2.5
     assert parsed.timing.prompt_ms == 7
     assert parsed.timing.generation_ms == 20
     assert parsed.timing.generated_tokens == 0
+    assert parsed.finish_reason == 'length'
     assert OllamaProvider._parse_response({'message': {}}).timing.load_ms is None
+
+
+def test_openai_finish_reason_is_preserved():
+    parsed = OpenAIProvider._parse_response({
+        'choices': [{'finish_reason': 'length', 'message': {'content': 'Оборванный ответ'}}],
+    })
+    assert parsed.finish_reason == 'length'
+
+
+@pytest.mark.asyncio
+async def test_openai_chat_completion_uses_integer_token_limit(monkeypatch):
+    monkeypatch.setenv('OPENAI_API_KEY', 'test-key')
+    monkeypatch.setenv('MAX_TOKENS_G', '256')
+    original = httpx.AsyncClient
+
+    def handle(request):
+        assert request.url.path == '/v1/chat/completions'
+        payload = json.loads(request.content)
+        assert payload['max_completion_tokens'] == 256
+        assert 'max_output_tokens' not in payload
+        return httpx.Response(200, json={'choices': [{'finish_reason': 'stop', 'message': {'content': 'ok'}}]})
+
+    monkeypatch.setattr(httpx, 'AsyncClient', lambda **kwargs: original(transport=httpx.MockTransport(handle), **kwargs))
+    assert (await OpenAIModel(Settings()).generate({'model': 'test', 'messages': []}))['choices'][0]['finish_reason'] == 'stop'
 
 
 @pytest.mark.asyncio

@@ -44,7 +44,7 @@ class OpenAIModel(AsyncModel):
         if not self.think:
             payload["reasoning_effort"] = "low"
         if self.max_tokens != -1:
-            payload["max_output_tokens"] = str(self.max_tokens)
+            payload["max_completion_tokens"] = self.max_tokens
 
         async with httpx.AsyncClient(
             timeout=self.timeout,
@@ -161,6 +161,7 @@ class OpenAIProvider(LLMProvider):
             content=message.get("content") or "",
             tool_calls=calls,
             raw_tool_calls=raw_calls,
+            finish_reason=choices[0].get("finish_reason"),
         )
 
     async def chat(

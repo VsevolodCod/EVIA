@@ -134,6 +134,16 @@ class CSVQueryAgent:
             call_timing = response.timing.model_copy() if response.timing else ModelTiming()
             call_timing.elapsed_ms = elapsed
             timing.calls.append(call_timing)
+            if response.finish_reason == "length":
+                if attempt == 0:
+                    messages.append(LLMMessage(
+                        role="user",
+                        content="Ответ оборвался по лимиту токенов. Сформируй короткий JSON-план заново, без лишнего текста.",
+                    ))
+                    continue
+                return self._error(request_id, timing, attempt + 1, trace, "MODEL_OUTPUT_INCOMPLETE", last_plan)
+            if response.finish_reason not in (None, "stop"):
+                return self._error(request_id, timing, attempt + 1, trace, "MODEL_OUTPUT_INCOMPLETE", last_plan)
             try:
                 plan = ModelPlan.model_validate(json.loads(response.content))
             except (ValueError, ValidationError):
@@ -202,9 +212,14 @@ class CSVQueryAgent:
 
     @staticmethod
     def _error(request_id, timing, steps, trace, code, plan):
+        message = (
+            "Ответ модели прервался из-за лимита генерации. Попробуйте уточнить вопрос или увеличить MAX_TOKENS_G."
+            if code == "MODEL_OUTPUT_INCOMPLETE" else "Не удалось выполнить запрос по выбранному источнику."
+        )
         return AgentResponse(
-            request_id=request_id, status="error", answer="Не удалось выполнить запрос по выбранному источнику.",
+            request_id=request_id, status="error", answer=message,
             steps=steps, analysis=AnalysisPlan(intent=plan.intent, sql=plan.sql, explanation="Запрос не выполнен.") if plan else None,
             tool_results=trace, timing=timing,
-            error=Error(code=code, message="Запрос не выполнен.", request_id=request_id),
+            error=Error(code=code, message=message, request_id=request_id,
+                        retryable=code == "MODEL_OUTPUT_INCOMPLETE"),
         )

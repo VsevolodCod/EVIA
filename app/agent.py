@@ -17,6 +17,12 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
+class IncompleteModelOutput(Exception):
+    def __init__(self, steps: int, tool_results: list[ToolResult]) -> None:
+        self.steps = steps
+        self.tool_results = tool_results
+
 SYSTEM_PROMPT = """
 Ты — помощник аналитика в локальной BI-платформе.
 
@@ -71,12 +77,22 @@ class AgentRuntime:
                 result = await self.csv_query.ask(question, selected.source_id, timing, request_id, history)
                 result.answer_kind = "computed" if result.status == "answered" else "model"
             else:
-                legacy = await self._ask(question, source_ids, history, timing)
-                result = AgentResponse(
-                    **legacy.model_dump(exclude={"timing"}),
-                    request_id=request_id, status="answered", timing=timing,
-                    answer_kind="demo" if isinstance(self.llm, MockLLMProvider) else "model",
-                )
+                try:
+                    legacy = await self._ask(question, source_ids, history, timing)
+                except IncompleteModelOutput as exc:
+                    message = "Ответ модели прервался из-за лимита генерации. Попробуйте уточнить вопрос или увеличить MAX_TOKENS_G."
+                    result = AgentResponse(
+                        request_id=request_id, status="error", answer=message,
+                        steps=exc.steps, tool_results=exc.tool_results, timing=timing,
+                        error=Error(code="MODEL_OUTPUT_INCOMPLETE", message=message,
+                                    request_id=request_id, retryable=True),
+                    )
+                else:
+                    result = AgentResponse(
+                        **legacy.model_dump(exclude={"timing"}),
+                        request_id=request_id, status="answered", timing=timing,
+                        answer_kind="demo" if isinstance(self.llm, MockLLMProvider) else "model",
+                    )
             outcome = result.status
             result.timing = timing
             return result
@@ -118,6 +134,7 @@ class AgentRuntime:
         )
 
         results: list[ToolResult] = []
+        answer_parts: list[str] = []
 
         # Основный цикл агента
         for step in range(1, self.max_steps + 1):
@@ -132,8 +149,18 @@ class AgentRuntime:
             call_timing.elapsed_ms = elapsed
             timing.calls.append(call_timing)
 
+            if response.finish_reason == "length":
+                if response.tool_calls or step == self.max_steps:
+                    raise IncompleteModelOutput(step, results)
+                answer_parts.append(response.content)
+                messages.append(LLMMessage(role="assistant", content=response.content))
+                messages.append(LLMMessage(role="user", content="Продолжи ответ точно с места обрыва, без повторения уже написанного."))
+                continue
+            if response.finish_reason not in (None, "stop", "tool_calls"):
+                raise IncompleteModelOutput(step, results)
+
             if not response.tool_calls:  # Если модель готова ответить пользователю
-                answer = response.content.strip()
+                answer = ("".join(answer_parts) + response.content).strip()
 
                 if not answer:
                     answer = "Модель вернула пустой ответ."
@@ -146,6 +173,8 @@ class AgentRuntime:
                     steps=step,
                     tool_results=results,
                 )
+
+            answer_parts.clear()
 
             raw_calls = response.raw_tool_calls
 

@@ -100,6 +100,20 @@ async function ask(question: string) {
   fireEvent.click(screen.getByRole("button", { name: "Отправить вопрос" }));
   await waitFor(() => expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).startsWith("/agent/chat?")).length).toBeGreaterThan(previousCalls));
 }
+it("shows an incomplete model response as a retryable error", async () => {
+  setup(() => Promise.resolve(Response.json({
+    answer: "Ответ модели прервался из-за лимита генерации.",
+    status: "error",
+    steps: 2,
+    tool_results: [],
+  })));
+  render(<App />);
+  await select("A");
+  await ask("Что в данных?");
+  expect(await screen.findByText("Ответ модели прервался из-за лимита генерации.")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Повторить вопрос" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /Результаты инструментов/ })).not.toBeInTheDocument();
+});
 it("keeps late answers and history bound to their source", async () => {
   let now = 1000;
   vi.spyOn(performance, "now").mockImplementation(() => now);

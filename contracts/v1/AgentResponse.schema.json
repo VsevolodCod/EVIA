@@ -71,6 +71,7 @@
             "QUERY_REJECTED",
             "QUERY_TIMEOUT",
             "MODEL_UNAVAILABLE",
+            "MODEL_OUTPUT_INCOMPLETE",
             "INTERNAL_ERROR"
           ],
           "title": "Code",

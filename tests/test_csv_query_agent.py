@@ -259,6 +259,31 @@ async def test_malformed_json_never_reaches_sql_executor(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_truncated_json_plan_cannot_execute_sql_even_if_syntactically_valid(tmp_path):
+    class TruncatedProvider:
+        calls = 0
+
+        async def chat(self, messages, tools=None):
+            self.calls += 1
+            return LLMResponse(
+                content=json.dumps({"intent": "count", "sql": "SELECT COUNT(*) FROM source", "explanation": ""}),
+                finish_reason="length",
+            )
+
+    provider = TruncatedProvider()
+    agent, source, catalog = agent_with_csv(tmp_path, provider)
+    try:
+        answer = await agent.ask("Сколько строк?", [source.source_id])
+        assert answer.status == "error"
+        assert answer.error and answer.error.code == "MODEL_OUTPUT_INCOMPLETE"
+        assert answer.results == []
+        assert answer.tool_results == []
+        assert provider.calls == 2
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
 async def test_invented_column_is_repaired_against_current_schema(tmp_path):
     provider = ScriptedProvider(
         {"intent": "sum", "sql": 'SELECT SUM(TRY_CAST("fantasy" AS DOUBLE)) AS total FROM source', "explanation": ""},
