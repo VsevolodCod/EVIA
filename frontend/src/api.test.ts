@@ -77,6 +77,23 @@ it("maps provider failure to an actionable message", async () => {
   );
   await expect(api.ask("Покажи данные", "a")).rejects.toThrow("модели");
 });
+it("shows CSV row accounting from a structured import error", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({
+    detail: {
+      message: "CSV row ending at line 3 has 3 fields; expected 2",
+      report: { rows_read: 2, accepted_rows: 1, rejected_rows: 1, errors: ["CSV row ending at line 3 has 3 fields; expected 2"] },
+    },
+  }, { status: 400 })));
+  await expect(api.upload(new File(["a,b\n1,2\n3,4,5"], "bad.csv")))
+    .rejects.toThrow("Принято 1 из 2 строк, отклонено 1");
+});
+it("marks a repeat CSV upload with its existing source ID", async () => {
+  const fetcher = vi.fn().mockResolvedValue(Response.json(source));
+  vi.stubGlobal("fetch", fetcher);
+  await api.upload(new File(["id\n1\n"], "new.csv"), undefined, "existing-id");
+  const request = fetcher.mock.calls[0][1];
+  expect(request.body.get("source_id")).toBe("existing-id");
+});
 it("sends only selected source and question, without prior conversational history", async () => {
   const fetcher = vi
     .fn()

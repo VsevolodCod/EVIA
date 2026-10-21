@@ -10,13 +10,16 @@ from fastapi import (
     Request,
     UploadFile,
 )
+from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import FileResponse
 
 from app.agent import AgentRuntime
 from app.config import PROJECT_ROOT, get_settings
+from app.csv_import import CSVImportError
 from app.data_sources.postgresql_adapter import PostgreSQLAdapter
 from app.db import create_chat_database, initialize_chat_database
 from app.llm.factory import create_llm_provider
-from app.models import AskRequest, AskResponse, ChatMessage, DataSource, Chat, ChatCreateRequest, ChatSummary, \
+from app.models import AskRequest, AskResponse, ChatMessage, DataSource, CSVVersion, Chat, ChatCreateRequest, ChatSummary, \
     ChatHistoryResponse
 from app.schema_catalog import SchemaCatalog
 from app.source_service import SourceService
@@ -110,15 +113,22 @@ def health():
 async def upload_csv(
     file: UploadFile = File(...),
     name: str | None = Form(default=None),
+    source_id: str | None = Form(default=None),
 ):
     try:
-        content = await file.read()
-
-        return source_service.register_csv(
+        return await run_in_threadpool(
+            source_service.register_csv_stream,
             filename=file.filename or "uploaded.csv",
-            content=content,
+            stream=file.file,
             name=name,
+            source_id=source_id,
         )
+
+    except CSVImportError as exc:
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail={"message": str(exc), "report": exc.report.model_dump(mode="json")},
+        ) from exc
 
     except ValueError as exc:
         raise HTTPException(
@@ -137,6 +147,23 @@ async def upload_csv(
 @app.get("/sources", response_model=list[DataSource])
 def list_sources():
     return source_service.list_sources()
+
+
+@app.get("/sources/{source_id}/versions", response_model=list[CSVVersion])
+def list_csv_versions(source_id: str):
+    try:
+        return source_service.list_csv_versions(source_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/sources/{source_id}/versions/{snapshot_id}/download")
+def download_csv_version(source_id: str, snapshot_id: str):
+    try:
+        path = source_service.raw_csv_path(source_id, snapshot_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return FileResponse(path, media_type="text/csv", filename=path.name)
 
 
 @app.get("/sources/postgresql/status")

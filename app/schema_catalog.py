@@ -47,6 +47,22 @@ class SchemaCatalog:
             else:
                 record.payload = source.model_dump_json()
 
+    def save_source_and_schema(self, source: DataSource, schema: SourceSchema) -> None:
+        """Publish a CSV snapshot and its schema in one catalog transaction."""
+        with self.session_factory.begin() as session:
+            record = session.get(DataSourceORM, source.source_id)
+            if record is None:
+                session.add(DataSourceORM(source_id=source.source_id, payload=source.model_dump_json()))
+            else:
+                record.payload = source.model_dump_json()
+            schema_record = session.get(SourceSchemaORM, schema.source_id)
+            if schema_record is None:
+                session.add(SourceSchemaORM(source_id=schema.source_id, version=schema.version,
+                                            payload=schema.model_dump_json()))
+            else:
+                schema_record.version = schema.version
+                schema_record.payload = schema.model_dump_json()
+
     def get_source(self, source_id: str) -> DataSource | None:
         with self.session_factory() as session:
             record = session.get(DataSourceORM, source_id)

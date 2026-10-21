@@ -58,6 +58,29 @@
 .analytics-report {
   min-width: 0;
 }
+.csv-import-details {
+  margin: 0 0 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 12px;
+}
+.csv-import-details summary {
+  color: var(--ink);
+  font-weight: 700;
+  cursor: pointer;
+}
+.csv-import-details p { margin: 10px 0 0; }
+.csv-import-details a, .csv-reimport {
+  display: inline-flex;
+  margin: 12px 14px 0 0;
+  color: var(--accent);
+  font-weight: 700;
+}
+.csv-reimport { cursor: pointer; }
+.csv-reimport input { position: absolute; width: 1px; height: 1px; opacity: 0; }
 .analytics-tabs {
   display: flex;
   gap: 3px;

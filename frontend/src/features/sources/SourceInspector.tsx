@@ -55,11 +55,13 @@ export function SourceInspector({
   entry,
   view,
   setView,
+  onReimport,
 }: {
   source: Source;
   entry?: Entry;
   view: View;
   setView: (view: View) => void;
+  onReimport?: (file: File, sourceId: string) => void;
 }) {
   const [data, setData] = useState<SourceData | null>(null);
   const [failure, setFailure] = useState<{
@@ -109,7 +111,7 @@ export function SourceInspector({
           setFailure({ id: source.source_id, message: errorMessage(error) });
       });
     return () => controller.abort();
-  }, [source.source_id, revision]);
+  }, [source.source_id, source.snapshot_id, revision]);
   const current = data?.id === source.source_id ? data : null;
   const error = failure?.id === source.source_id ? failure.message : null;
   const profileError = profileFailure?.id === source.source_id ? profileFailure.message : null;
@@ -293,8 +295,28 @@ export function SourceInspector({
                   </div>
                 </div>
                 <p className="analytics-caption">
-                  Типы определены автоматически по выборке.
+                  {source.import_report
+                    ? "Типы определены по всему файлу. Исходные значения сохранены."
+                    : "Типы определены автоматически по выборке."}
                 </p>
+                {source.import_report && <details className="csv-import-details">
+                  <summary>Отчёт об импорте</summary>
+                  <p>Принято {numberText(source.import_report.accepted_rows)} из {numberText(source.import_report.rows_read)} строк · отклонено {numberText(source.import_report.rejected_rows)}</p>
+                  <p>Кодировка: {source.import_report.encoding.toUpperCase()} · разделитель: {source.import_report.delimiter === "\t" ? "табуляция" : source.import_report.delimiter}</p>
+                  {source.import_report.warnings.length > 0 && <ul>{source.import_report.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>}
+                  {source.csv_versions?.map((version, index) => <a
+                    key={version.snapshot_id}
+                    href={`/sources/${encodeURIComponent(source.source_id)}/versions/${encodeURIComponent(version.snapshot_id)}/download`}
+                  >Скачать оригинал {index + 1}</a>)}
+                  {onReimport && <label className="csv-reimport">
+                    Повторно импортировать CSV
+                    <input type="file" accept=".csv,text/csv" aria-label="Повторно импортировать CSV" onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) onReimport(file, source.source_id);
+                      event.target.value = "";
+                    }} />
+                  </label>}
+                </details>}
                 {!current.schema.objects.length ? (
                   <p className="muted">В источнике нет объектов схемы.</p>
                 ) : (
