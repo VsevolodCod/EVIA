@@ -180,11 +180,13 @@ export function SourceInspector({
           <small>В схеме источника</small>
         </div>
         <div>
-          <span>Строк изучено</span>
+          <span>{current?.profile?.coverage === "full" ? "Строк обработано" : "Строк изучено"}</span>
           <strong>
-            {current?.profile ? numberText(current.profile.sample_size) : "—"}
+            {current?.profile
+              ? numberText(current.profile.coverage === "full" ? current.profile.processed_rows : current.profile.sample_size)
+              : "—"}
           </strong>
-          <small>Для профиля выборки</small>
+          <small>{current?.profile?.coverage === "full" ? "Полный датасет" : "Для профиля выборки"}</small>
         </div>
       </div>}
       <section className="analytics-report" aria-label="Исследование данных">
@@ -209,9 +211,13 @@ export function SourceInspector({
               <div className="profile-scope">
                 <span className="scope-dot" aria-hidden="true" />
                 <p>
-                  {sampleDescription(current.profile)}
+                  {current.profile.coverage === "full"
+                    ? "Статистика по всему датасету"
+                    : sampleDescription(current.profile)}
                   <small>
-                    Статистика относится к выборке, а не ко всему источнику.
+                    {current.profile.coverage === "full"
+                      ? <><span>Обработано {numberText(current.profile.processed_rows)} строк</span>. Точные показатели рассчитаны по всем строкам; частые значения — по выборке из {numberText(current.profile.sample_size)} строк.</>
+                      : "Статистика относится к выборке, а не ко всему источнику."}
                   </small>
                 </p>
               </div>
@@ -230,6 +236,7 @@ export function SourceInspector({
               model ? <ProfileColumns
                 key={`${source.source_id}-${columnSelection.revision}`}
                 fields={model.fields}
+                sampleSize={current.profile?.sample_size ?? 0}
                 initialSearch={
                   columnSelection.sourceId === source.source_id
                     ? columnSelection.name
@@ -360,9 +367,9 @@ export function SourceInspector({
                 <p>
                   Источник: {source.name}. Версия схемы:{" "}
                   {current.schema.version}. Число строк датасета берётся из
-                  схемы; остальные показатели — из профиля выборки.
-                  Заполненность — доля непустых ячеек среди ячеек с доступной
-                  статистикой. Частые значения сравниваются как исходные строки.
+                  схемы; {current.profile.coverage === "full"
+                    ? "заполненность, NULL, пустые строки и уникальность рассчитаны по всему датасету. Частые значения — из профиля выборки."
+                    : "остальные показатели — из профиля выборки. Заполненность — доля непустых ячеек среди ячеек с доступной статистикой. Частые значения сравниваются как исходные строки."}
                 </p>
                 <p>{current.profile.note}</p>
               </details>

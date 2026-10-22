@@ -107,18 +107,67 @@ it("separates the full source from profile coverage and highlights data quality"
         objects: [{ ...schema.objects[0], row_count: 2_000 }],
       }}
       rows={rows}
-      profile={profile}
+      profile={{
+        ...profile,
+        processed_rows: 2_000,
+        columns: {
+          ...profile.columns,
+          city: {
+            ...profile.columns.city,
+            non_null_count: 1_900,
+            null_count: 100,
+            empty_count: 20,
+            distinct_count: 87,
+            uniqueness_ratio: 87 / 1_900,
+          },
+        },
+      }}
       fullSourceRows={2_000}
     />,
   );
 
   expect(screen.getByText("Строк в источнике")).toBeInTheDocument();
   expect(screen.getByText("2 000")).toBeInTheDocument();
+  expect(screen.getByText("Профиль покрывает весь датасет")).toBeInTheDocument();
+  expect(screen.getByText("2 000 строк обработано")).toBeInTheDocument();
+  expect(screen.queryByText("выборка до 500 строк")).not.toBeInTheDocument();
+  expect(screen.getByText("Нужна проверка")).toBeInTheDocument();
+  expect(screen.getByText("1 поле с пропусками")).toBeInTheDocument();
+  expect(
+    screen.getByRole("img", { name: /Пропуски по столбцам: city: 5%/ }),
+  ).toBeInTheDocument();
+});
+
+it("retains sample counts for PostgreSQL profiles without exact coverage", () => {
+  const sampled: Profile = {
+    sample_size: 3,
+    sample_limit: 500,
+    coverage: "sample",
+    note: "Профиль построен по выборке.",
+    columns: {
+      city: {
+        sample_non_null_count: 2,
+        sample_null_count: 1,
+        distinct_sample_values: 2,
+        top_values: [],
+      },
+    },
+  };
+  render(
+    <Dashboard
+      title="Поездки"
+      sourceLabel="Поездки.csv"
+      scope="sampled-postgres"
+      schema={schema}
+      rows={rows}
+      profile={sampled}
+      fullSourceRows={2_000}
+    />,
+  );
+
   expect(screen.getByText("Профиль покрывает")).toBeInTheDocument();
   expect(screen.getByText("3 строки")).toBeInTheDocument();
   expect(screen.getByText("выборка до 500 строк")).toBeInTheDocument();
-  expect(screen.getByText("Нужна проверка")).toBeInTheDocument();
-  expect(screen.getByText("1 поле с пропусками")).toBeInTheDocument();
   expect(
     screen.getByRole("img", { name: /Пропуски по столбцам: city: 33,3%/ }),
   ).toBeInTheDocument();
@@ -136,7 +185,7 @@ it("uses a readable plural form for several fields with missing values", () => {
         ...profile,
         columns: {
           ...profile.columns,
-          distance: { ...profile.columns.distance, sample_null_count: 1 },
+          distance: { ...profile.columns.distance, null_count: 1 },
         },
       }}
       fullSourceRows={3}

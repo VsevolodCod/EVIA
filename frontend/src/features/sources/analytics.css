@@ -593,6 +593,33 @@
   font-size: 19px;
   font-weight: 650;
 }
+.column-stats-exact {
+  grid-template-columns: repeat(auto-fit, minmax(108px, 1fr));
+  margin-bottom: 16px;
+}
+.column-ranges {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 22px;
+  padding: 12px;
+  border-radius: 10px;
+  background: #f5f8f6;
+}
+.column-ranges > div {
+  display: grid;
+  gap: 3px;
+}
+.column-ranges dt {
+  color: var(--muted);
+  font-size: 10px;
+}
+.column-ranges dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: #34483d;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
 .frequency-heading {
   display: flex;
   justify-content: space-between;
