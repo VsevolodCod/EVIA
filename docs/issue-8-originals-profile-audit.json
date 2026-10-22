@@ -1,0 +1,109 @@
+{
+  "format": "evia-csv-profile-audit/v1",
+  "expected_file_count": 9,
+  "found_file_count": 9,
+  "status": "accepted",
+  "total_runtime_ms": 122428.921,
+  "errors": [],
+  "files": [
+    {
+      "filename": "01_Продажи.csv",
+      "sha256": "24d4b5065fd4c3c0b3f218d87e1f920d334d5f311ee1b3a4ce6795eb80e7bbdd",
+      "source_id": "a8a9647712df4e719c5a82028dc0bb3e",
+      "snapshot_id": "f97b5b89cae8418e98fc9199874e96ac",
+      "accepted_import_rows": 500000,
+      "processed_rows": 500000,
+      "coverage": "full",
+      "runtime_ms": 16116.885,
+      "errors": []
+    },
+    {
+      "filename": "02_Техническая_поддержка.csv",
+      "sha256": "637e65f0019d8962c2ee4a3f9b96dded13bc2a7b96cece768703daee82653a1c",
+      "source_id": "98044b654dab40dc99a335cee0598103",
+      "snapshot_id": "d25d910cc2264a87a98769f260abd190",
+      "accepted_import_rows": 500000,
+      "processed_rows": 500000,
+      "coverage": "full",
+      "runtime_ms": 12537.65,
+      "errors": []
+    },
+    {
+      "filename": "03_Задачи_команд.csv",
+      "sha256": "2214df17146386963d643aada7f63f9f7b8d5c5b9777f9cc6c5f9f06b8d8a34f",
+      "source_id": "0b75268e966d416da80594a2b781422f",
+      "snapshot_id": "0df9d106af7d4226b967328d7d4386d3",
+      "accepted_import_rows": 500000,
+      "processed_rows": 500000,
+      "coverage": "full",
+      "runtime_ms": 12894.929,
+      "errors": []
+    },
+    {
+      "filename": "04_Доставка.csv",
+      "sha256": "4b7321033df27dddaf119c250ccb5032cf2f6e28104629ebd4133c653b18b4ba",
+      "source_id": "c06796b53090460eac96f728fde1480f",
+      "snapshot_id": "72ff3f576b0e45d1ba03125726926d49",
+      "accepted_import_rows": 500000,
+      "processed_rows": 500000,
+      "coverage": "full",
+      "runtime_ms": 12630.04,
+      "errors": []
+    },
+    {
+      "filename": "05_События_приложения.csv",
+      "sha256": "1501707e4c0a81d9ce0f503d1c7b974151e36443e46292c2232f99c456687956",
+      "source_id": "f837a7cebeb64683a353bdfe11048744",
+      "snapshot_id": "90d10e0dd59745bdaeff8637344127df",
+      "accepted_import_rows": 1000000,
+      "processed_rows": 1000000,
+      "coverage": "full",
+      "runtime_ms": 21782.46,
+      "errors": []
+    },
+    {
+      "filename": "06_Рекламные_кампании.csv",
+      "sha256": "d17a7a0a935eb60118abd66c0c32d7e26a8bebc3f63342ef1943a545bc970ce3",
+      "source_id": "f53bbb24d9cc4e488d09b9790441c638",
+      "snapshot_id": "d6a6e0ff20934613a3eafe94217844f5",
+      "accepted_import_rows": 500000,
+      "processed_rows": 500000,
+      "coverage": "full",
+      "runtime_ms": 11897.799,
+      "errors": []
+    },
+    {
+      "filename": "07_Заявки_на_закупку.csv",
+      "sha256": "828eb441b00e6569cfc05013bdebda102532e97e3d3aa1b30271efd22eafba36",
+      "source_id": "203bf93f9996476381cbf00e059fdc49",
+      "snapshot_id": "88084b0905e8467fae6748f2b32cafda",
+      "accepted_import_rows": 500000,
+      "processed_rows": 500000,
+      "coverage": "full",
+      "runtime_ms": 15340.125,
+      "errors": []
+    },
+    {
+      "filename": "08_Фоновые_задания.csv",
+      "sha256": "225d50485f10afdc427fb3c1d5c040e3661bfd052c64f7519245265c1a4ed56d",
+      "source_id": "76612a53fb514a56ac8cd45214eedfe7",
+      "snapshot_id": "7df3a3d38e474dedb362decb47bdae97",
+      "accepted_import_rows": 500000,
+      "processed_rows": 500000,
+      "coverage": "full",
+      "runtime_ms": 10265.407,
+      "errors": []
+    },
+    {
+      "filename": "09_Лекарственные_препараты.csv",
+      "sha256": "40081d8a1fadfbcb9dc35c45483182503a2eb75d5224ac7f363c9c43f7f4733c",
+      "source_id": "e3c5bfee017e4e38a690c7cf97caf552",
+      "snapshot_id": "302fcd08874048a1bf3ec01cf4284f2b",
+      "accepted_import_rows": 876000,
+      "processed_rows": 876000,
+      "coverage": "full",
+      "runtime_ms": 8900.621,
+      "errors": []
+    }
+  ]
+}

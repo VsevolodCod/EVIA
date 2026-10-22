@@ -5,6 +5,7 @@ from app.llm.mock import MockLLMProvider
 from app.schema_catalog import SchemaCatalog
 from app.source_service import SourceService
 from app.tools import build_tool_registry
+from app.models import LLMResponse
 
 
 @pytest.mark.asyncio
@@ -83,3 +84,64 @@ async def test_history_is_optional_and_not_mutated(tmp_path):
         assert len(history) == 1
     finally:
         catalog.close()
+
+
+@pytest.mark.asyncio
+async def test_agent_continues_truncated_answer_before_reporting_success():
+    class LLM:
+        def __init__(self):
+            self.messages = []
+
+        async def chat(self, messages, tools=None):
+            self.messages.append(list(messages))
+            if len(self.messages) == 1:
+                return LLMResponse(content='В данных 500 000', finish_reason='length')
+            return LLMResponse(content=' строк за 2024 год.', finish_reason='stop')
+
+    class Tools:
+        def descriptions(self):
+            return []
+
+    llm = LLM()
+    result = await AgentRuntime(llm, Tools(), max_steps=3).ask('Что в данных?')
+    assert result.status == 'answered'
+    assert result.answer == 'В данных 500 000 строк за 2024 год.'
+    assert result.steps == 2
+    assert result.timing and len(result.timing.calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_agent_does_not_return_partial_answer_when_token_limit_exhausted():
+    class LLM:
+        async def chat(self, messages, tools=None):
+            return LLMResponse(content='Обрыв', finish_reason='length')
+
+    class Tools:
+        def descriptions(self):
+            return []
+
+    result = await AgentRuntime(LLM(), Tools(), max_steps=2).ask('Вопрос')
+    assert result.status == 'error'
+    assert result.error and result.error.code == 'MODEL_OUTPUT_INCOMPLETE'
+    assert 'Обрыв' not in result.answer
+    assert result.steps == 2
+
+
+@pytest.mark.asyncio
+async def test_agent_rejects_empty_continuation_after_truncated_answer():
+    class LLM:
+        calls = 0
+
+        async def chat(self, messages, tools=None):
+            self.calls += 1
+            if self.calls == 1:
+                return LLMResponse(content="Период начинается с", finish_reason="length")
+            return LLMResponse(content="", finish_reason="stop")
+
+    class Tools:
+        def descriptions(self): return []
+
+    result = await AgentRuntime(LLM(), Tools(), max_steps=3).ask("Период?")
+    assert result.status == "error"
+    assert result.error and result.error.code == "MODEL_OUTPUT_INCOMPLETE"
+    assert "Период начинается с" not in result.answer

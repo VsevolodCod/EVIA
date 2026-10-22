@@ -195,3 +195,30 @@ async def test_follow_up_receives_previous_turns_and_new_chat_starts_empty(tmp_p
             assert response.status_code == 200
             assert response.json()['chat_id'] == chat_id
         assert seen == [[], [('user', 'remember 73'), ('assistant', 'Answer: remember 73')], []]
+
+
+@pytest.mark.asyncio
+async def test_failed_agent_answer_is_not_saved_as_successful_assistant_message(tmp_path, monkeypatch):
+    monkeypatch.setenv('BI_DATA_DIR', str(tmp_path / 'data'))
+    monkeypatch.setenv('CATALOG_DB_PATH', str(tmp_path / 'catalog.db'))
+    monkeypatch.setenv('CHAT_DB_PATH', str(tmp_path / 'api-chats.db'))
+    module = importlib.import_module('app.main')
+    monkeypatch.setattr(module.settings, 'chat_db_path', tmp_path / 'api-chats.db')
+    from app.contracts.v1 import AgentResponse, Error
+
+    class FailingAgent:
+        async def ask(self, question, source_ids, history):
+            request_id = 'failed-request'
+            return AgentResponse(
+                request_id=request_id, status='error', answer='Модель недоступна.', steps=1,
+                error=Error(code='MODEL_UNAVAILABLE', message='Модель недоступна.', request_id=request_id),
+            )
+
+    monkeypatch.setattr(module, 'agent', FailingAgent())
+    async with module.app.router.lifespan_context(module.app), AsyncClient(transport=ASGITransport(app=module.app), base_url='http://test') as client:
+        chat_id = (await client.post('/chats', json={'title': 'Test'})).json()['chat_id']
+        answer = await client.post('/agent/chat', params={'chat_id': chat_id}, json={'question': 'Сколько строк?'})
+        assert answer.status_code == 200
+        assert answer.json()['status'] == 'error'
+        history = (await client.get(f'/chats/{chat_id}')).json()
+        assert [(message['role'], message['content']) for message in history['messages']] == [('user', 'Сколько строк?')]

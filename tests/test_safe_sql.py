@@ -37,6 +37,25 @@ def test_readonly_query_returns_bounded_typed_result(service_and_source):
     assert result.provenance[0].snapshot_id == source.snapshot_id
 
 
+def test_cte_cannot_shadow_physical_source_even_with_different_case(service_and_source):
+    from app.safe_sql import SafeQueryError
+
+    service, source = service_and_source
+    for alias in ("source", "SOURCE"):
+        with pytest.raises(SafeQueryError) as caught:
+            service.query(source.source_id,
+                f'WITH {alias} AS (SELECT COUNT(*) AS revenue) SELECT SUM(revenue) AS total FROM {alias}')
+        assert caught.value.code == "QUERY_REJECTED"
+
+
+def test_cte_derived_from_physical_source_remains_usable(service_and_source):
+    service, source = service_and_source
+    result = service.query(source.source_id,
+        'WITH amounts AS (SELECT TRY_CAST("revenue" AS BIGINT) AS amount FROM source) '
+        'SELECT SUM(amount) AS total FROM amounts')
+    assert result.rows == [[60]]
+
+
 @pytest.mark.parametrize(
     "sql",
     [

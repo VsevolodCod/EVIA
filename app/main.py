@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 import logging
+from uuid import uuid4
 
 from fastapi import (
     FastAPI,
@@ -10,19 +11,24 @@ from fastapi import (
     Request,
     UploadFile,
 )
+from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import FileResponse
 
 from app.agent import AgentRuntime
+from app.contracts.v1 import AgentResponse
 from app.config import PROJECT_ROOT, get_settings
-from app.data_sources.postgresql_adapter import PostgreSQLAdapter
+from app.csv_import import CSVImportError
+from app.data_sources.postgresql_adapter import PostgresSourceError, PostgreSQLAdapter
 from app.db import create_chat_database, initialize_chat_database
 from app.llm.factory import create_llm_provider
-from app.models import AskRequest, AskResponse, ChatMessage, DataSource, Chat, ChatCreateRequest, ChatSummary, \
+from app.models import AskRequest, AskResponse, ChatMessage, DataSource, CSVVersion, Chat, ChatCreateRequest, ChatSummary, \
     ChatHistoryResponse
 from app.schema_catalog import SchemaCatalog
 from app.source_service import SourceService
 from app.tools import build_tool_registry
 from app.core.logging import setup_logging
 from app.chat_manager import ChatManager, ChatNotFoundError
+from app.contracts.v1 import Profile
 from app.web import mount_frontend
 
 
@@ -58,6 +64,7 @@ agent = AgentRuntime(
     llm=llm_provider,
     tools=tool_registry,
     max_steps=settings.agent_max_steps,
+    sources=source_service,
 )
 
 
@@ -110,15 +117,22 @@ def health():
 async def upload_csv(
     file: UploadFile = File(...),
     name: str | None = Form(default=None),
+    source_id: str | None = Form(default=None),
 ):
     try:
-        content = await file.read()
-
-        return source_service.register_csv(
+        return await run_in_threadpool(
+            source_service.register_csv_stream,
             filename=file.filename or "uploaded.csv",
-            content=content,
+            stream=file.file,
             name=name,
+            source_id=source_id,
         )
+
+    except CSVImportError as exc:
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail={"message": str(exc), "report": exc.report.model_dump(mode="json")},
+        ) from exc
 
     except ValueError as exc:
         raise HTTPException(
@@ -137,6 +151,23 @@ async def upload_csv(
 @app.get("/sources", response_model=list[DataSource])
 def list_sources():
     return source_service.list_sources()
+
+
+@app.get("/sources/{source_id}/versions", response_model=list[CSVVersion])
+def list_csv_versions(source_id: str):
+    try:
+        return source_service.list_csv_versions(source_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/sources/{source_id}/versions/{snapshot_id}/download")
+def download_csv_version(source_id: str, snapshot_id: str):
+    try:
+        path = source_service.raw_csv_path(source_id, snapshot_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return FileResponse(path, media_type="text/csv", filename=path.name)
 
 
 @app.get("/sources/postgresql/status")
@@ -176,7 +207,7 @@ def preview_source(source_id: str, limit: int = 10):
         ) from exc
 
 
-@app.get("/sources/{source_id}/profile")
+@app.get("/sources/{source_id}/profile", response_model=Profile)
 def profile_source(source_id: str):
     try:
         return source_service.profile(source_id)
@@ -187,8 +218,30 @@ def profile_source(source_id: str):
             detail=str(exc),
         ) from exc
 
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        ) from exc
 
-@app.post("/agent/ask", response_model=AskResponse)
+    except PostgresSourceError as exc:
+        status_code, message = {
+            "CONNECTION_FAILED": (503, "PostgreSQL source is temporarily unavailable."),
+            "QUERY_TIMEOUT": (504, "PostgreSQL source timed out."),
+            "INTERNAL_ERROR": (503, "PostgreSQL source is temporarily unavailable."),
+            "SOURCE_FORBIDDEN": (403, "PostgreSQL source is not available to this request."),
+        }[exc.code]
+        raise HTTPException(
+            status_code=status_code,
+            detail={
+                "code": exc.code,
+                "message": message,
+                "retryable": status_code in {503, 504},
+            },
+        ) from exc
+
+
+@app.post("/agent/ask", response_model=AgentResponse)
 async def ask_agent(body: AskRequest):
     try:
         return await agent.ask(
@@ -204,7 +257,7 @@ async def ask_agent(body: AskRequest):
         ) from exc
 
 
-@app.post("/agent/chat", response_model=AskResponse)
+@app.post("/agent/chat", response_model=AgentResponse)
 async def chat_agent(
     body: AskRequest,
     http_request: Request,
@@ -241,20 +294,23 @@ async def chat_agent(
             history=chat.messages[:-1],
         )
 
-        # Сохраняем ответ ассистента в истории.
-        chat.messages.append(
-            ChatMessage(
-                role="assistant",
-                content=answer.answer,
+        # Не сохраняем текст ошибки как успешный ответ: незавершённый вопрос
+        # при повторном открытии чата остаётся доступным для повтора.
+        if getattr(answer, "status", "answered") != "error":
+            chat.messages.append(
+                ChatMessage(
+                    role="assistant",
+                    content=answer.answer,
+                )
             )
-        )
-
-        await chat_manager.save(chat)
+            await chat_manager.save(chat)
 
         # Возвращаем обычный ответ агента вместе с идентификатором чата.
         response_data = answer.model_dump()
         response_data["chat_id"] = chat.chat_id
-        return AskResponse.model_validate(response_data)
+        response_data.setdefault("request_id", uuid4().hex)
+        response_data.setdefault("status", "answered")
+        return AgentResponse.model_validate(response_data)
 
     except ChatNotFoundError as exc:
         raise HTTPException(

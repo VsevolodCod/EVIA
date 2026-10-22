@@ -59,13 +59,6 @@ class OllamaModel(AsyncModel):
                 self.url,
                 json=request_data,
             )
-            if response.is_error:
-                print("Status:", response.status_code)
-                print("Response:", response.text)
-
-            if response.is_error:
-                print("Error:", response.text)
-
             response.raise_for_status()
             return response.json()
 
@@ -139,6 +132,7 @@ class OllamaProvider(LLMProvider):
             content=message.get("content") or "",
             tool_calls=calls,
             raw_tool_calls=raw_calls,
+            finish_reason=data.get("done_reason") if data.get("done") is True and data.get("done_reason") else "incomplete",
             timing=ModelTiming(
                 model=data.get('model'),
                 load_ms=data['load_duration'] / 1_000_000 if data.get('load_duration') is not None else None,
@@ -172,6 +166,18 @@ class OllamaProvider(LLMProvider):
 
         data = await self.model.generate(payload)
 
+        return self._parse_response(data)
+
+    async def chat_structured(
+        self,
+        messages: list[LLMMessage],
+        schema: dict[str, Any],
+    ) -> LLMResponse:
+        """Ask Ollama to enforce the plan schema at generation time."""
+        data = await self.model.generate({
+            "messages": self._serialize_messages(messages),
+            "format": schema,
+        })
         return self._parse_response(data)
 
 

@@ -4,9 +4,31 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
-
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+class ImportReport(BaseModel):
+    sha256: str = ""
+    size_bytes: int = 0
+    encoding: str = ""
+    delimiter: str = ""
+    rows_read: int = 0
+    accepted_rows: int = 0
+    rejected_rows: int = 0
+    blank_lines: int = 0
+    column_types: dict[str, str] = Field(default_factory=dict)
+    column_nullable: dict[str, bool] = Field(default_factory=dict)
+    typed_sql_types: dict[str, str] = Field(default_factory=dict)
+    warnings: list[str] = Field(default_factory=list)
+    errors: list[str] = Field(default_factory=list)
+
+
+class CSVVersion(BaseModel):
+    snapshot_id: str
+    raw_filename: str
+    normalized_filename: str
+    report: ImportReport
 
 
 class DataSource(BaseModel):
@@ -24,6 +46,8 @@ class DataSource(BaseModel):
     status: str = "registered"
     created_at: datetime = Field(default_factory=utc_now)
     schema_version: int = 1
+    import_report: ImportReport | None = None
+    csv_versions: list[CSVVersion] = Field(default_factory=list)
 
 
 class SchemaField(BaseModel):
@@ -99,6 +123,7 @@ class LLMResponse(BaseModel):
     tool_calls: list[ToolCall] = Field(default_factory=list)
     raw_tool_calls: list[dict[str, Any]] = Field(default_factory=list)
     timing: ModelTiming | None = None
+    finish_reason: str | None = None
 
 
 class ToolResult(BaseModel):

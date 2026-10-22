@@ -71,6 +71,7 @@
             "QUERY_REJECTED",
             "QUERY_TIMEOUT",
             "MODEL_UNAVAILABLE",
+            "MODEL_OUTPUT_INCOMPLETE",
             "INTERNAL_ERROR"
           ],
           "title": "Code",
@@ -384,6 +385,16 @@
     },
     "answer": {
       "title": "Answer",
+      "type": "string"
+    },
+    "answer_kind": {
+      "default": "model",
+      "enum": [
+        "demo",
+        "model",
+        "computed"
+      ],
+      "title": "Answer Kind",
       "type": "string"
     },
     "artifact_ids": {

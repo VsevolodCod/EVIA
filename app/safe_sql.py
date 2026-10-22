@@ -16,6 +16,7 @@ import sqlglot
 from sqlglot import exp
 
 from app.contracts.v1 import Provenance, QueryResult, ResultColumn
+from app.duckdb_access import DUCKDB_ACCESS_LOCK
 
 import logging
 
@@ -41,14 +42,14 @@ _SAFE_FUNCTIONS = {
     "ABS", "AVG", "CAST", "CEIL", "CEILING", "COALESCE", "CONCAT",
     "COUNT", "DATE", "DATE_TRUNC", "EXTRACT", "FLOOR", "GREATEST",
     "LEAST", "LENGTH", "LOWER", "LPAD", "LTRIM", "MAX", "MIN",
-    "NULLIF", "ROUND", "RPAD", "RTRIM", "STRFTIME", "SUBSTRING", "SUM",
+    "NULLIF", "REPLACE", "ROUND", "RPAD", "RTRIM", "STRFTIME", "SUBSTRING", "SUM",
     "TRIM", "TRY_CAST", "UPPER",
 }
 _SELECT_ROOTS = (exp.Select, exp.Union, exp.Intersect, exp.Except)
 _BLOCKED_NODE_NAMES = {
     "ALTER", "ANALYZE", "ATTACH", "CACHE", "COMMAND", "COPY", "CREATE",
     "DELETE", "DESCRIBE", "DETACH", "DROP", "GRANT", "INSERT", "INSTALL",
-    "LOAD", "MERGE", "PRAGMA", "REPLACE", "REVOKE", "TRANSACTION", "TRUNCATE",
+    "LOAD", "MERGE", "PRAGMA", "REVOKE", "TRANSACTION", "TRUNCATE",
     "UNLOAD", "UPDATE", "USE", "VACUUM",
 }
 
@@ -98,6 +99,8 @@ class SafeQueryExecutor:
         timed_out = False
         connection = None
         timer: Timer | None = None
+        if not DUCKDB_ACCESS_LOCK.acquire(timeout=float(timeout)):
+            raise SafeQueryError("QUERY_TIMEOUT")
         try:
             connection = duckdb.connect(
                 str(self.database_path),
@@ -113,7 +116,7 @@ class SafeQueryExecutor:
                 timed_out = True
                 connection.interrupt()
 
-            timer = Timer(float(timeout), interrupt)
+            timer = Timer(max(0.001, float(timeout) - (perf_counter() - started)), interrupt)
             timer.daemon = True
             timer.start()
             cursor = connection.execute(bounded_sql)
@@ -175,6 +178,7 @@ class SafeQueryExecutor:
                 timer.cancel()
             if connection is not None:
                 connection.close()
+            DUCKDB_ACCESS_LOCK.release()
 
         columns = self._columns(names, description)
         return QueryResult(
@@ -206,6 +210,9 @@ class SafeQueryExecutor:
                 raise SafeQueryError("QUERY_REJECTED")
 
         cte_names = {cte.alias_or_name for cte in statement.find_all(exp.CTE)}
+        protected_names = {name.casefold() for name in (*allowed_tables, *allowed_tables.values())}
+        if any(name.casefold() in protected_names for name in cte_names):
+            raise SafeQueryError("QUERY_REJECTED")
         for table in statement.find_all(exp.Table):
             if not isinstance(table.this, exp.Identifier):
                 # Table-valued functions (read_csv, parquet_scan, httpfs, …)

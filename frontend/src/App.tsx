@@ -377,7 +377,7 @@ export default function App() {
     setMobilePanel("analytics");
     void loadPostgresStatus();
   }
-  async function upload(file: File) {
+  async function upload(file: File, sourceId?: string) {
     if (uploading) return;
     setUploadError("");
     setUploadFailure(null);
@@ -396,7 +396,7 @@ export default function App() {
     const controller = new AbortController();
     uploadController.current = controller;
     try {
-      const created = await api.upload(file, controller.signal);
+      const created = await api.upload(file, controller.signal, sourceId);
       if (controller.signal.aborted) return;
       sourceController.current?.abort();
       setSourcesLoading(false);
@@ -488,6 +488,8 @@ export default function App() {
           mascotState: "cancelled",
           error: "Ожидание остановлено. Сервер может продолжать обработку.",
         });
+      else if (answer.status === "error")
+        finish({ state: "error", mascotState: "error", answer, error: answer.answer });
       else finish({ state: "success", answer });
     } catch (error) {
       finish({
@@ -591,7 +593,7 @@ export default function App() {
                 if (window.matchMedia?.("(max-width: 640px)").matches) openMobileUpload();
                 else chooseFile();
               }}
-              title="CSV · UTF-8 · запятая или точка с запятой"
+              title="CSV · UTF-8, UTF-16 или Windows-1251"
               disabled={uploading}
             >
               <Icon name="plus" size={16} />
@@ -707,6 +709,7 @@ export default function App() {
               entry={activeEntry}
               view={view}
               setView={setView}
+              onReimport={(file, id) => void upload(file, id)}
             />
           ) : sourceSetup === "postgres" ? (
             <PostgresSetup
@@ -776,9 +779,9 @@ export default function App() {
                   <Icon name="upload" />
                   {uploading ? "Загружаем…" : selectedUploadFile ? "Загрузить файл" : "Выбрать CSV"}
                 </button>
-                <small>UTF-8 · запятая или ; · первая строка — заголовки</small>
+                <small>UTF-8, UTF-16 или Windows-1251 · до 512 МиБ</small>
               </section>
-              <details className="upload-advanced"><summary>Дополнительно</summary><p>Файл должен быть в кодировке UTF-8. Разделитель — запятая или точка с запятой; первая строка содержит названия столбцов.</p></details>
+              <details className="upload-advanced"><summary>Дополнительно</summary><p>Поддерживаются UTF-8, UTF-16 и Windows-1251; разделители — запятая, точка с запятой, табуляция и вертикальная черта. Первая строка содержит уникальные названия столбцов. Для замены данных откройте «Схема» у нужного источника.</p></details>
             </>
           )}
         </main>

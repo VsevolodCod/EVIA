@@ -194,6 +194,30 @@ def test_source_service_dispatches_live_postgresql_without_changing_csv(tmp_path
         catalog.close()
 
 
+def test_postgresql_profile_counts_empty_strings_as_missing_sample_values():
+    from app.config import PostgresSettings
+    from app.data_sources.postgresql_adapter import PostgreSQLAdapter
+
+    adapter = PostgreSQLAdapter(
+        PostgresSettings(
+            dsn="postgresql://reader:secret@db.example/analytics",
+            allowed_tables=frozenset({("public", "orders")}),
+            connect_timeout_seconds=5,
+            statement_timeout_ms=10_000,
+        ),
+    )
+    adapter.preview = lambda *_args, **_kwargs: [{"value": ""}, {"value": "paid"}, {"value": None}]
+
+    profile = adapter.profile("public", "orders")
+
+    assert profile["columns"]["value"] == {
+        "sample_non_null_count": 1,
+        "sample_null_count": 2,
+        "distinct_sample_values": 1,
+        "top_values": [{"value": "paid", "count": 1}],
+    }
+
+
 def test_source_service_hides_stale_postgresql_catalog_entries_after_allowlist_changes(tmp_path):
     from app.config import PostgresSettings
     from app.data_sources.postgresql_adapter import PostgreSQLAdapter
