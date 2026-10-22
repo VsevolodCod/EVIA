@@ -16,7 +16,7 @@ from fastapi.responses import FileResponse
 from app.agent import AgentRuntime
 from app.config import PROJECT_ROOT, get_settings
 from app.csv_import import CSVImportError
-from app.data_sources.postgresql_adapter import PostgreSQLAdapter
+from app.data_sources.postgresql_adapter import PostgresSourceError, PostgreSQLAdapter
 from app.db import create_chat_database, initialize_chat_database
 from app.llm.factory import create_llm_provider
 from app.models import AskRequest, AskResponse, ChatMessage, DataSource, CSVVersion, Chat, ChatCreateRequest, ChatSummary, \
@@ -26,6 +26,7 @@ from app.source_service import SourceService
 from app.tools import build_tool_registry
 from app.core.logging import setup_logging
 from app.chat_manager import ChatManager, ChatNotFoundError
+from app.contracts.v1 import Profile
 from app.web import mount_frontend
 
 
@@ -203,7 +204,7 @@ def preview_source(source_id: str, limit: int = 10):
         ) from exc
 
 
-@app.get("/sources/{source_id}/profile")
+@app.get("/sources/{source_id}/profile", response_model=Profile)
 def profile_source(source_id: str):
     try:
         return source_service.profile(source_id)
@@ -212,6 +213,28 @@ def profile_source(source_id: str):
         raise HTTPException(
             status_code=404,
             detail=str(exc),
+        ) from exc
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        ) from exc
+
+    except PostgresSourceError as exc:
+        status_code, message = {
+            "CONNECTION_FAILED": (503, "PostgreSQL source is temporarily unavailable."),
+            "QUERY_TIMEOUT": (504, "PostgreSQL source timed out."),
+            "INTERNAL_ERROR": (503, "PostgreSQL source is temporarily unavailable."),
+            "SOURCE_FORBIDDEN": (403, "PostgreSQL source is not available to this request."),
+        }[exc.code]
+        raise HTTPException(
+            status_code=status_code,
+            detail={
+                "code": exc.code,
+                "message": message,
+                "retryable": status_code in {503, 504},
+            },
         ) from exc
 
 

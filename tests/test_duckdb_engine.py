@@ -142,3 +142,106 @@ def test_legacy_catalog_source_receives_snapshot_before_materialization(tmp_path
         assert service.data_engine.has_table(repaired)
     finally:
         catalog.close()
+
+
+def test_profile_calculates_full_snapshot_statistics_and_typed_blocks(tmp_path):
+    from app.contracts.v1 import Profile
+    from app.data_engine import DuckDBDataEngine
+    from app.models import ImportReport
+
+    null_value = "__EVIA_NULL_profile-sha__"
+    source = DataSource(
+        source_id="profile-source",
+        snapshot_id="profile-snapshot",
+        name="Profile source",
+        source_type="csv",
+        import_report=ImportReport(
+            sha256="profile-sha",
+            typed_sql_types={
+                "unique_id": "VARCHAR",
+                "non_unique_id": "VARCHAR",
+                "label": "VARCHAR",
+                "amount": "DECIMAL(38,2)",
+                "day": "DATE",
+            },
+        ),
+    )
+    csv_path = tmp_path / "profile.csv"
+    csv_path.write_text(
+        "unique_id;non_unique_id;label;amount;day\n"
+        "id-1;repeat;alpha;10,50;2026-01-20\n"
+        "id-2;repeat;;0,00;2026-01-01\n"
+        f"id-3;tail;{null_value};5,25;2026-01-10\n"
+        "id-4;tail;beta;4,00;2026-02-02\n"
+        "id-5;tail;gamma;4,00;2026-01-15\n",
+        encoding="utf-8",
+    )
+    engine = DuckDBDataEngine(tmp_path / "analytics.duckdb")
+    engine.import_csv(source, csv_path, delimiter=";", typed_sql_types=source.import_report.typed_sql_types)
+
+    profile = engine.profile(source, sample_size=2)
+
+    Profile.model_validate(profile)
+    assert profile["processed_rows"] == 5
+    assert profile["coverage"] == "full"
+    assert profile["snapshot_id"] == "profile-snapshot"
+    assert profile["sample_size"] == 2
+    assert profile["sample_limit"] == 2
+    assert profile["columns"]["unique_id"]["distinct_count"] == 5
+    assert profile["columns"]["unique_id"]["is_identifier_candidate"] is True
+    assert profile["columns"]["non_unique_id"]["is_identifier_candidate"] is False
+    assert profile["columns"]["label"] == {
+        "sample_non_null_count": 1,
+        "sample_null_count": 1,
+        "distinct_sample_values": 1,
+        "top_values": [{"value": "alpha", "count": 1}],
+        "top_values_coverage": "sample",
+        "non_null_count": 4,
+        "null_count": 1,
+        "empty_count": 1,
+        "distinct_count": 4,
+        "uniqueness_ratio": 1.0,
+        "is_identifier_candidate": False,
+        "numeric": None,
+        "temporal": None,
+    }
+    assert profile["columns"]["non_unique_id"]["top_values"] == [{"value": "repeat", "count": 2}]
+    assert profile["columns"]["amount"]["numeric"] == {
+        "count": 5,
+        "minimum": "0.00",
+        "maximum": "10.50",
+        "total": "23.75",
+        "average": "4.75",
+    }
+    assert profile["columns"]["day"]["temporal"] == {
+        "count": 5,
+        "minimum": "2026-01-01",
+        "maximum": "2026-02-02",
+    }
+
+
+def test_profile_for_legacy_raw_import_is_a_complete_text_only_payload(tmp_path):
+    from app.contracts.v1 import Profile
+    from app.data_engine import DuckDBDataEngine
+
+    source = DataSource(
+        source_id="legacy-profile-source",
+        name="Legacy profile source",
+        source_type="csv",
+    )
+    csv_path = tmp_path / "legacy-profile.csv"
+    csv_path.write_text("id,text\n1,\n2,value\n", encoding="utf-8")
+    engine = DuckDBDataEngine(tmp_path / "analytics.duckdb")
+    engine.import_csv(source, csv_path, delimiter=",")
+
+    profile = engine.profile(source, sample_size=10)
+
+    Profile.model_validate(profile)
+    assert profile["snapshot_id"] == "legacy"
+    assert profile["sample_size"] == 2
+    assert profile["sample_limit"] == 10
+    assert profile["columns"]["id"]["numeric"] is None
+    assert profile["columns"]["id"]["temporal"] is None
+    assert profile["columns"]["text"]["non_null_count"] == 2
+    assert profile["columns"]["text"]["null_count"] == 0
+    assert profile["columns"]["text"]["empty_count"] == 1

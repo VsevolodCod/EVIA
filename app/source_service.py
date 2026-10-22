@@ -4,6 +4,8 @@ import uuid
 from pathlib import Path
 from typing import Any, BinaryIO
 
+from pydantic import ValidationError
+
 from app.data_sources.csv_adapter import CSVAdapter
 from app.data_sources.csv_format import (
     PARSER_VERSION,
@@ -13,7 +15,7 @@ from app.data_sources.csv_format import (
 from app.data_engine import DuckDBDataEngine
 from app.csv_import import CSVImportError, ImportReport, copy_original, scan_csv
 from app.data_sources.postgresql_adapter import PostgreSQLAdapter
-from app.contracts.v1 import Provenance, QueryResult
+from app.contracts.v1 import Profile, Provenance, QueryResult
 from app.models import CSVVersion, DataSource, SourceSchema, utc_now
 from app.safe_sql import SafeQueryExecutor
 from app.schema_catalog import CatalogConflictError, SchemaCatalog
@@ -228,10 +230,63 @@ class SourceService:
         if source.source_type == "postgresql":
             if self.postgres_adapter is None:
                 raise ValueError("PostgreSQL source is not configured")
-            return self.postgres_adapter.profile(source)
+            profile = self.postgres_adapter.profile(source)
+            try:
+                return Profile.model_validate(profile).model_dump(mode="json")
+            except ValidationError:
+                return Profile.model_validate(
+                    self._sampled_postgresql_profile(profile)
+                ).model_dump(mode="json")
 
         source = self._ensure_materialized(source)
-        return self.data_engine.profile(source, self.csv_adapter.sample_size)
+        return Profile.model_validate(
+            self.data_engine.profile(source, self.csv_adapter.sample_size)
+        ).model_dump(mode="json")
+
+    @staticmethod
+    def _sampled_postgresql_profile(profile: dict[str, Any]) -> dict[str, Any]:
+        """Make the legacy bounded PostgreSQL sample explicit without mutating its source."""
+        sample_size = profile.get("sample_size", 0)
+        if not isinstance(sample_size, int) or sample_size < 0:
+            sample_size = 0
+        sample_limit = profile.get("sample_limit", sample_size or 1)
+        if not isinstance(sample_limit, int) or sample_limit < 1:
+            sample_limit = max(sample_size, 1)
+
+        columns: dict[str, dict[str, Any]] = {}
+        raw_columns = profile.get("columns", {})
+        if isinstance(raw_columns, dict):
+            for name, raw_column in raw_columns.items():
+                column = raw_column if isinstance(raw_column, dict) else {}
+                non_null_count = SourceService._nonnegative_int(
+                    column.get("sample_non_null_count"), default=0
+                )
+                null_count = SourceService._nonnegative_int(
+                    column.get("sample_null_count"), default=0
+                )
+                distinct_count = SourceService._nonnegative_int(
+                    column.get("distinct_sample_values"), default=0
+                )
+                top_values = column.get("top_values", [])
+                columns[str(name)] = {
+                    "sample_non_null_count": non_null_count,
+                    "sample_null_count": null_count,
+                    "distinct_sample_values": distinct_count,
+                    "top_values": top_values if isinstance(top_values, list) else [],
+                }
+
+        note = profile.get("note")
+        return {
+            "sample_size": sample_size,
+            "sample_limit": sample_limit,
+            "coverage": "sample",
+            "columns": columns,
+            "note": note if isinstance(note, str) else "Column statistics use a bounded sample.",
+        }
+
+    @staticmethod
+    def _nonnegative_int(value: Any, *, default: int) -> int:
+        return value if isinstance(value, int) and value >= 0 else default
 
     def query(
         self,

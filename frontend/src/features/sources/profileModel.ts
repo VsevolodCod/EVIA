@@ -1,6 +1,18 @@
 import type { Profile, SourceSchema } from "../../api";
 
 export const numberText = (value: number) => value.toLocaleString("ru-RU");
+export function rowsText(count: number) {
+  const remainder = Math.abs(count) % 100;
+  const lastDigit = remainder % 10;
+  const noun = remainder > 10 && remainder < 20
+    ? "строк"
+    : lastDigit === 1
+      ? "строка"
+      : lastDigit > 1 && lastDigit < 5
+        ? "строки"
+        : "строк";
+  return `${numberText(count)} ${noun}`;
+}
 export const percentText = (value: number | null) =>
   value === null
     ? "—"
@@ -25,14 +37,27 @@ export type ProfileField = {
   stats?: Profile["columns"][string];
 };
 
+export type ExactColumnProfile = Extract<Profile, { coverage: "full" }>["columns"][string];
+
+export function hasExactStats(
+  stats: Profile["columns"][string],
+): stats is ExactColumnProfile {
+  return "non_null_count" in stats;
+}
+
 export function profileModel(schema: SourceSchema, profile: Profile) {
   const fields: ProfileField[] = schema.objects.flatMap((object) =>
-    object.fields.map((field) => ({
-      name: field.name,
-      type: field.inferred_type,
-      identifier: field.is_identifier_candidate,
-      stats: profile.columns[field.name],
-    })),
+    object.fields.map((field) => {
+      const stats = profile.columns[field.name];
+      return {
+        name: field.name,
+        type: field.inferred_type,
+        identifier: stats && hasExactStats(stats)
+          ? stats.is_identifier_candidate
+          : field.is_identifier_candidate,
+        stats,
+      };
+    }),
   );
   const counts = schema.objects.map((object) => object.row_count);
   const totalRows =
@@ -40,12 +65,13 @@ export function profileModel(schema: SourceSchema, profile: Profile) {
       ? counts.reduce<number>((sum, count) => sum + (count ?? 0), 0)
       : null;
   const profiled = fields.filter((field) => field.stats !== undefined);
+  const exact = profile.coverage === "full";
   const filled = profiled.reduce(
-    (sum, field) => sum + field.stats!.sample_non_null_count,
+    (sum, field) => sum + (exact ? (field.stats! as ExactColumnProfile).non_null_count : field.stats!.sample_non_null_count),
     0,
   );
   const missing = profiled.reduce(
-    (sum, field) => sum + field.stats!.sample_null_count,
+    (sum, field) => sum + (exact ? (field.stats! as ExactColumnProfile).null_count : field.stats!.sample_null_count),
     0,
   );
   const typeCounts = new Map<string, number>();
@@ -57,6 +83,7 @@ export function profileModel(schema: SourceSchema, profile: Profile) {
   );
   return {
     fields,
+    coverage: profile.coverage,
     totalRows,
     filled,
     missing,
@@ -64,19 +91,16 @@ export function profileModel(schema: SourceSchema, profile: Profile) {
     completeness: ratio(filled, filled + missing),
     types: [...typeCounts].map(([label, count]) => ({ label, count })),
     missingFields: profiled
-      .filter((field) => field.stats!.sample_null_count > 0)
-      .sort((a, b) => b.stats!.sample_null_count - a.stats!.sample_null_count),
+      .filter((field) => exact
+        ? (field.stats! as ExactColumnProfile).null_count > 0
+        : field.stats!.sample_null_count > 0)
+      .sort((a, b) => exact
+        ? (b.stats! as ExactColumnProfile).null_count - (a.stats! as ExactColumnProfile).null_count
+        : b.stats!.sample_null_count - a.stats!.sample_null_count),
   };
 }
 export type ProfileModel = ReturnType<typeof profileModel>;
 
 export function sampleDescription(profile: Profile) {
-  const count = profile.sample_size;
-  const noun =
-    count % 10 === 1 && count % 100 !== 11
-      ? "строка"
-      : [2, 3, 4].includes(count % 10) && ![12, 13, 14].includes(count % 100)
-        ? "строки"
-        : "строк";
-  return `Выборка: ${numberText(count)} ${noun} · до ${numberText(profile.sample_limit)} первых строк`;
+  return `Выборка: ${rowsText(profile.sample_size)} · до ${numberText(profile.sample_limit)} первых строк`;
 }

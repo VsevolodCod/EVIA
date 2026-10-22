@@ -1,8 +1,15 @@
 import { useState } from "react";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { SourceInspector } from "./SourceInspector";
 import { api, type Profile, type Source, type SourceSchema } from "../../api";
 import type { Entry, View } from "../chat/types";
+
+const analyticsCss = readFileSync(
+  resolve(process.cwd(), "src/features/sources/analytics.css"),
+  "utf8",
+);
 
 const source: Source = {
   source_id: "A",
@@ -11,6 +18,7 @@ const source: Source = {
   status: "available",
   created_at: "2026-10-18",
   schema_version: 1,
+  snapshot_id: "sales-snapshot-001",
 };
 const schema: SourceSchema = {
   source_id: "A",
@@ -34,6 +42,12 @@ const schema: SourceSchema = {
           nullable: false,
           is_identifier_candidate: false,
         },
+        {
+          name: "created_at",
+          inferred_type: "datetime",
+          nullable: false,
+          is_identifier_candidate: false,
+        },
       ],
     },
   ],
@@ -41,7 +55,10 @@ const schema: SourceSchema = {
 const profile: Profile = {
   sample_size: 4,
   sample_limit: 500,
-  note: "Bounded sample",
+  processed_rows: 2_000,
+  coverage: "full",
+  snapshot_id: "sales-snapshot-001",
+  note: "Full dataset statistics; top values are sampled.",
   columns: {
     region: {
       sample_null_count: 1,
@@ -51,6 +68,13 @@ const profile: Profile = {
         { value: "Север", count: 2 },
         { value: "Юг", count: 1 },
       ],
+      non_null_count: 1_900,
+      null_count: 100,
+      empty_count: 20,
+      distinct_count: 87,
+      uniqueness_ratio: 87 / 1_900,
+      is_identifier_candidate: false,
+      top_values_coverage: "sample",
     },
     revenue: {
       sample_null_count: 0,
@@ -60,6 +84,65 @@ const profile: Profile = {
         { value: "100", count: 1 },
         { value: "200", count: 1 },
       ],
+      non_null_count: 2_000,
+      null_count: 0,
+      empty_count: 0,
+      distinct_count: 2_000,
+      uniqueness_ratio: 1,
+      is_identifier_candidate: true,
+      top_values_coverage: "sample",
+      numeric: {
+        count: 2_000,
+        minimum: "0.000000123456789",
+        maximum: "9876543210.123456789",
+        total: "12345678901.23456789",
+        average: "6172839.450617283945",
+      },
+    },
+    created_at: {
+      sample_null_count: 0,
+      sample_non_null_count: 4,
+      distinct_sample_values: 4,
+      top_values: [],
+      non_null_count: 2_000,
+      null_count: 0,
+      empty_count: 0,
+      distinct_count: 2_000,
+      uniqueness_ratio: 1,
+      is_identifier_candidate: false,
+      top_values_coverage: "sample",
+      temporal: {
+        count: 2_000,
+        minimum: "2024-01-01T00:00:00.000001Z",
+        maximum: "2026-10-22T23:59:59.999999Z",
+      },
+    },
+  },
+};
+
+const sampledProfile: Profile = {
+  sample_size: 4,
+  sample_limit: 500,
+  coverage: "sample",
+  note: "Профиль построен по выборке.",
+  columns: {
+    region: {
+      sample_null_count: 1,
+      sample_non_null_count: 3,
+      distinct_sample_values: 2,
+      top_values: [{ value: "Север", count: 2 }],
+    },
+    revenue: {
+      sample_null_count: 0,
+      sample_non_null_count: 4,
+      distinct_sample_values: 4,
+      top_values: [{ value: "100", count: 1 }],
+    },
+    created_at: {
+      sample_null_count: 0,
+      sample_non_null_count: 4,
+      distinct_sample_values: 4,
+      top_values: [],
     },
   },
 };
@@ -111,6 +194,12 @@ it("keeps the section navigation above every analytics view", async () => {
   expect(navigation!.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
+it("keeps the profile scope disclosure visible at mobile widths", () => {
+  expect(analyticsCss).toMatch(
+    /@media \(max-width: 640px\) \{[\s\S]*?\.profile-scope\s*\{\s*display:\s*flex;/,
+  );
+});
+
 it("shows import accounting and allows replacing a CSV with a new snapshot", async () => {
   setup();
   const onReimport = vi.fn();
@@ -137,7 +226,7 @@ it("drills down from missing cells to a column and searches columns", async () =
   fireEvent.click(screen.getByRole("button", { name: "Качество" }));
   fireEvent.click(screen.getByRole("button", { name: "Изучить region" }));
   const column = await screen.findByRole("region", { name: "Столбец region" });
-  expect(within(column).getAllByText("25%")).toHaveLength(2);
+  expect(within(column).getAllByText("5%")).toHaveLength(1);
   expect(within(column).getByText("Север")).toBeInTheDocument();
   fireEvent.change(screen.getByRole("searchbox", { name: "Поиск столбца" }), {
     target: { value: "REVENUE" },
@@ -154,6 +243,56 @@ it("drills down from missing cells to a column and searches columns", async () =
   expect(screen.getByText("Столбцы не найдены")).toBeInTheDocument();
 });
 
+it("labels full CSV statistics as exact while keeping top values scoped to the sample", async () => {
+  setup();
+  render(<Workspace initial="profile" />);
+
+  expect(await screen.findByText("Статистика по всему датасету")).toBeInTheDocument();
+  expect(screen.getByText("Обработано 2 000 строк")).toBeInTheDocument();
+
+  const revenue = screen.getByRole("region", { name: "Столбец revenue" });
+  fireEvent.click(revenue.querySelector("summary")!);
+  expect(within(revenue).getByText("Заполнено")).toBeInTheDocument();
+  expect(within(revenue).getByText("NULL")).toBeInTheDocument();
+  expect(within(revenue).getByText("Пустые строки")).toBeInTheDocument();
+  expect(within(revenue).getByText("Уникальных значений")).toBeInTheDocument();
+  expect(within(revenue).getByText("Уникальность")).toBeInTheDocument();
+  expect(within(revenue).getAllByText("2 000")).toHaveLength(2);
+  expect(within(revenue).getByText(/Гипотеза: кандидат в идентификаторы/)).toBeInTheDocument();
+  expect(within(revenue).getByText("Диапазон чисел")).toBeInTheDocument();
+  expect(within(revenue).getByText("0.000000123456789 — 9876543210.123456789")).toBeInTheDocument();
+  expect(within(revenue).getByText("Частые значения — только по выборке")).toBeInTheDocument();
+  expect(within(revenue).getByText("4 строки в выборке")).toBeInTheDocument();
+
+  const createdAt = screen.getByRole("region", { name: "Столбец created_at" });
+  fireEvent.click(createdAt.querySelector("summary")!);
+  expect(within(createdAt).getByText("Диапазон дат")).toBeInTheDocument();
+  expect(within(createdAt).getByText("2024-01-01T00:00:00.000001Z — 2026-10-22T23:59:59.999999Z")).toBeInTheDocument();
+});
+
+it("keeps PostgreSQL sample profiles visibly limited to sampled statistics", async () => {
+  setup(sampledProfile);
+  render(<Workspace initial="profile" />);
+
+  expect(await screen.findByText(/Выборка: 4 строки/)).toBeInTheDocument();
+  expect(screen.getByText("Статистика относится к выборке, а не ко всему источнику.")).toBeInTheDocument();
+  expect(screen.queryByText("Статистика по всему датасету")).not.toBeInTheDocument();
+  const region = screen.getByRole("region", { name: "Столбец region" });
+  fireEvent.click(region.querySelector("summary")!);
+  expect(within(region).getByText("Количество в выборке")).toBeInTheDocument();
+  expect(within(region).queryByText("NULL")).not.toBeInTheDocument();
+  expect(within(region).queryByText("Пустые строки")).not.toBeInTheDocument();
+  expect(within(region).queryByText("Уникальность")).not.toBeInTheDocument();
+});
+
+it("rejects an exact profile created for a different source snapshot", async () => {
+  setup({ ...profile, snapshot_id: "stale-snapshot" });
+  render(<Workspace current={{ ...source, snapshot_id: "current-snapshot" }} initial="profile" />);
+
+  expect(await screen.findByText(/другой версии источника/i)).toBeInTheDocument();
+  expect(screen.queryByText("Статистика по всему датасету")).not.toBeInTheDocument();
+});
+
 it("keeps an empty preview distinct from an incomplete profile", async () => {
   setup({ ...profile, sample_size: 0, columns: {} });
   vi.mocked(api.preview).mockResolvedValue([]);
@@ -161,7 +300,7 @@ it("keeps an empty preview distinct from an incomplete profile", async () => {
   expect(await screen.findByText("В предпросмотре нет строк")).toBeInTheDocument();
   expect(screen.queryByText("100%")).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Столбцы" }));
-  expect(screen.getAllByText("Статистика столбца недоступна")).toHaveLength(2);
+  expect(screen.getAllByText("Статистика столбца недоступна")).toHaveLength(3);
 });
 
 it("keeps source dashboard calculations tied to preview rather than profile coverage", async () => {

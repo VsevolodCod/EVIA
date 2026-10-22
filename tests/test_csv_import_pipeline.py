@@ -9,6 +9,7 @@ import pytest
 
 from app.schema_catalog import SchemaCatalog
 from app.source_service import SourceService
+from app.contracts.v1 import Profile
 
 
 @pytest.fixture
@@ -175,6 +176,121 @@ def test_reimport_creates_new_snapshot_and_keeps_previous_original(service):
     assert service.raw_csv_path(second.source_id, second.snapshot_id).read_bytes() == b"id;amount\n001;20\n"
     assert service.preview(second.source_id) == [{"id": "001", "amount": "20"}]
     assert [version.snapshot_id for version in service.list_csv_versions(first.source_id)] == [first.snapshot_id, second.snapshot_id]
+
+
+def test_profile_reimport_replaces_current_snapshot_statistics(service):
+    first = service.register_csv("sales.csv", b"id,amount\n001,10\n002,20\n")
+    first_profile = service.profile(first.source_id)
+    Profile.model_validate(first_profile)
+
+    second = service.register_csv("sales.csv", b"id,amount\n001,100\n", source_id=first.source_id)
+    current_profile = service.profile(second.source_id)
+
+    Profile.model_validate(current_profile)
+    assert current_profile["snapshot_id"] == second.snapshot_id
+    assert current_profile["snapshot_id"] != first.snapshot_id
+    assert current_profile["processed_rows"] == 1
+    assert current_profile["columns"]["amount"]["numeric"] == {
+        "count": 1,
+        "minimum": "100",
+        "maximum": "100",
+        "total": "100",
+        "average": "100",
+    }
+
+
+def test_profile_treats_whitespace_only_cells_as_empty_across_raw_and_typed_statistics(service):
+    source = service.register_csv(
+        "spaces.csv",
+        b"amount,day\n1,2026-01-01\n , \n",
+    )
+
+    profile = service.profile(source.source_id)
+
+    assert profile["columns"]["amount"]["empty_count"] == 1
+    assert profile["columns"]["amount"]["numeric"]["count"] == 1
+    assert profile["columns"]["day"]["empty_count"] == 1
+    assert profile["columns"]["day"]["temporal"]["count"] == 1
+
+
+def test_profile_calculates_exact_average_for_large_integers(service):
+    source = service.register_csv(
+        "large-integers.csv",
+        b"amount\n9007199254740992\n9007199254740994\n",
+    )
+
+    profile = service.profile(source.source_id)
+
+    assert profile["columns"]["amount"]["numeric"]["average"] == "9007199254740993"
+
+
+def test_profile_sums_maximum_precision_decimals_without_overflow(service):
+    from decimal import Decimal, localcontext
+
+    value = "9" * 36 + ".99"
+    source = service.register_csv(
+        "max-decimal.csv",
+        f"amount\n{value}\n{value}\n".encode(),
+    )
+
+    profile = service.profile(source.source_id)
+
+    with localcontext() as context:
+        context.prec = 100
+        expected_total = format(Decimal(value) + Decimal(value), "f")
+    assert source.import_report.typed_sql_types["amount"] == "DECIMAL(38,2)"
+    assert profile["columns"]["amount"]["numeric"]["total"] == expected_total
+    assert profile["columns"]["amount"]["numeric"]["average"] == value
+
+
+def test_legacy_postgresql_profile_is_explicitly_sampled_with_a_stable_snapshot(tmp_path):
+    from app.models import DataSource
+
+    source = DataSource(
+        source_id="postgresql:public:orders",
+        name="public.orders",
+        source_type="postgresql",
+        schema_name="public",
+        table_name="orders",
+        status="available",
+    )
+
+    class LegacyAdapter:
+        def profile(self, requested_source):
+            assert requested_source == source
+            return {
+                "sample_size": 1,
+                "sample_limit": 100,
+                "columns": {
+                    "id": {
+                        "sample_non_null_count": 1,
+                        "sample_null_count": 0,
+                        "distinct_sample_values": 1,
+                        "top_values": [{"value": "1", "count": 1}],
+                    }
+                },
+                "note": "bounded sample",
+            }
+
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    try:
+        catalog.upsert_source(source)
+        service = SourceService(tmp_path / "data", catalog, postgres_adapter=LegacyAdapter())
+
+        first = service.profile(source.source_id)
+        assert first["coverage"] == "sample"
+        assert first["sample_size"] == 1
+        assert first["sample_limit"] == 100
+        assert first["columns"]["id"] == {
+            "sample_non_null_count": 1,
+            "sample_null_count": 0,
+            "distinct_sample_values": 1,
+            "top_values": [{"value": "1", "count": 1}],
+        }
+        assert "processed_rows" not in first
+        assert "snapshot_id" not in first
+    finally:
+        catalog.close()
 
 
 def test_invalid_reimport_leaves_previous_snapshot_and_catalog_untouched(service):

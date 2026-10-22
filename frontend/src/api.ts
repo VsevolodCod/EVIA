@@ -44,22 +44,101 @@ const schemaSchema = z.object({
     }),
   ),
 });
-const profileSchema = z.object({
+const datasetSnapshotSchema = z.object({
+  source_id: z.string().min(1).max(200),
+  snapshot_id: z.string().min(1).max(200),
+  schema_version: z.number().int().min(1),
+  content_sha256: z.string().regex(/^[0-9a-f]{64}$/),
+  created_at: z.string(),
+  state: z.enum(["importing", "ready", "failed"]),
+  row_count: z.number().int().nonnegative().nullable().optional(),
+});
+const sampleColumnProfileSchema = z.object({
+  sample_non_null_count: z.number().int().nonnegative(),
+  sample_null_count: z.number().int().nonnegative(),
+  distinct_sample_values: z.number().int().nonnegative(),
+  top_values: z.array(
+    z.object({ value: z.string(), count: z.number().int().nonnegative() }).strict(),
+  ),
+}).strict();
+const sampleProfileSchema = z.object({
   sample_size: z.number().int().nonnegative(),
-  sample_limit: z.number().int().nonnegative(),
+  sample_limit: z.number().int().min(1),
+  coverage: z.literal("sample"),
   note: z.string(),
+  columns: z.record(z.string(), sampleColumnProfileSchema),
+}).strict().superRefine((profile, context) => {
+  if (profile.sample_size > profile.sample_limit) {
+    context.addIssue({ code: "custom", path: ["sample_size"], message: "sample_size exceeds sample_limit" });
+  }
+  for (const [name, column] of Object.entries(profile.columns)) {
+    if (column.sample_non_null_count + column.sample_null_count !== profile.sample_size) {
+      context.addIssue({ code: "custom", path: ["columns", name], message: "sample counts do not match sample_size" });
+    }
+    if (column.distinct_sample_values > column.sample_non_null_count || column.top_values.reduce((total, value) => total + value.count, 0) > column.sample_non_null_count) {
+      context.addIssue({ code: "custom", path: ["columns", name], message: "sample values exceed non-null values" });
+    }
+  }
+});
+const fullProfileSchema = z.object({
+  sample_size: z.number().int().nonnegative(),
+  sample_limit: z.number().int().min(1),
+  processed_rows: z.number().int().nonnegative(),
+  coverage: z.literal("full"),
+  snapshot_id: z.string().min(1),
+  note: z.string(),
+  snapshot: datasetSnapshotSchema.nullable().optional(),
   columns: z.record(
     z.string(),
-    z.object({
-      sample_non_null_count: z.number().int().nonnegative(),
-      sample_null_count: z.number().int().nonnegative(),
-      distinct_sample_values: z.number().int().nonnegative(),
-      top_values: z.array(
-        z.object({ value: z.string(), count: z.number().int().nonnegative() }),
-      ),
-    }),
+    sampleColumnProfileSchema.extend({
+      non_null_count: z.number().int().nonnegative(),
+      null_count: z.number().int().nonnegative(),
+      empty_count: z.number().int().nonnegative(),
+      distinct_count: z.number().int().nonnegative(),
+      uniqueness_ratio: z.number().min(0).max(1),
+      is_identifier_candidate: z.boolean(),
+      top_values_coverage: z.literal("sample"),
+      numeric: z.object({
+        count: z.number().int().nonnegative(),
+        minimum: z.string(),
+        maximum: z.string(),
+        total: z.string(),
+        average: z.string(),
+      }).nullable().optional(),
+      temporal: z.object({
+        count: z.number().int().nonnegative(),
+        minimum: z.string(),
+        maximum: z.string(),
+      }).nullable().optional(),
+    }).strict(),
   ),
+}).strict().superRefine((profile, context) => {
+  if (profile.sample_size > profile.sample_limit) {
+    context.addIssue({ code: "custom", path: ["sample_size"], message: "sample_size exceeds sample_limit" });
+  }
+  if (profile.snapshot?.row_count != null && profile.snapshot.row_count !== profile.processed_rows) {
+    context.addIssue({ code: "custom", path: ["processed_rows"], message: "processed_rows does not match snapshot" });
+  }
+  if (profile.snapshot && profile.snapshot.snapshot_id !== profile.snapshot_id) {
+    context.addIssue({ code: "custom", path: ["snapshot_id"], message: "profile snapshot does not match attached snapshot" });
+  }
+  for (const [name, column] of Object.entries(profile.columns)) {
+    if (column.sample_non_null_count + column.sample_null_count !== profile.sample_size || column.distinct_sample_values > column.sample_non_null_count || column.top_values.reduce((total, value) => total + value.count, 0) > column.sample_non_null_count) {
+      context.addIssue({ code: "custom", path: ["columns", name], message: "sample values are inconsistent" });
+    }
+    if (column.non_null_count + column.null_count !== profile.processed_rows || column.empty_count > column.non_null_count || column.distinct_count > column.non_null_count) {
+      context.addIssue({ code: "custom", path: ["columns", name], message: "exact counts are inconsistent" });
+    }
+    const typedCount = column.non_null_count - column.empty_count;
+    if ((column.numeric && column.temporal) || (column.numeric && column.numeric.count !== typedCount) || (column.temporal && column.temporal.count !== typedCount)) {
+      context.addIssue({ code: "custom", path: ["columns", name], message: "typed counts are inconsistent" });
+    }
+    if (column.is_identifier_candidate && (column.non_null_count !== profile.processed_rows || column.empty_count !== 0 || column.distinct_count !== profile.processed_rows)) {
+      context.addIssue({ code: "custom", path: ["columns", name], message: "identifier candidate is inconsistent" });
+    }
+  }
 });
+const profileSchema = z.discriminatedUnion("coverage", [fullProfileSchema, sampleProfileSchema]);
 const answerSchema = z.object({
   answer: z.string(),
   chat_id: z.string().nullable().optional(),

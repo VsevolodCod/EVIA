@@ -5,7 +5,7 @@ from jsonschema import Draft202012Validator, FormatChecker
 import pytest
 from pydantic import ValidationError
 
-from app.contracts.v1 import CONTRACTS, AgentResponse, QueryResult
+from app.contracts.v1 import CONTRACTS, AgentResponse, Profile, QueryResult
 from app.models import AskResponse
 from scripts.export_contracts import ROOT, documents, serialized
 
@@ -23,6 +23,188 @@ def test_export_is_current_and_fixtures_validate(path, document):
 def test_legacy_agent_reader_accepts_additive_contract():
     data = documents()['fixtures/success.json']['data']
     assert AskResponse.model_validate(data).answer == data['answer']
+
+
+def full_profile_data():
+    return {
+        'sample_size': 5,
+        'sample_limit': 500,
+        'processed_rows': 12,
+        'coverage': 'full',
+        'snapshot_id': 'snapshot-001',
+        'note': 'Top values use a bounded sample.',
+        'columns': {
+            'amount': {
+                'sample_non_null_count': 5,
+                'sample_null_count': 0,
+                'distinct_sample_values': 4,
+                'top_values': [{'value': '12.50', 'count': 2}],
+                'top_values_coverage': 'sample',
+                'non_null_count': 10,
+                'null_count': 2,
+                'empty_count': 0,
+                'distinct_count': 8,
+                'uniqueness_ratio': 0.8,
+                'is_identifier_candidate': False,
+                'numeric': {
+                    'count': 10,
+                    'minimum': '0.01',
+                    'maximum': '100.50',
+                    'total': '457.75',
+                    'average': '45.775',
+                },
+            },
+            'created_at': {
+                'sample_non_null_count': 5,
+                'sample_null_count': 0,
+                'distinct_sample_values': 5,
+                'top_values': [],
+                'top_values_coverage': 'sample',
+                'non_null_count': 12,
+                'null_count': 0,
+                'empty_count': 0,
+                'distinct_count': 12,
+                'uniqueness_ratio': 1.0,
+                'is_identifier_candidate': True,
+                'temporal': {
+                    'count': 12,
+                    'minimum': '2026-01-01T00:00:00Z',
+                    'maximum': '2026-01-12T00:00:00Z',
+                },
+            },
+        },
+    }
+
+
+def test_profile_distinguishes_exact_snapshot_statistics_from_sample_top_values():
+    profile = Profile.model_validate(full_profile_data()).root
+
+    assert profile.processed_rows == 12
+    assert profile.coverage == 'full'
+    assert profile.snapshot_id == 'snapshot-001'
+    assert profile.columns['amount'].numeric.minimum == '0.01'
+    assert profile.columns['amount'].top_values_coverage == 'sample'
+    assert profile.columns['created_at'].temporal.maximum == '2026-01-12T00:00:00Z'
+
+
+@pytest.mark.parametrize('path', [
+    ('processed_rows',),
+    ('snapshot_id',),
+    ('columns', 'amount', 'non_null_count'),
+    ('columns', 'amount', 'null_count'),
+    ('columns', 'amount', 'empty_count'),
+    ('columns', 'amount', 'distinct_count'),
+    ('columns', 'amount', 'uniqueness_ratio'),
+    ('columns', 'amount', 'is_identifier_candidate'),
+    ('columns', 'amount', 'top_values_coverage'),
+])
+def test_full_profile_rejects_missing_or_null_exact_statistics(path):
+    for invalid_value in (None, ...):
+        data = copy.deepcopy(full_profile_data())
+        target = data
+        for key in path[:-1]:
+            target = target[key]
+        if invalid_value is ...:
+            target.pop(path[-1])
+        else:
+            target[path[-1]] = invalid_value
+        with pytest.raises(ValidationError):
+            Profile.model_validate(data)
+
+
+def test_profile_without_explicit_coverage_is_rejected():
+    data = full_profile_data()
+    data.pop('coverage')
+    with pytest.raises(ValidationError):
+        Profile.model_validate(data)
+
+
+def test_profile_accepts_bounded_sample_without_exact_snapshot_claims():
+    profile = Profile.model_validate({
+        'sample_size': 2,
+        'sample_limit': 100,
+        'coverage': 'sample',
+        'note': 'Column statistics use a bounded sample.',
+        'columns': {
+            'id': {
+                'sample_non_null_count': 2,
+                'sample_null_count': 0,
+                'distinct_sample_values': 2,
+                'top_values': [{'value': '1', 'count': 1}],
+            },
+        },
+    })
+
+    assert profile.root.coverage == 'sample'
+    assert profile.model_dump() == {
+        'sample_size': 2,
+        'sample_limit': 100,
+        'coverage': 'sample',
+        'note': 'Column statistics use a bounded sample.',
+        'columns': {
+            'id': {
+                'sample_non_null_count': 2,
+                'sample_null_count': 0,
+                'distinct_sample_values': 2,
+                'top_values': [{'value': '1', 'count': 1}],
+            },
+        },
+    }
+
+
+def test_sample_profile_rejects_dataset_wide_statistics():
+    data = {
+        'sample_size': 2,
+        'sample_limit': 100,
+        'coverage': 'sample',
+        'note': 'Column statistics use a bounded sample.',
+        'columns': {
+            'id': {
+                'sample_non_null_count': 2,
+                'sample_null_count': 0,
+                'distinct_sample_values': 2,
+                'top_values': [],
+                'distinct_count': 2,
+            },
+        },
+    }
+    with pytest.raises(ValidationError):
+        Profile.model_validate(data)
+
+
+@pytest.mark.parametrize('mutate', [
+    lambda data: data.update(sample_size=501),
+    lambda data: data['columns']['amount'].update(non_null_count=9),
+    lambda data: data['columns']['amount'].update(empty_count=11),
+    lambda data: data['columns']['amount']['numeric'].update(count=11),
+    lambda data: data['columns']['amount'].update(temporal={
+        'count': 10, 'minimum': '2026-01-01', 'maximum': '2026-01-02',
+    }),
+])
+def test_full_profile_rejects_inconsistent_exact_statistics(mutate):
+    data = full_profile_data()
+    mutate(data)
+    with pytest.raises(ValidationError):
+        Profile.model_validate(data)
+
+
+def test_sample_profile_rejects_counts_outside_its_bounded_sample():
+    data = {
+        'sample_size': 101,
+        'sample_limit': 100,
+        'coverage': 'sample',
+        'note': 'Column statistics use a bounded sample.',
+        'columns': {
+            'id': {
+                'sample_non_null_count': 101,
+                'sample_null_count': 0,
+                'distinct_sample_values': 101,
+                'top_values': [],
+            },
+        },
+    }
+    with pytest.raises(ValidationError):
+        Profile.model_validate(data)
 
 
 @pytest.mark.parametrize('mutation', ['width', 'limit', 'count', 'decimal'])

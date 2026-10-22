@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Profile, Row, SourceSchema } from "../../api";
-import { numberText, percentText } from "../sources/profileModel";
+import { hasExactStats, numberText, percentText } from "../sources/profileModel";
 import { buildDashboardModel, type ChartValue } from "./dashboardModel";
 import { defaultPalette, loadPalette, savePalette, seriesColor, type PalettePreference } from "./palette";
 import { PaletteEditor } from "./PaletteEditor";
@@ -123,17 +123,27 @@ export function Dashboard({
   const standardDeviation = model.numeric
     ? Math.sqrt(model.numeric.values.reduce((sum, value) => sum + (value - model.numeric!.mean) ** 2, 0) / model.numeric.values.length)
     : 0;
-  const profiledRows = profile?.sample_size ?? 0;
+  const fullProfile = profile?.coverage === "full";
+  const profiledRows = profile
+    ? fullProfile
+      ? profile.processed_rows
+      : profile.sample_size
+    : 0;
   const profileLimit = profile?.sample_limit ?? 0;
   const missingFields = Object.values(profile?.columns ?? {}).filter(
-    (column) => column.sample_null_count > 0,
+    (column) => fullProfile && hasExactStats(column)
+      ? column.null_count > 0
+      : column.sample_null_count > 0,
   ).length;
   const missingColumns = Object.entries(profile?.columns ?? {})
     .map(([label, column]) => {
-      const total = column.sample_non_null_count + column.sample_null_count;
+      const exact = fullProfile && hasExactStats(column);
+      const total = exact
+        ? column.non_null_count + column.null_count
+        : column.sample_non_null_count + column.sample_null_count;
       return {
         label,
-        value: total ? (column.sample_null_count / total) * 100 : 0,
+        value: total ? ((exact ? column.null_count : column.sample_null_count) / total) * 100 : 0,
       };
     })
     .filter((column) => column.value > 0)
@@ -143,11 +153,15 @@ export function Dashboard({
     ? (() => {
         const columns = Object.values(profile.columns);
         const cells = columns.reduce(
-          (total, column) => total + column.sample_non_null_count + column.sample_null_count,
+          (total, column) => total + (fullProfile && hasExactStats(column)
+            ? column.non_null_count + column.null_count
+            : column.sample_non_null_count + column.sample_null_count),
           0,
         );
         const filled = columns.reduce(
-          (total, column) => total + column.sample_non_null_count,
+          (total, column) => total + (fullProfile && hasExactStats(column)
+            ? column.non_null_count
+            : column.sample_non_null_count),
           0,
         );
         return cells ? (filled / cells) * 100 : null;
@@ -155,7 +169,7 @@ export function Dashboard({
     : model.completeness;
   const hasSourceTotal = context === "source" && fullSourceRows != null;
   const profileReady = Boolean(
-    profile && profile.sample_size > 0 && Object.keys(profile.columns).length > 0,
+    profile && profiledRows > 0 && Object.keys(profile.columns).length > 0,
   );
   const scopeDescription = context === "result"
     ? model.rowCount
@@ -202,7 +216,7 @@ export function Dashboard({
     <div className="kpi-grid" aria-label="Ключевые показатели">
       <section className="dashboard-card"><span>{context === "result" ? "Строк в результате" : hasSourceTotal ? "Строк в источнике" : "Строк в предпросмотре"}</span><strong>{numberText(hasSourceTotal ? fullSourceRows : model.rowCount)}</strong><small>{context === "result" ? "Ответ инструмента" : hasSourceTotal ? "Полный датасет" : "Полный объём неизвестен"}</small></section>
       <section className="dashboard-card"><span>Столбцов</span><strong>{numberText(model.columnCount)}</strong></section>
-      <section className="dashboard-card"><span>{profile ? "Профиль покрывает" : "Заполнено ячеек"}</span><strong>{profile ? (profileReady ? rowsText(profiledRows) : "Нет данных") : percentText(model.completeness)}</strong><small>{profile ? (profileReady ? `выборка до ${numberText(profileLimit)} строк` : "Нет строк для анализа") : "доступных ячеек"}</small></section>
+      <section className="dashboard-card"><span>{profile ? (fullProfile ? "Профиль покрывает весь датасет" : "Профиль покрывает") : "Заполнено ячеек"}</span><strong>{profile ? (profileReady ? fullProfile ? `${rowsText(profiledRows)} обработано` : rowsText(profiledRows) : "Нет данных") : percentText(model.completeness)}</strong><small>{profile ? (profileReady ? fullProfile ? "Точная статистика" : `выборка до ${numberText(profileLimit)} строк` : "Нет строк для анализа") : "доступных ячеек"}</small></section>
       {profile && <section className={`dashboard-card quality-kpi ${profileReady && missingFields ? "needs-attention" : ""}`}><span>Качество данных</span><strong>{!profileReady ? "Нет профиля" : missingFields ? "Нужна проверка" : "Без пропусков"}</strong><small>{!profileReady ? "Нет строк для проверки" : missingFields ? `${fieldsText(missingFields)} с пропусками` : `${percentText(profileCompleteness)} заполнено`}</small></section>}
     </div>
     {hasCharts || missingColumns.length > 0 ? <div className="dashboard-grid">

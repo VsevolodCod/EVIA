@@ -27,9 +27,13 @@ def documents():
         'source': ('Source', source),
         'schema': ('SourceSchema', {'source_id': source['source_id'], 'parser_version': 2, 'version': 1, 'discovered_at': timestamp, 'objects': [], 'relations': []}),
         'snapshot': ('DatasetSnapshot', snapshot),
-        'profile': ('Profile', {'sample_size': 2, 'sample_limit': 500, 'columns': {'id': {
-            'sample_non_null_count': 2, 'sample_null_count': 0, 'distinct_sample_values': 2,
-            'top_values': [{'value': '0001', 'count': 1}, {'value': '0002', 'count': 1}]}}, 'note': 'Bounded sample'}),
+        'profile': ('Profile', {'sample_size': 2, 'sample_limit': 500, 'processed_rows': 2,
+            'coverage': 'full', 'snapshot_id': snapshot['snapshot_id'], 'columns': {'id': {
+                'sample_non_null_count': 2, 'sample_null_count': 0, 'distinct_sample_values': 2,
+                'top_values': [{'value': '0001', 'count': 1}, {'value': '0002', 'count': 1}],
+                'non_null_count': 2, 'null_count': 0, 'empty_count': 0, 'distinct_count': 2,
+                'uniqueness_ratio': 1.0, 'is_identifier_candidate': True,
+                'top_values_coverage': 'sample'}}, 'note': 'Full dataset statistics; top values are sampled.'}),
         'query': ('QueryResult', query),
         'empty': ('QueryResult', {**query, 'rows': [], 'returned_rows': 0}),
         'success': ('AgentResponse', {'answer': 'Synthetic fixture: 30.50', 'steps': 2,
