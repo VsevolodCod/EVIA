@@ -1,8 +1,15 @@
 import { useState } from "react";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { SourceInspector } from "./SourceInspector";
 import { api, type Profile, type Source, type SourceSchema } from "../../api";
 import type { Entry, View } from "../chat/types";
+
+const analyticsCss = readFileSync(
+  resolve(process.cwd(), "src/features/sources/analytics.css"),
+  "utf8",
+);
 
 const source: Source = {
   source_id: "A",
@@ -184,6 +191,12 @@ it("keeps the section navigation above every analytics view", async () => {
   const navigation = container.querySelector(".analytics-tabs");
   expect(navigation).not.toBeNull();
   expect(navigation!.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
+it("keeps the profile scope disclosure visible at mobile widths", () => {
+  expect(analyticsCss).toMatch(
+    /@media \(max-width: 640px\) \{[\s\S]*?\.profile-scope\s*\{\s*display:\s*flex;/,
+  );
 });
 
 it("shows import accounting and allows replacing a CSV with a new snapshot", async () => {
