@@ -187,6 +187,22 @@ class DuckDBDataEngine:
             names = [column[0] for column in cursor.description]
             return [dict(zip(names, row)) for row in cursor.fetchall()]
 
+    @staticmethod
+    def _exact_decimal_total(connection, table: str, column: str) -> Decimal:
+        """Sum a DECIMAL column without DuckDB's fixed-width SUM overflow.
+
+        The cursor is consumed in bounded batches, so a large CSV never
+        materializes a full numeric column in Python memory.
+        """
+        cursor = connection.execute(f"SELECT {column} FROM {table} WHERE {column} IS NOT NULL")
+        with localcontext() as context:
+            context.prec = 100
+            total = Decimal(0)
+            while rows := cursor.fetchmany(10_000):
+                for (value,) in rows:
+                    total += Decimal(str(value))
+            return +total
+
     def profile(self, source: DataSource, sample_size: int = 500) -> dict[str, Any]:
         if sample_size < 1:
             raise ValueError("sample_size must be positive")
@@ -261,19 +277,25 @@ class DuckDBDataEngine:
                 }
                 typed_type = typed_types.get(name)
                 if typed_type in {"BIGINT"} or (typed_type and typed_type.startswith("DECIMAL(")):
-                    count, minimum, maximum, total = connection.execute(
-                        f"SELECT COUNT({quoted}), MIN({quoted}), MAX({quoted}), SUM({quoted}) "
-                        f"FROM {typed_table}"
+                    count, minimum, maximum = connection.execute(
+                        f"SELECT COUNT({quoted}), MIN({quoted}), MAX({quoted}) FROM {typed_table}"
                     ).fetchone()
                     if count:
+                        total = (
+                            self._exact_decimal_total(connection, typed_table, quoted)
+                            if typed_type.startswith("DECIMAL(")
+                            else Decimal(str(connection.execute(
+                                f"SELECT SUM({quoted}) FROM {typed_table}"
+                            ).fetchone()[0]))
+                        )
                         with localcontext() as context:
                             context.prec = 100
-                            average = Decimal(str(total)) / Decimal(int(count))
+                            average = total / Decimal(int(count))
                         column["numeric"] = {
                             "count": int(count),
                             "minimum": format(Decimal(str(minimum)), "f"),
                             "maximum": format(Decimal(str(maximum)), "f"),
-                            "total": format(Decimal(str(total)), "f"),
+                            "total": format(total, "f"),
                             "average": format(average, "f"),
                         }
                     else:

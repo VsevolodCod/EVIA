@@ -224,6 +224,25 @@ def test_profile_calculates_exact_average_for_large_integers(service):
     assert profile["columns"]["amount"]["numeric"]["average"] == "9007199254740993"
 
 
+def test_profile_sums_maximum_precision_decimals_without_overflow(service):
+    from decimal import Decimal, localcontext
+
+    value = "9" * 36 + ".99"
+    source = service.register_csv(
+        "max-decimal.csv",
+        f"amount\n{value}\n{value}\n".encode(),
+    )
+
+    profile = service.profile(source.source_id)
+
+    with localcontext() as context:
+        context.prec = 100
+        expected_total = format(Decimal(value) + Decimal(value), "f")
+    assert source.import_report.typed_sql_types["amount"] == "DECIMAL(38,2)"
+    assert profile["columns"]["amount"]["numeric"]["total"] == expected_total
+    assert profile["columns"]["amount"]["numeric"]["average"] == value
+
+
 def test_legacy_postgresql_profile_is_explicitly_sampled_with_a_stable_snapshot(tmp_path):
     from app.models import DataSource
 
