@@ -42,6 +42,61 @@ it("accepts shared versioned fixtures without breaking the current API reader", 
   expect((await api.profile("synthetic-sales")).sample_size).toBe(2);
   expect((await api.ask("fixture", "synthetic-sales")).tool_results[0].data).toEqual([{ id: "0001" }]);
 });
+
+it("retains exact full-snapshot statistics while labeling top values as sample data", async () => {
+  const profile = {
+    sample_size: 5,
+    sample_limit: 500,
+    processed_rows: 12,
+    coverage: "full",
+    snapshot_id: "snapshot-001",
+    note: "Top values use a bounded sample.",
+    columns: {
+      amount: {
+        sample_non_null_count: 5,
+        sample_null_count: 0,
+        distinct_sample_values: 4,
+        top_values: [{ value: "12.50", count: 2 }],
+        top_values_coverage: "sample",
+        non_null_count: 10,
+        null_count: 2,
+        empty_count: 1,
+        distinct_count: 8,
+        uniqueness_ratio: 0.8,
+        is_identifier_candidate: false,
+        numeric: {
+          count: 10,
+          minimum: "0.01",
+          maximum: "100.50",
+          total: "457.75",
+          average: "45.775",
+        },
+      },
+      created_at: {
+        sample_non_null_count: 5,
+        sample_null_count: 0,
+        distinct_sample_values: 5,
+        top_values: [],
+        top_values_coverage: "sample",
+        non_null_count: 12,
+        null_count: 0,
+        empty_count: 0,
+        distinct_count: 12,
+        uniqueness_ratio: 1,
+        is_identifier_candidate: true,
+        temporal: {
+          count: 12,
+          minimum: "2026-01-01T00:00:00Z",
+          maximum: "2026-01-12T00:00:00Z",
+        },
+      },
+    },
+  };
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json(profile)));
+
+  await expect(api.profile("snapshot-source")).resolves.toEqual(profile);
+});
+
 it("accepts valid source responses and rejects an invalid response shape", async () => {
   vi.stubGlobal(
     "fetch",

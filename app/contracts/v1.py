@@ -24,16 +24,42 @@ class TopValue(BaseModel):
     count: int = Field(ge=0)
 
 
+class NumericProfile(BaseModel):
+    count: int = Field(ge=0)
+    minimum: str
+    maximum: str
+    total: str
+    average: str
+
+
+class TemporalProfile(BaseModel):
+    count: int = Field(ge=0)
+    minimum: str
+    maximum: str
+
+
 class ColumnProfile(BaseModel):
     sample_non_null_count: int = Field(ge=0)
     sample_null_count: int = Field(ge=0)
     distinct_sample_values: int = Field(ge=0)
     top_values: list[TopValue]
+    non_null_count: int | None = Field(default=None, ge=0)
+    null_count: int | None = Field(default=None, ge=0)
+    empty_count: int | None = Field(default=None, ge=0)
+    distinct_count: int | None = Field(default=None, ge=0)
+    uniqueness_ratio: float | None = Field(default=None, ge=0, le=1)
+    is_identifier_candidate: bool | None = None
+    top_values_coverage: Literal['sample'] | None = None
+    numeric: NumericProfile | None = None
+    temporal: TemporalProfile | None = None
 
 
 class Profile(BaseModel):
     sample_size: int = Field(ge=0)
     sample_limit: int = Field(ge=1)
+    processed_rows: int | None = Field(default=None, ge=0)
+    coverage: Literal['full'] = 'full'
+    snapshot_id: Identifier | None = None
     columns: dict[str, ColumnProfile]
     note: str
     snapshot: DatasetSnapshot | None = None

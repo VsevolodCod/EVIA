@@ -47,6 +47,9 @@ const schemaSchema = z.object({
 const profileSchema = z.object({
   sample_size: z.number().int().nonnegative(),
   sample_limit: z.number().int().nonnegative(),
+  processed_rows: z.number().int().nonnegative().nullable().optional(),
+  coverage: z.literal("full").optional(),
+  snapshot_id: z.string().min(1).nullable().optional(),
   note: z.string(),
   columns: z.record(
     z.string(),
@@ -57,6 +60,25 @@ const profileSchema = z.object({
       top_values: z.array(
         z.object({ value: z.string(), count: z.number().int().nonnegative() }),
       ),
+      non_null_count: z.number().int().nonnegative().nullable().optional(),
+      null_count: z.number().int().nonnegative().nullable().optional(),
+      empty_count: z.number().int().nonnegative().nullable().optional(),
+      distinct_count: z.number().int().nonnegative().nullable().optional(),
+      uniqueness_ratio: z.number().min(0).max(1).nullable().optional(),
+      is_identifier_candidate: z.boolean().nullable().optional(),
+      top_values_coverage: z.literal("sample").nullable().optional(),
+      numeric: z.object({
+        count: z.number().int().nonnegative(),
+        minimum: z.string(),
+        maximum: z.string(),
+        total: z.string(),
+        average: z.string(),
+      }).nullable().optional(),
+      temporal: z.object({
+        count: z.number().int().nonnegative(),
+        minimum: z.string(),
+        maximum: z.string(),
+      }).nullable().optional(),
     }),
   ),
 });

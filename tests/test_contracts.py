@@ -5,7 +5,7 @@ from jsonschema import Draft202012Validator, FormatChecker
 import pytest
 from pydantic import ValidationError
 
-from app.contracts.v1 import CONTRACTS, AgentResponse, QueryResult
+from app.contracts.v1 import CONTRACTS, AgentResponse, Profile, QueryResult
 from app.models import AskResponse
 from scripts.export_contracts import ROOT, documents, serialized
 
@@ -23,6 +23,64 @@ def test_export_is_current_and_fixtures_validate(path, document):
 def test_legacy_agent_reader_accepts_additive_contract():
     data = documents()['fixtures/success.json']['data']
     assert AskResponse.model_validate(data).answer == data['answer']
+
+
+def test_profile_distinguishes_exact_snapshot_statistics_from_sample_top_values():
+    profile = Profile.model_validate({
+        'sample_size': 5,
+        'sample_limit': 500,
+        'processed_rows': 12,
+        'coverage': 'full',
+        'snapshot_id': 'snapshot-001',
+        'note': 'Top values use a bounded sample.',
+        'columns': {
+            'amount': {
+                'sample_non_null_count': 5,
+                'sample_null_count': 0,
+                'distinct_sample_values': 4,
+                'top_values': [{'value': '12.50', 'count': 2}],
+                'top_values_coverage': 'sample',
+                'non_null_count': 10,
+                'null_count': 2,
+                'empty_count': 1,
+                'distinct_count': 8,
+                'uniqueness_ratio': 0.8,
+                'is_identifier_candidate': False,
+                'numeric': {
+                    'count': 10,
+                    'minimum': '0.01',
+                    'maximum': '100.50',
+                    'total': '457.75',
+                    'average': '45.775',
+                },
+            },
+            'created_at': {
+                'sample_non_null_count': 5,
+                'sample_null_count': 0,
+                'distinct_sample_values': 5,
+                'top_values': [],
+                'top_values_coverage': 'sample',
+                'non_null_count': 12,
+                'null_count': 0,
+                'empty_count': 0,
+                'distinct_count': 12,
+                'uniqueness_ratio': 1.0,
+                'is_identifier_candidate': True,
+                'temporal': {
+                    'count': 12,
+                    'minimum': '2026-01-01T00:00:00Z',
+                    'maximum': '2026-01-12T00:00:00Z',
+                },
+            },
+        },
+    })
+
+    assert profile.processed_rows == 12
+    assert profile.coverage == 'full'
+    assert profile.snapshot_id == 'snapshot-001'
+    assert profile.columns['amount'].numeric.minimum == '0.01'
+    assert profile.columns['amount'].top_values_coverage == 'sample'
+    assert profile.columns['created_at'].temporal.maximum == '2026-01-12T00:00:00Z'
 
 
 @pytest.mark.parametrize('mutation', ['width', 'limit', 'count', 'decimal'])
