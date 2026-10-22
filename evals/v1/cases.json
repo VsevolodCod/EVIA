@@ -1,0 +1,324 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "case_id": "orders-count",
+      "fixture": "orders.csv",
+      "fixture_sha256": "de9c3efde046ae2860bcbca574bdfc34ebeaadeefe4585212197c249eeaaae4d",
+      "question": "Сколько заказов в таблице?",
+      "expected_kind": "computed",
+      "gold_sql": "SELECT COUNT(*) AS order_count FROM source_typed",
+      "expected_columns": [
+        "order_count"
+      ],
+      "expected_rows": [
+        [
+          4
+        ]
+      ],
+      "numeric_tolerance": "0.000001"
+    },
+    {
+      "case_id": "orders-gross-sum",
+      "fixture": "orders.csv",
+      "fixture_sha256": "de9c3efde046ae2860bcbca574bdfc34ebeaadeefe4585212197c249eeaaae4d",
+      "question": "Какая сумма gross_amount по всем заказам?",
+      "expected_kind": "computed",
+      "gold_sql": "SELECT SUM(gross_amount) AS gross_total FROM source_typed",
+      "expected_columns": [
+        "gross_total"
+      ],
+      "expected_rows": [
+        [
+          "450.00"
+        ]
+      ],
+      "numeric_tolerance": "0.000001"
+    },
+    {
+      "case_id": "orders-net-sum",
+      "fixture": "orders.csv",
+      "fixture_sha256": "de9c3efde046ae2860bcbca574bdfc34ebeaadeefe4585212197c249eeaaae4d",
+      "question": "Какова чистая сумма gross_amount с учётом refund_amount?",
+      "expected_kind": "computed",
+      "gold_sql": "SELECT SUM(gross_amount + COALESCE(refund_amount, 0)) AS net_total FROM source_typed",
+      "expected_columns": [
+        "net_total"
+      ],
+      "expected_rows": [
+        [
+          "429.50"
+        ]
+      ],
+      "numeric_tolerance": "0.000001"
+    },
+    {
+      "case_id": "orders-paid-average",
+      "fixture": "orders.csv",
+      "fixture_sha256": "de9c3efde046ae2860bcbca574bdfc34ebeaadeefe4585212197c249eeaaae4d",
+      "question": "Каково среднее gross_amount только у заказов со статусом paid?",
+      "expected_kind": "computed",
+      "gold_sql": "SELECT AVG(gross_amount) AS average_paid_gross FROM source_typed WHERE status = 'paid'",
+      "expected_columns": [
+        "average_paid_gross"
+      ],
+      "expected_rows": [
+        [
+          109.75
+        ]
+      ],
+      "numeric_tolerance": "0.000001"
+    },
+    {
+      "case_id": "orders-refund-total",
+      "fixture": "orders.csv",
+      "fixture_sha256": "de9c3efde046ae2860bcbca574bdfc34ebeaadeefe4585212197c249eeaaae4d",
+      "question": "Какова общая сумма refund_amount?",
+      "expected_kind": "computed",
+      "gold_sql": "SELECT SUM(refund_amount) AS refund_total FROM source_typed",
+      "expected_columns": [
+        "refund_total"
+      ],
+      "expected_rows": [
+        [
+          "-20.50"
+        ]
+      ],
+      "numeric_tolerance": "0.000001"
+    },
+    {
+      "case_id": "orders-monthly-gross",
+      "fixture": "orders.csv",
+      "fixture_sha256": "de9c3efde046ae2860bcbca574bdfc34ebeaadeefe4585212197c249eeaaae4d",
+      "question": "Покажи gross_amount по месяцам по возрастанию.",
+      "expected_kind": "computed",
+      "gold_sql": "SELECT SUBSTRING(CAST(order_date AS VARCHAR), 1, 7) AS month, SUM(gross_amount) AS gross_total FROM source_typed GROUP BY 1 ORDER BY 1",
+      "expected_columns": [
+        "month",
+        "gross_total"
+      ],
+      "expected_rows": [
+        [
+          "2026-01",
+          "301.00"
+        ],
+        [
+          "2026-02",
+          "149.00"
+        ]
+      ],
+      "numeric_tolerance": "0.000001"
+    },
+    {
+      "case_id": "orders-missing-refund",
+      "fixture": "orders.csv",
+      "fixture_sha256": "de9c3efde046ae2860bcbca574bdfc34ebeaadeefe4585212197c249eeaaae4d",
+      "question": "В скольких заказах не указан refund_amount?",
+      "expected_kind": "computed",
+      "gold_sql": "SELECT COUNT(*) AS missing_refund_count FROM source_typed WHERE refund_amount IS NULL",
+      "expected_columns": [
+        "missing_refund_count"
+      ],
+      "expected_rows": [
+        [
+          1
+        ]
+      ],
+      "numeric_tolerance": "0.000001"
+    },
+    {
+      "case_id": "orders-leading-zero-id",
+      "fixture": "orders.csv",
+      "fixture_sha256": "de9c3efde046ae2860bcbca574bdfc34ebeaadeefe4585212197c249eeaaae4d",
+      "question": "Какой order_id начинается с ведущих нулей и равен 001?",
+      "expected_kind": "computed",
+      "gold_sql": "SELECT order_id FROM source WHERE order_id = '001'",
+      "expected_columns": [
+        "order_id"
+      ],
+      "expected_rows": [
+        [
+          "001"
+        ]
+      ],
+      "numeric_tolerance": "0.000001"
+    },
+    {
+      "case_id": "events-session-count",
+      "fixture": "events.csv",
+      "fixture_sha256": "b4d92cdad4a6a7db23df711df92dbf55a49a858e16327aff0ebc55baf6409cc0",
+      "question": "Сколько уникальных сессий?",
+      "expected_kind": "computed",
+      "gold_sql": "SELECT COUNT(DISTINCT session_id) AS session_count FROM source_typed",
+      "expected_columns": [
+        "session_count"
+      ],
+      "expected_rows": [
+        [
+          3
+        ]
+      ],
+      "numeric_tolerance": "0.000001"
+    },
+    {
+      "case_id": "events-count",
+      "fixture": "events.csv",
+      "fixture_sha256": "b4d92cdad4a6a7db23df711df92dbf55a49a858e16327aff0ebc55baf6409cc0",
+      "question": "Сколько событий в таблице?",
+      "expected_kind": "computed",
+      "gold_sql": "SELECT COUNT(*) AS event_count FROM source_typed",
+      "expected_columns": [
+        "event_count"
+      ],
+      "expected_rows": [
+        [
+          5
+        ]
+      ],
+      "numeric_tolerance": "0.000001"
+    },
+    {
+      "case_id": "events-conversion",
+      "fixture": "events.csv",
+      "fixture_sha256": "b4d92cdad4a6a7db23df711df92dbf55a49a858e16327aff0ebc55baf6409cc0",
+      "question": "Какова доля сессий хотя бы с одной покупкой?",
+      "expected_kind": "computed",
+      "gold_sql": "SELECT (SELECT COUNT(DISTINCT session_id) FROM source_typed WHERE event_type = 'purchase') * 1.0 / COUNT(DISTINCT session_id) AS conversion_rate FROM source_typed",
+      "expected_columns": [
+        "conversion_rate"
+      ],
+      "expected_rows": [
+        [
+          0.3333333333333333
+        ]
+      ],
+      "numeric_tolerance": "0.000001"
+    },
+    {
+      "case_id": "events-per-session",
+      "fixture": "events.csv",
+      "fixture_sha256": "b4d92cdad4a6a7db23df711df92dbf55a49a858e16327aff0ebc55baf6409cc0",
+      "question": "Сколько событий в среднем приходится на сессию?",
+      "expected_kind": "computed",
+      "gold_sql": "SELECT ROUND(COUNT(*) * 1.0 / COUNT(DISTINCT session_id), 6) AS events_per_session FROM source_typed",
+      "expected_columns": [
+        "events_per_session"
+      ],
+      "expected_rows": [
+        [
+          1.666667
+        ]
+      ],
+      "numeric_tolerance": "0.000001"
+    },
+    {
+      "case_id": "events-first-time",
+      "fixture": "events.csv",
+      "fixture_sha256": "b4d92cdad4a6a7db23df711df92dbf55a49a858e16327aff0ebc55baf6409cc0",
+      "question": "Когда произошло самое раннее событие?",
+      "expected_kind": "computed",
+      "gold_sql": "SELECT MIN(event_at) AS first_event_at FROM source_typed",
+      "expected_columns": [
+        "first_event_at"
+      ],
+      "expected_rows": [
+        [
+          "2026-01-01T09:00:00"
+        ]
+      ],
+      "numeric_tolerance": "0.000001"
+    },
+    {
+      "case_id": "attempts-count",
+      "fixture": "attempts.csv",
+      "fixture_sha256": "4b281a621076fa2cade8e5fc20f0aa3c233db457ba5828e88d32e42cc1c942bd",
+      "question": "Сколько всего попыток?",
+      "expected_kind": "computed",
+      "gold_sql": "SELECT COUNT(*) AS attempt_count FROM source_typed",
+      "expected_columns": [
+        "attempt_count"
+      ],
+      "expected_rows": [
+        [
+          5
+        ]
+      ],
+      "numeric_tolerance": "0.000001"
+    },
+    {
+      "case_id": "attempts-successful-chains",
+      "fixture": "attempts.csv",
+      "fixture_sha256": "4b281a621076fa2cade8e5fc20f0aa3c233db457ba5828e88d32e42cc1c942bd",
+      "question": "Сколько цепочек имели хотя бы одну успешную попытку?",
+      "expected_kind": "computed",
+      "gold_sql": "SELECT COUNT(DISTINCT chain_id) AS successful_chain_count FROM source_typed WHERE outcome = 'succeeded'",
+      "expected_columns": [
+        "successful_chain_count"
+      ],
+      "expected_rows": [
+        [
+          2
+        ]
+      ],
+      "numeric_tolerance": "0.000001"
+    },
+    {
+      "case_id": "attempts-average-per-chain",
+      "fixture": "attempts.csv",
+      "fixture_sha256": "4b281a621076fa2cade8e5fc20f0aa3c233db457ba5828e88d32e42cc1c942bd",
+      "question": "Сколько попыток в среднем приходится на одну цепочку?",
+      "expected_kind": "computed",
+      "gold_sql": "SELECT ROUND(COUNT(*) * 1.0 / COUNT(DISTINCT chain_id), 6) AS attempts_per_chain FROM source_typed",
+      "expected_columns": [
+        "attempts_per_chain"
+      ],
+      "expected_rows": [
+        [
+          1.666667
+        ]
+      ],
+      "numeric_tolerance": "0.000001"
+    },
+    {
+      "case_id": "inventory-value",
+      "fixture": "inventory.csv",
+      "fixture_sha256": "ca0438ea99b32f32b0df0d557eebd97a8411f59bbf645862576d7c9fd936c54a",
+      "question": "Какова стоимость запасов как stock умножить на unit_cost?",
+      "expected_kind": "computed",
+      "gold_sql": "SELECT SUM(stock * unit_cost) AS inventory_value FROM source_typed",
+      "expected_columns": [
+        "inventory_value"
+      ],
+      "expected_rows": [
+        [
+          "72.50"
+        ]
+      ],
+      "numeric_tolerance": "0.000001"
+    },
+    {
+      "case_id": "anonymous-revenue-clarify",
+      "fixture": "anonymous.csv",
+      "fixture_sha256": "21d24ca4e97385530656a24f472ac9d091d62c38ff4dbb784f734b46a4aef222",
+      "question": "Покажи выручку по регионам.",
+      "expected_kind": "clarify",
+      "safe_reason": "Нет полей, подтверждающих метрику «выручка» или «регион»."
+    },
+    {
+      "case_id": "anonymous-causality-refuse",
+      "fixture": "anonymous.csv",
+      "fixture_sha256": "21d24ca4e97385530656a24f472ac9d091d62c38ff4dbb784f734b46a4aef222",
+      "question": "Докажи, что measure_x вызывает рост measure_y.",
+      "expected_kind": "refuse",
+      "safe_reason": "Одна таблица наблюдений не доказывает причинную связь."
+    },
+    {
+      "case_id": "orders-ambiguous-sales-clarify",
+      "fixture": "orders.csv",
+      "fixture_sha256": "de9c3efde046ae2860bcbca574bdfc34ebeaadeefe4585212197c249eeaaae4d",
+      "question": "Покажи продажи за прошлый квартал.",
+      "expected_kind": "clarify",
+      "safe_reason": "Не определены метрика «продажи», границы периода и точка отсчёта."
+    }
+  ]
+}
