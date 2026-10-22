@@ -71,6 +71,23 @@ def detect_encoding(path: Path) -> str:
                 continue
             if any(char in decoded for char in ",;\t|\n\r"):
                 return encoding
+    # Cyrillic UTF-16 without a BOM can contain almost no NUL bytes: each
+    # letter occupies two nonzero bytes. Decoding those bytes as UTF-8 may
+    # still succeed, but produces a stream dominated by control characters.
+    # A real UTF-16 line ending gives us an unambiguous byte-order signal.
+    non_nul_controls = sum(byte < 32 and byte not in (0, 9, 10, 13) for byte in sample)
+    if non_nul_controls / max(1, len(sample)) >= 0.15:
+        candidates = []
+        even_sample = sample[:len(sample) - len(sample) % 2]
+        for encoding in ("utf-16-le", "utf-16-be"):
+            decoded = even_sample.decode(encoding, errors="ignore")
+            if "\n" not in decoded and "\r" not in decoded:
+                continue
+            if any(ord(char) < 32 and char not in "\n\r\t" for char in decoded):
+                continue
+            candidates.append(encoding)
+        if len(candidates) == 1:
+            return candidates[0]
     try:
         codecs.getincrementaldecoder("utf-8")().decode(sample, final=False)
         return "utf-8"

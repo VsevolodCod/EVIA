@@ -69,6 +69,15 @@ def test_bomless_utf16_with_cyrillic_rows_is_detected(service, encoding):
     assert service.preview(source.source_id)[0] == {"Название": "Яблоко", "Категория": "Фрукты"}
 
 
+@pytest.mark.parametrize("encoding", ["utf-16-le", "utf-16-be"])
+def test_bomless_utf16_without_nul_bytes_is_detected(service, encoding):
+    original = ("Название\n" + "Ж" * 100 + "\n").encode(encoding)
+    source = service.register_csv("cyrillic.csv", original)
+    assert source.import_report.encoding == encoding
+    assert source.import_report.accepted_rows == 1
+    assert service.preview(source.source_id) == [{"Название": "Ж" * 100}]
+
+
 def test_header_spacing_is_preserved_and_case_duplicate_is_reported(service):
     source = service.register_csv("spaces.csv", b" a ,b\n1,2\n")
     assert service.preview(source.source_id) == [{" a ": "1", "b": "2"}]
