@@ -150,9 +150,9 @@ class AgentRuntime:
             call_timing.elapsed_ms = elapsed
             timing.calls.append(call_timing)
 
-            # logger.info("LLM content: %s", response.content)
-            # logger.info("LLM tool calls: %s", response.tool_calls)
-            # logger.info("LLM raw tool calls: %s", response.raw_tool_calls)
+            logger.info("LLM content: %s", response.content)
+            logger.info("LLM tool calls: %s", response.tool_calls)
+            logger.info("LLM raw tool calls: %s", response.raw_tool_calls)
 
             if response.finish_reason == "length":
                 if response.tool_calls or step == self.max_steps:
