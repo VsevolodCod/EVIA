@@ -1,0 +1,5 @@
+order_id,order_date,customer_id,gross_amount,refund_amount,status
+001,2026-01-02,C01,120.50,0.00,paid
+002,2026-01-03,C02,180.50,-20.50,refunded
+003,2026-02-01,C01,99.00,,paid
+004,2026-02-04,C03,50.00,0.00,cancelled
