@@ -8,7 +8,7 @@ executed only through :mod:`app.safe_sql`; callers here never accept SQL text.
 from __future__ import annotations
 
 from contextlib import contextmanager
-from decimal import Decimal
+from decimal import Decimal, localcontext
 from hashlib import sha256
 from pathlib import Path
 import re
@@ -217,7 +217,7 @@ class DuckDBDataEngine:
                     SELECT
                         COUNT({quoted}),
                         COUNT(*) - COUNT({quoted}),
-                        COUNT(*) FILTER (WHERE {quoted} = ''),
+                        COUNT(*) FILTER (WHERE TRIM({quoted}) = ''),
                         COUNT(DISTINCT {quoted})
                     FROM {raw_table}
                     """
@@ -227,7 +227,10 @@ class DuckDBDataEngine:
                 empty_count = int(empty_count)
                 distinct_count = int(distinct_count)
                 sample_values = [row[name] for row in sample_rows]
-                sample_nonempty = [value for value in sample_values if value not in (None, "")]
+                sample_nonempty = [
+                    value for value in sample_values
+                    if value is not None and str(value).strip() != ""
+                ]
                 sample_counts: dict[str, int] = {}
                 for value in sample_nonempty:
                     text = str(value)
@@ -258,20 +261,20 @@ class DuckDBDataEngine:
                 }
                 typed_type = typed_types.get(name)
                 if typed_type in {"BIGINT"} or (typed_type and typed_type.startswith("DECIMAL(")):
-                    count, minimum, maximum, total, average = connection.execute(
-                        f"SELECT COUNT({quoted}), MIN({quoted}), MAX({quoted}), SUM({quoted}), AVG({quoted}) "
+                    count, minimum, maximum, total = connection.execute(
+                        f"SELECT COUNT({quoted}), MIN({quoted}), MAX({quoted}), SUM({quoted}) "
                         f"FROM {typed_table}"
                     ).fetchone()
                     if count:
+                        with localcontext() as context:
+                            context.prec = 100
+                            average = Decimal(str(total)) / Decimal(int(count))
                         column["numeric"] = {
                             "count": int(count),
                             "minimum": format(Decimal(str(minimum)), "f"),
                             "maximum": format(Decimal(str(maximum)), "f"),
                             "total": format(Decimal(str(total)), "f"),
-                            # DuckDB returns AVG(BIGINT) as a float. The
-                            # public contract uses a canonical decimal string
-                            # so an integral mean remains "100", not "100.0".
-                            "average": format(Decimal(str(average)).normalize(), "f"),
+                            "average": format(average, "f"),
                         }
                     else:
                         column["numeric"] = {

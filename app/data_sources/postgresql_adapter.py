@@ -241,7 +241,10 @@ class PostgreSQLAdapter(DataSourceAdapter):
             values = [row[name] for row in rows]
             # Match the CSV profile semantics: an empty string has no usable
             # value and must never be displayed as a filled cell.
-            non_null = [value for value in values if value not in (None, "")]
+            non_null = [
+                value for value in values
+                if value is not None and (not isinstance(value, str) or value.strip() != "")
+            ]
             counts: dict[str, int] = {}
             for value in non_null:
                 rendered = str(value)

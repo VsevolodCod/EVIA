@@ -199,6 +199,31 @@ def test_profile_reimport_replaces_current_snapshot_statistics(service):
     }
 
 
+def test_profile_treats_whitespace_only_cells_as_empty_across_raw_and_typed_statistics(service):
+    source = service.register_csv(
+        "spaces.csv",
+        b"amount,day\n1,2026-01-01\n , \n",
+    )
+
+    profile = service.profile(source.source_id)
+
+    assert profile["columns"]["amount"]["empty_count"] == 1
+    assert profile["columns"]["amount"]["numeric"]["count"] == 1
+    assert profile["columns"]["day"]["empty_count"] == 1
+    assert profile["columns"]["day"]["temporal"]["count"] == 1
+
+
+def test_profile_calculates_exact_average_for_large_integers(service):
+    source = service.register_csv(
+        "large-integers.csv",
+        b"amount\n9007199254740992\n9007199254740994\n",
+    )
+
+    profile = service.profile(source.source_id)
+
+    assert profile["columns"]["amount"]["numeric"]["average"] == "9007199254740993"
+
+
 def test_legacy_postgresql_profile_is_explicitly_sampled_with_a_stable_snapshot(tmp_path):
     from app.models import DataSource
 
