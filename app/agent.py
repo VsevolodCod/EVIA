@@ -108,6 +108,10 @@ class AgentRuntime:
             call_timing.elapsed_ms = elapsed
             timing.calls.append(call_timing)
 
+            logger.info("LLM content: %s", response.content)
+            logger.info("LLM tool calls: %s", response.tool_calls)
+            logger.info("LLM raw tool calls: %s", response.raw_tool_calls)
+
             if not response.tool_calls:  # Если модель готова ответить пользователю
                 answer = response.content.strip()
 
