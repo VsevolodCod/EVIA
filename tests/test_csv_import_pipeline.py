@@ -2,8 +2,8 @@
 
 from io import BytesIO
 from pathlib import Path
-from concurrent.futures import ThreadPoolExecutor
-from threading import Barrier
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
+from threading import Barrier, Event
 
 import pytest
 
@@ -76,6 +76,41 @@ def test_bomless_utf16_without_nul_bytes_is_detected(service, encoding):
     assert source.import_report.encoding == encoding
     assert source.import_report.accepted_rows == 1
     assert service.preview(source.source_id) == [{"Название": "Ж" * 100}]
+
+
+def test_profile_can_open_while_a_readonly_query_is_finishing(service, monkeypatch):
+    import app.safe_sql as safe_sql
+
+    source = service.register_csv("parallel.csv", b"id,amount\n001,10\n")
+    query_open = Event()
+    release_query = Event()
+    profile_started = Event()
+    original_json_value = safe_sql._json_value
+    original_connect = service.data_engine._connect
+
+    def hold_query(value):
+        query_open.set()
+        assert release_query.wait(5)
+        return original_json_value(value)
+
+    def signal_profile_connect():
+        profile_started.set()
+        return original_connect()
+
+    monkeypatch.setattr(safe_sql, "_json_value", hold_query)
+    monkeypatch.setattr(service.data_engine, "_connect", signal_profile_connect)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        query = pool.submit(service.query, source.source_id, "SELECT id FROM source")
+        try:
+            assert query_open.wait(5)
+            profile = pool.submit(service.profile, source.source_id)
+            assert profile_started.wait(5)
+            with pytest.raises(FutureTimeout):
+                profile.result(timeout=0.2)
+        finally:
+            release_query.set()
+        assert query.result(timeout=5).rows == [["001"]]
+        assert profile.result(timeout=5)["sample_size"] == 1
 
 
 def test_header_spacing_is_preserved_and_case_duplicate_is_reported(service):

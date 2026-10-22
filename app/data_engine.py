@@ -7,6 +7,7 @@ executed only through :mod:`app.safe_sql`; callers here never accept SQL text.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from hashlib import sha256
 from pathlib import Path
 import re
@@ -16,6 +17,7 @@ from uuid import uuid4
 import duckdb
 
 from app.csv_import import null_marker
+from app.duckdb_access import DUCKDB_ACCESS_LOCK
 from app.models import DataSource
 
 
@@ -39,8 +41,11 @@ class DuckDBDataEngine:
     def typed_table_name(self, source: DataSource) -> str:
         return f"{self.table_name(source)}_typed"
 
+    @contextmanager
     def _connect(self):
-        return duckdb.connect(str(self.database_path))
+        with DUCKDB_ACCESS_LOCK:
+            with duckdb.connect(str(self.database_path)) as connection:
+                yield connection
 
     def _typed_projections(self, connection, raw_table: str, typed_sql_types: dict[str, str]) -> list[str]:
         raw_columns = [row[0] for row in connection.execute(f"DESCRIBE {raw_table}").fetchall()]
