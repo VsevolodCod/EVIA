@@ -1,4 +1,114 @@
 {
+  "$defs": {
+    "CSVVersion": {
+      "properties": {
+        "normalized_filename": {
+          "title": "Normalized Filename",
+          "type": "string"
+        },
+        "raw_filename": {
+          "title": "Raw Filename",
+          "type": "string"
+        },
+        "report": {
+          "$ref": "#/$defs/ImportReport"
+        },
+        "snapshot_id": {
+          "title": "Snapshot Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "snapshot_id",
+        "raw_filename",
+        "normalized_filename",
+        "report"
+      ],
+      "title": "CSVVersion",
+      "type": "object"
+    },
+    "ImportReport": {
+      "properties": {
+        "accepted_rows": {
+          "default": 0,
+          "title": "Accepted Rows",
+          "type": "integer"
+        },
+        "blank_lines": {
+          "default": 0,
+          "title": "Blank Lines",
+          "type": "integer"
+        },
+        "column_nullable": {
+          "additionalProperties": {
+            "type": "boolean"
+          },
+          "title": "Column Nullable",
+          "type": "object"
+        },
+        "column_types": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Column Types",
+          "type": "object"
+        },
+        "delimiter": {
+          "default": "",
+          "title": "Delimiter",
+          "type": "string"
+        },
+        "encoding": {
+          "default": "",
+          "title": "Encoding",
+          "type": "string"
+        },
+        "errors": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Errors",
+          "type": "array"
+        },
+        "rejected_rows": {
+          "default": 0,
+          "title": "Rejected Rows",
+          "type": "integer"
+        },
+        "rows_read": {
+          "default": 0,
+          "title": "Rows Read",
+          "type": "integer"
+        },
+        "sha256": {
+          "default": "",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "size_bytes": {
+          "default": 0,
+          "title": "Size Bytes",
+          "type": "integer"
+        },
+        "typed_sql_types": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Typed Sql Types",
+          "type": "object"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Warnings",
+          "type": "array"
+        }
+      },
+      "title": "ImportReport",
+      "type": "object"
+    }
+  },
   "$id": "urn:evia:contracts:1.0:Source",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "properties": {
@@ -6,6 +116,24 @@
       "format": "date-time",
       "title": "Created At",
       "type": "string"
+    },
+    "csv_versions": {
+      "items": {
+        "$ref": "#/$defs/CSVVersion"
+      },
+      "title": "Csv Versions",
+      "type": "array"
+    },
+    "import_report": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ImportReport"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "name": {
       "title": "Name",

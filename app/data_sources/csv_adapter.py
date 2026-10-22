@@ -73,7 +73,8 @@ class CSVAdapter(DataSourceAdapter):
         self.sample_size = sample_size
 
     def _path(self, source: DataSource) -> Path:
-        path = (self.storage_dir / f"{source.source_id}.csv").resolve()
+        filename = source.csv_versions[-1].raw_filename if source.csv_versions else f"{source.source_id}.csv"
+        path = (self.storage_dir / filename).resolve()
 
         if path.parent != self.storage_dir:
             raise ValueError("Invalid source path")
@@ -98,7 +99,8 @@ class CSVAdapter(DataSourceAdapter):
                 f"Source file not found: {source.source_id}"
             )
 
-        with path.open("r", encoding="utf-8-sig", newline="") as file:
+        encoding = source.import_report.encoding if source.import_report else "utf-8-sig"
+        with path.open("r", encoding=encoding, newline="") as file:
             reader = csv_reader(file)
             headers = read_header(reader)
             rows = list(islice(checked_rows(reader, headers), self.sample_size))
@@ -106,6 +108,8 @@ class CSVAdapter(DataSourceAdapter):
         return headers, rows
 
     def _count_rows(self, source: DataSource) -> int:
+        if source.import_report is not None:
+            return source.import_report.accepted_rows
         with self._path(source).open(
             "r",
             encoding="utf-8-sig",
@@ -129,14 +133,14 @@ class CSVAdapter(DataSourceAdapter):
                 else 0.0
             )
 
+            report = source.import_report
             fields.append(
                 SchemaField(
                     name=header,
-                    inferred_type=infer_type(values),
+                    inferred_type=report.column_types.get(header, infer_type(values)) if report else infer_type(values),
                     nullable=(
-                        any(not v.strip() for v in values)
-                        if values
-                        else None
+                        report.column_nullable.get(header) if report else
+                        (any(not v.strip() for v in values) if values else None)
                     ),
                     is_identifier_candidate=(
                         len(nonempty) >= 2 and unique_ratio >= 0.95

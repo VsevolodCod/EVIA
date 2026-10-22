@@ -1,0 +1,110 @@
+[
+  {
+    "file": "01_Продажи.csv",
+    "status": "accepted",
+    "sha256": "24d4b5065fd4c3c0b3f218d87e1f920d334d5f311ee1b3a4ce6795eb80e7bbdd",
+    "size_bytes": 188324476,
+    "encoding": "utf-8-sig",
+    "delimiter": ";",
+    "rows_read": 500000,
+    "accepted_rows": 500000,
+    "rejected_rows": 0,
+    "errors": []
+  },
+  {
+    "file": "02_Техническая_поддержка.csv",
+    "status": "accepted",
+    "sha256": "637e65f0019d8962c2ee4a3f9b96dded13bc2a7b96cece768703daee82653a1c",
+    "size_bytes": 181721714,
+    "encoding": "utf-8-sig",
+    "delimiter": ";",
+    "rows_read": 500000,
+    "accepted_rows": 500000,
+    "rejected_rows": 0,
+    "errors": []
+  },
+  {
+    "file": "03_Задачи_команд.csv",
+    "status": "accepted",
+    "sha256": "2214df17146386963d643aada7f63f9f7b8d5c5b9777f9cc6c5f9f06b8d8a34f",
+    "size_bytes": 189362335,
+    "encoding": "utf-8-sig",
+    "delimiter": ";",
+    "rows_read": 500000,
+    "accepted_rows": 500000,
+    "rejected_rows": 0,
+    "errors": []
+  },
+  {
+    "file": "04_Доставка.csv",
+    "status": "accepted",
+    "sha256": "4b7321033df27dddaf119c250ccb5032cf2f6e28104629ebd4133c653b18b4ba",
+    "size_bytes": 148423087,
+    "encoding": "utf-8-sig",
+    "delimiter": ";",
+    "rows_read": 500000,
+    "accepted_rows": 500000,
+    "rejected_rows": 0,
+    "errors": []
+  },
+  {
+    "file": "05_События_приложения.csv",
+    "status": "accepted",
+    "sha256": "1501707e4c0a81d9ce0f503d1c7b974151e36443e46292c2232f99c456687956",
+    "size_bytes": 223284610,
+    "encoding": "utf-8-sig",
+    "delimiter": ";",
+    "rows_read": 1000000,
+    "accepted_rows": 1000000,
+    "rejected_rows": 0,
+    "errors": []
+  },
+  {
+    "file": "06_Рекламные_кампании.csv",
+    "status": "accepted",
+    "sha256": "d17a7a0a935eb60118abd66c0c32d7e26a8bebc3f63342ef1943a545bc970ce3",
+    "size_bytes": 134326591,
+    "encoding": "utf-8-sig",
+    "delimiter": ";",
+    "rows_read": 500000,
+    "accepted_rows": 500000,
+    "rejected_rows": 0,
+    "errors": []
+  },
+  {
+    "file": "07_Заявки_на_закупку.csv",
+    "status": "accepted",
+    "sha256": "828eb441b00e6569cfc05013bdebda102532e97e3d3aa1b30271efd22eafba36",
+    "size_bytes": 190300753,
+    "encoding": "utf-8-sig",
+    "delimiter": ";",
+    "rows_read": 500000,
+    "accepted_rows": 500000,
+    "rejected_rows": 0,
+    "errors": []
+  },
+  {
+    "file": "08_Фоновые_задания.csv",
+    "status": "accepted",
+    "sha256": "225d50485f10afdc427fb3c1d5c040e3661bfd052c64f7519245265c1a4ed56d",
+    "size_bytes": 122084672,
+    "encoding": "utf-8-sig",
+    "delimiter": ";",
+    "rows_read": 500000,
+    "accepted_rows": 500000,
+    "rejected_rows": 0,
+    "errors": []
+  },
+  {
+    "file": "09_Лекарственные_препараты.csv",
+    "status": "accepted",
+    "sha256": "40081d8a1fadfbcb9dc35c45483182503a2eb75d5224ac7f363c9c43f7f4733c",
+    "size_bytes": 98278281,
+    "encoding": "utf-8-sig",
+    "delimiter": ";",
+    "rows_read": 876000,
+    "accepted_rows": 876000,
+    "rejected_rows": 0,
+    "errors": []
+  }
+]

@@ -55,11 +55,13 @@ export function SourceInspector({
   entry,
   view,
   setView,
+  onReimport,
 }: {
   source: Source;
   entry?: Entry;
   view: View;
   setView: (view: View) => void;
+  onReimport?: (file: File, sourceId: string) => void;
 }) {
   const [data, setData] = useState<SourceData | null>(null);
   const [failure, setFailure] = useState<{
@@ -84,6 +86,15 @@ export function SourceInspector({
     let loadedProfile: Profile | undefined;
     void api.profile(source.source_id, controller.signal)
       .then((profile) => {
+        if (profile.coverage === "full" && profile.snapshot_id !== source.snapshot_id) {
+          if (!controller.signal.aborted) {
+            setProfileFailure({
+              id: source.source_id,
+              message: "Профиль относится к другой версии источника. Обновите данные и повторите расчёт.",
+            });
+          }
+          return;
+        }
         loadedProfile = profile;
         if (!controller.signal.aborted) {
           setData((previous) => previous?.id === source.source_id
@@ -109,7 +120,7 @@ export function SourceInspector({
           setFailure({ id: source.source_id, message: errorMessage(error) });
       });
     return () => controller.abort();
-  }, [source.source_id, revision]);
+  }, [source.source_id, source.snapshot_id, revision]);
   const current = data?.id === source.source_id ? data : null;
   const error = failure?.id === source.source_id ? failure.message : null;
   const profileError = profileFailure?.id === source.source_id ? profileFailure.message : null;
@@ -178,11 +189,13 @@ export function SourceInspector({
           <small>В схеме источника</small>
         </div>
         <div>
-          <span>Строк изучено</span>
+          <span>{current?.profile?.coverage === "full" ? "Строк обработано" : "Строк изучено"}</span>
           <strong>
-            {current?.profile ? numberText(current.profile.sample_size) : "—"}
+            {current?.profile
+              ? numberText(current.profile.coverage === "full" ? current.profile.processed_rows : current.profile.sample_size)
+              : "—"}
           </strong>
-          <small>Для профиля выборки</small>
+          <small>{current?.profile?.coverage === "full" ? "Полный датасет" : "Для профиля выборки"}</small>
         </div>
       </div>}
       <section className="analytics-report" aria-label="Исследование данных">
@@ -207,9 +220,13 @@ export function SourceInspector({
               <div className="profile-scope">
                 <span className="scope-dot" aria-hidden="true" />
                 <p>
-                  {sampleDescription(current.profile)}
+                  {current.profile.coverage === "full"
+                    ? "Статистика по всему датасету"
+                    : sampleDescription(current.profile)}
                   <small>
-                    Статистика относится к выборке, а не ко всему источнику.
+                    {current.profile.coverage === "full"
+                      ? <><span>Обработано {numberText(current.profile.processed_rows)} строк</span>. Точные показатели рассчитаны по всем строкам; частые значения — по выборке из {numberText(current.profile.sample_size)} строк.</>
+                      : "Статистика относится к выборке, а не ко всему источнику."}
                   </small>
                 </p>
               </div>
@@ -228,6 +245,7 @@ export function SourceInspector({
               model ? <ProfileColumns
                 key={`${source.source_id}-${columnSelection.revision}`}
                 fields={model.fields}
+                sampleSize={current.profile?.sample_size ?? 0}
                 initialSearch={
                   columnSelection.sourceId === source.source_id
                     ? columnSelection.name
@@ -293,8 +311,28 @@ export function SourceInspector({
                   </div>
                 </div>
                 <p className="analytics-caption">
-                  Типы определены автоматически по выборке.
+                  {source.import_report
+                    ? "Типы определены по всему файлу. Исходные значения сохранены."
+                    : "Типы определены автоматически по выборке."}
                 </p>
+                {source.import_report && <details className="csv-import-details">
+                  <summary>Отчёт об импорте</summary>
+                  <p>Принято {numberText(source.import_report.accepted_rows)} из {numberText(source.import_report.rows_read)} строк · отклонено {numberText(source.import_report.rejected_rows)}</p>
+                  <p>Кодировка: {source.import_report.encoding.toUpperCase()} · разделитель: {source.import_report.delimiter === "\t" ? "табуляция" : source.import_report.delimiter}</p>
+                  {source.import_report.warnings.length > 0 && <ul>{source.import_report.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>}
+                  {source.csv_versions?.map((version, index) => <a
+                    key={version.snapshot_id}
+                    href={`/sources/${encodeURIComponent(source.source_id)}/versions/${encodeURIComponent(version.snapshot_id)}/download`}
+                  >Скачать оригинал {index + 1}</a>)}
+                  {onReimport && <label className="csv-reimport">
+                    Повторно импортировать CSV
+                    <input type="file" accept=".csv,text/csv" aria-label="Повторно импортировать CSV" onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) onReimport(file, source.source_id);
+                      event.target.value = "";
+                    }} />
+                  </label>}
+                </details>}
                 {!current.schema.objects.length ? (
                   <p className="muted">В источнике нет объектов схемы.</p>
                 ) : (
@@ -338,9 +376,9 @@ export function SourceInspector({
                 <p>
                   Источник: {source.name}. Версия схемы:{" "}
                   {current.schema.version}. Число строк датасета берётся из
-                  схемы; остальные показатели — из профиля выборки.
-                  Заполненность — доля непустых ячеек среди ячеек с доступной
-                  статистикой. Частые значения сравниваются как исходные строки.
+                  схемы; {current.profile.coverage === "full"
+                    ? "заполненность, NULL, пустые строки и уникальность рассчитаны по всему датасету. Частые значения — из профиля выборки."
+                    : "остальные показатели — из профиля выборки. Заполненность — доля непустых ячеек среди ячеек с доступной статистикой. Частые значения сравниваются как исходные строки."}
                 </p>
                 <p>{current.profile.note}</p>
               </details>

@@ -16,6 +16,7 @@ import sqlglot
 from sqlglot import exp
 
 from app.contracts.v1 import Provenance, QueryResult, ResultColumn
+from app.duckdb_access import DUCKDB_ACCESS_LOCK
 
 
 class SafeQueryError(Exception):
@@ -93,6 +94,8 @@ class SafeQueryExecutor:
         timed_out = False
         connection = None
         timer: Timer | None = None
+        if not DUCKDB_ACCESS_LOCK.acquire(timeout=float(timeout)):
+            raise SafeQueryError("QUERY_TIMEOUT")
         try:
             connection = duckdb.connect(
                 str(self.database_path),
@@ -108,7 +111,7 @@ class SafeQueryExecutor:
                 timed_out = True
                 connection.interrupt()
 
-            timer = Timer(float(timeout), interrupt)
+            timer = Timer(max(0.001, float(timeout) - (perf_counter() - started)), interrupt)
             timer.daemon = True
             timer.start()
             cursor = connection.execute(bounded_sql)
@@ -165,6 +168,7 @@ class SafeQueryExecutor:
                 timer.cancel()
             if connection is not None:
                 connection.close()
+            DUCKDB_ACCESS_LOCK.release()
 
         columns = self._columns(names, description)
         return QueryResult(

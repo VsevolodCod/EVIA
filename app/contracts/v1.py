@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field, JsonValue, model_validator
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, RootModel, model_validator
 
 from app.models import AskResponse, DataSource, SourceSchema
 
@@ -24,19 +24,126 @@ class TopValue(BaseModel):
     count: int = Field(ge=0)
 
 
-class ColumnProfile(BaseModel):
+class NumericProfile(BaseModel):
+    count: int = Field(ge=0)
+    minimum: str
+    maximum: str
+    total: str
+    average: str
+
+
+class TemporalProfile(BaseModel):
+    count: int = Field(ge=0)
+    minimum: str
+    maximum: str
+
+
+class SampleColumnProfile(BaseModel):
+    """Facts calculated only from a bounded sample."""
+
+    model_config = ConfigDict(extra='forbid')
     sample_non_null_count: int = Field(ge=0)
     sample_null_count: int = Field(ge=0)
     distinct_sample_values: int = Field(ge=0)
     top_values: list[TopValue]
 
 
-class Profile(BaseModel):
+class ColumnProfile(SampleColumnProfile):
+    """Sample facts plus statistics calculated across an exact snapshot."""
+
+    non_null_count: int = Field(ge=0)
+    null_count: int = Field(ge=0)
+    empty_count: int = Field(ge=0)
+    distinct_count: int = Field(ge=0)
+    uniqueness_ratio: float = Field(ge=0, le=1)
+    is_identifier_candidate: bool
+    top_values_coverage: Literal['sample']
+    numeric: NumericProfile | None = None
+    temporal: TemporalProfile | None = None
+
+
+class FullProfile(BaseModel):
+    """Profile with exact statistics for an immutable CSV snapshot."""
+
+    model_config = ConfigDict(extra='forbid')
     sample_size: int = Field(ge=0)
     sample_limit: int = Field(ge=1)
+    processed_rows: int = Field(ge=0)
+    coverage: Literal['full']
+    snapshot_id: Identifier
     columns: dict[str, ColumnProfile]
     note: str
     snapshot: DatasetSnapshot | None = None
+
+    @model_validator(mode='after')
+    def consistent_exact_statistics(self):
+        _validate_sample_statistics(self.sample_size, self.sample_limit, self.columns)
+        if self.snapshot and self.snapshot.snapshot_id != self.snapshot_id:
+            raise ValueError('profile snapshot_id must match attached snapshot')
+        if self.snapshot and self.snapshot.row_count is not None and self.snapshot.row_count != self.processed_rows:
+            raise ValueError('profile processed_rows must match attached snapshot row_count')
+        for column in self.columns.values():
+            if column.non_null_count + column.null_count != self.processed_rows:
+                raise ValueError('column null counts must equal processed_rows')
+            if column.empty_count > column.non_null_count:
+                raise ValueError('column empty_count cannot exceed non_null_count')
+            if column.distinct_count > column.non_null_count:
+                raise ValueError('column distinct_count cannot exceed non_null_count')
+            if column.is_identifier_candidate and not (
+                column.non_null_count == self.processed_rows
+                and column.empty_count == 0
+                and column.distinct_count == self.processed_rows
+            ):
+                raise ValueError('identifier candidate must be complete and unique')
+            typed_count = column.non_null_count - column.empty_count
+            if column.numeric and column.temporal:
+                raise ValueError('column cannot be numeric and temporal simultaneously')
+            if column.numeric and column.numeric.count != typed_count:
+                raise ValueError('numeric count must equal non-empty values')
+            if column.temporal and column.temporal.count != typed_count:
+                raise ValueError('temporal count must equal non-empty values')
+        return self
+
+
+class SampleProfile(BaseModel):
+    """Profile whose facts are limited to a bounded live PostgreSQL sample."""
+
+    model_config = ConfigDict(extra='forbid')
+    sample_size: int = Field(ge=0)
+    sample_limit: int = Field(ge=1)
+    coverage: Literal['sample']
+    columns: dict[str, SampleColumnProfile]
+    note: str
+
+    @model_validator(mode='after')
+    def consistent_sample_statistics(self):
+        _validate_sample_statistics(self.sample_size, self.sample_limit, self.columns)
+        return self
+
+
+def _validate_sample_statistics(
+    sample_size: int,
+    sample_limit: int,
+    columns: dict[str, SampleColumnProfile],
+) -> None:
+    if sample_size > sample_limit:
+        raise ValueError('sample_size cannot exceed sample_limit')
+    for column in columns.values():
+        if column.sample_non_null_count + column.sample_null_count != sample_size:
+            raise ValueError('sample column counts must equal sample_size')
+        if column.distinct_sample_values > column.sample_non_null_count:
+            raise ValueError('distinct sample values cannot exceed non-null values')
+        if sum(value.count for value in column.top_values) > column.sample_non_null_count:
+            raise ValueError('top value counts cannot exceed non-null values')
+
+
+ProfileVariant = Annotated[FullProfile | SampleProfile, Field(discriminator='coverage')]
+
+
+class Profile(RootModel[ProfileVariant]):
+    """A response that distinguishes exact snapshot facts from sample facts."""
+
+    root: ProfileVariant
 
 
 class ResultColumn(BaseModel):

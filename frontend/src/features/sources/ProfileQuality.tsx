@@ -3,6 +3,7 @@ import {
   numberText,
   percentText,
   ratio,
+  hasExactStats,
   type ProfileModel,
 } from "./profileModel";
 
@@ -17,13 +18,14 @@ export function ProfileQuality({
     <div className="analytics-section">
       <div className="analytics-title">
         <div>
-          <span className="analytics-kicker">ПРОВЕРКА ВЫБОРКИ</span>
+          <span className="analytics-kicker">{model.coverage === "full" ? "ПРОВЕРКА ВСЕГО ДАТАСЕТА" : "ПРОВЕРКА ВЫБОРКИ"}</span>
           <h2>Качество данных</h2>
         </div>
       </div>
       <p className="analytics-caption">
-        Пропуски в доступном профиле. Полнота данных не гарантирует корректность
-        значений.
+        {model.coverage === "full"
+          ? "Точные NULL по всему датасету. Полнота данных не гарантирует корректность значений."
+          : "Пропуски в доступном профиле. Полнота данных не гарантирует корректность значений."}
       </p>
       <div className="quality-summary">
         <div>
@@ -58,9 +60,13 @@ export function ProfileQuality({
           <div className="missing-columns">
             {model.missingFields.map((field) => {
               const stats = field.stats!;
+              const exact = hasExactStats(stats);
+              const missingCount = exact ? stats.null_count : stats.sample_null_count;
               const missing = ratio(
-                stats.sample_null_count,
-                stats.sample_null_count + stats.sample_non_null_count,
+                missingCount,
+                exact
+                  ? stats.null_count + stats.non_null_count
+                  : stats.sample_null_count + stats.sample_non_null_count,
               );
               return (
                 <button
@@ -71,7 +77,7 @@ export function ProfileQuality({
                   <span className="missing-row">
                     <strong>{field.name}</strong>
                     <span>
-                      {numberText(stats.sample_null_count)} ·{" "}
+                      {numberText(missingCount)} ·{" "}
                       {percentText(missing)}
                     </span>
                     <Icon name="chevron" size={14} />

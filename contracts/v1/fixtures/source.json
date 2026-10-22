@@ -2,6 +2,8 @@
   "contract": "Source",
   "data": {
     "created_at": "2026-10-17T00:00:00Z",
+    "csv_versions": [],
+    "import_report": null,
     "name": "Synthetic sales",
     "schema_name": null,
     "schema_version": 1,

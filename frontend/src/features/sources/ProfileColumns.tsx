@@ -3,15 +3,19 @@ import {
   numberText,
   percentText,
   ratio,
+  hasExactStats,
+  rowsText,
   typeLabel,
   type ProfileField,
 } from "./profileModel";
 
 export function ProfileColumns({
   fields,
+  sampleSize,
   initialSearch = "",
 }: {
   fields: ProfileField[];
+  sampleSize: number;
   initialSearch?: string;
 }) {
   const [search, setSearch] = useState(initialSearch);
@@ -21,7 +25,9 @@ export function ProfileColumns({
       field.name
         .toLocaleLowerCase()
         .includes(search.trim().toLocaleLowerCase()) &&
-      (!onlyMissing || (field.stats?.sample_null_count ?? 0) > 0),
+      (!onlyMissing || (field.stats && hasExactStats(field.stats)
+        ? field.stats.null_count > 0
+        : (field.stats?.sample_null_count ?? 0) > 0)),
   );
   return (
     <div className="analytics-section">
@@ -54,8 +60,8 @@ export function ProfileColumns({
         </button>
       </div>
       <p className="analytics-caption">
-        Частоты и уникальные значения — по выборке. Нажмите на столбец, чтобы
-        раскрыть детали.
+        Точные показатели доступны для полных профилей; частые значения всегда
+        строятся по выборке. Нажмите на столбец, чтобы раскрыть детали.
       </p>
       {!filtered.length && (
         <div className="analytics-empty">
@@ -77,6 +83,7 @@ export function ProfileColumns({
           <ColumnCard
             key={field.name}
             field={field}
+            sampleSize={sampleSize}
             initialOpen={Boolean(initialSearch)}
           />
         ))}
@@ -87,14 +94,19 @@ export function ProfileColumns({
 
 function ColumnCard({
   field,
+  sampleSize,
   initialOpen,
 }: {
   field: ProfileField;
+  sampleSize: number;
   initialOpen: boolean;
 }) {
   const stats = field.stats;
+  const exact = stats && hasExactStats(stats);
   const total = stats
-    ? stats.sample_non_null_count + stats.sample_null_count
+    ? exact
+      ? stats.non_null_count + stats.null_count
+      : stats.sample_non_null_count + stats.sample_null_count
     : 0;
   const maximum = Math.max(
     1,
@@ -111,34 +123,37 @@ function ColumnCard({
             <strong>{field.name}</strong>
             <small>
               {typeLabel(field.type)}
-              {field.identifier ? " · Кандидат в идентификаторы" : ""}
+            {field.identifier ? " · Гипотеза: кандидат в идентификаторы" : ""}
             </small>
           </span>
           <span
-            className={`column-status ${stats?.sample_null_count ? "has-missing" : ""}`}
+            className={`column-status ${stats && (exact ? stats.null_count : stats.sample_null_count) ? "has-missing" : ""}`}
           >
-            {stats ? percentText(ratio(stats.sample_null_count, total)) : "Нет профиля"}
+            {stats ? percentText(ratio(exact ? stats.null_count : stats.sample_null_count, total)) : "Нет профиля"}
           </span>
         </summary>
         {stats ? (
           <div className="column-details">
-            <dl className="column-stats">
-              <div>
-                <dt>Заполнено</dt>
-                <dd>{numberText(stats.sample_non_null_count)}</dd>
-              </div>
-              <div>
-                <dt>Пропуски</dt>
-                <dd>{numberText(stats.sample_null_count)}</dd>
-              </div>
-              <div>
-                <dt>Доля пропусков</dt>
-                <dd>{percentText(ratio(stats.sample_null_count, total))}</dd>
-              </div>
-            </dl>
+            {exact ? <>
+              <dl className="column-stats column-stats-exact">
+                <div><dt>Заполнено</dt><dd>{numberText(stats.non_null_count)}</dd></div>
+                <div><dt>NULL</dt><dd>{numberText(stats.null_count)}</dd></div>
+                <div><dt>Пустые строки</dt><dd>{numberText(stats.empty_count)}</dd></div>
+                <div><dt>Уникальных значений</dt><dd>{numberText(stats.distinct_count)}</dd></div>
+                <div><dt>Уникальность</dt><dd>{percentText(stats.uniqueness_ratio * 100)}</dd></div>
+              </dl>
+              {(stats.numeric || stats.temporal) && <dl className="column-ranges">
+                {stats.numeric && <div><dt>Диапазон чисел</dt><dd>{stats.numeric.minimum} — {stats.numeric.maximum}</dd></div>}
+                {stats.temporal && <div><dt>Диапазон дат</dt><dd>{stats.temporal.minimum} — {stats.temporal.maximum}</dd></div>}
+              </dl>}
+            </> : <dl className="column-stats">
+              <div><dt>Заполнено</dt><dd>{numberText(stats.sample_non_null_count)}</dd></div>
+              <div><dt>Пропуски</dt><dd>{numberText(stats.sample_null_count)}</dd></div>
+              <div><dt>Доля пропусков</dt><dd>{percentText(ratio(stats.sample_null_count, total))}</dd></div>
+            </dl>}
             <div className="frequency-heading">
-              <h4>Частые значения</h4>
-              <span>Количество в выборке</span>
+              <h4>{exact ? "Частые значения — только по выборке" : "Частые значения"}</h4>
+              <span>{exact ? `${rowsText(sampleSize)} в выборке` : "Количество в выборке"}</span>
             </div>
             {stats.top_values.length ? (
               <ul
@@ -163,7 +178,7 @@ function ColumnCard({
               <p className="analytics-caption">Нет заполненных значений</p>
             )}
             <p className="chart-footnote">
-              Показаны самые частые значения из профиля, а не все значения
+              Показаны самые частые значения из выборки, а не все значения
               столбца.
             </p>
           </div>
