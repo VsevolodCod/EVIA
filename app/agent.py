@@ -1,7 +1,12 @@
 import json
 from time import perf_counter
+from uuid import uuid4
 
+from app.contracts.v1 import AgentResponse, Error
+from app.csv_query_agent import CSVQueryAgent
 from app.llm.base import LLMProvider
+from app.llm.mock import MockLLMProvider
+from app.source_service import SourceService
 from app.models import (
     AskResponse,
     LLMMessage,
@@ -11,6 +16,12 @@ from app.tools import ToolRegistry
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+class IncompleteModelOutput(Exception):
+    def __init__(self, steps: int, tool_results: list[ToolResult]) -> None:
+        self.steps = steps
+        self.tool_results = tool_results
 
 SYSTEM_PROMPT = """
 Ты — помощник аналитика в локальной BI-платформе.
@@ -36,31 +47,60 @@ class AgentRuntime:
             llm: LLMProvider,
             tools: ToolRegistry,
             max_steps: int = 5,
+            sources: SourceService | None = None,
     ) -> None:
 
         self.llm = llm
         self.tools = tools
         self.max_steps = max(1, max_steps)
+        self.sources = sources
+        self.csv_query = CSVQueryAgent(llm, sources) if sources is not None else None
 
     async def ask(
             self,
             question: str,
             source_ids: list[str] | None = None,
             history: list[ChatMessage] | None = None,
-    ) -> AskResponse:
+    ) -> AgentResponse:
         started = perf_counter()
         timing = AgentTiming()
         outcome = 'error'
+        request_id = uuid4().hex
         try:
-            result = await self._ask(question, source_ids, history, timing)
-            outcome = 'completed'
+            selected = self.sources.catalog.get_source(source_ids[0]) if self.sources and source_ids and len(source_ids) == 1 else None
+            if self.sources and source_ids and selected is None and len(source_ids) == 1:
+                result = AgentResponse(
+                    request_id=request_id, status="error", answer="Выбранный источник не найден.", steps=0,
+                    timing=timing, error=Error(code="SOURCE_NOT_FOUND", message="Источник не найден.", request_id=request_id),
+                )
+            elif selected and selected.source_type == "csv" and not isinstance(self.llm, MockLLMProvider):
+                result = await self.csv_query.ask(question, selected.source_id, timing, request_id, history)
+                result.answer_kind = "computed" if result.status == "answered" else "model"
+            else:
+                try:
+                    legacy = await self._ask(question, source_ids, history, timing)
+                except IncompleteModelOutput as exc:
+                    message = "Ответ модели прервался из-за лимита генерации. Попробуйте уточнить вопрос или увеличить MAX_TOKENS_G."
+                    result = AgentResponse(
+                        request_id=request_id, status="error", answer=message,
+                        steps=exc.steps, tool_results=exc.tool_results, timing=timing,
+                        error=Error(code="MODEL_OUTPUT_INCOMPLETE", message=message,
+                                    request_id=request_id, retryable=True),
+                    )
+                else:
+                    result = AgentResponse(
+                        **legacy.model_dump(exclude={"timing"}),
+                        request_id=request_id, status="answered", timing=timing,
+                        answer_kind="demo" if isinstance(self.llm, MockLLMProvider) else "model",
+                    )
+            outcome = result.status
             result.timing = timing
             return result
         finally:
             timing.elapsed_ms = (perf_counter() - started) * 1000
             # No question, source contents or answer text in performance logs.
-            logger.info('agent_timing outcome=%s elapsed_ms=%.1f llm_ms=%.1f tools_ms=%.1f calls=%d',
-                        outcome, timing.elapsed_ms, timing.llm_ms, timing.tools_ms, len(timing.calls))
+            logger.info('agent_timing request_id=%s outcome=%s elapsed_ms=%.1f llm_ms=%.1f tools_ms=%.1f calls=%d',
+                        request_id, outcome, timing.elapsed_ms, timing.llm_ms, timing.tools_ms, len(timing.calls))
 
     async def _ask(
             self,
@@ -94,6 +134,7 @@ class AgentRuntime:
         )
 
         results: list[ToolResult] = []
+        answer_parts: list[str] = []
 
         # Основный цикл агента
         for step in range(1, self.max_steps + 1):
@@ -108,11 +149,20 @@ class AgentRuntime:
             call_timing.elapsed_ms = elapsed
             timing.calls.append(call_timing)
 
-            if not response.tool_calls:  # Если модель готова ответить пользователю
-                answer = response.content.strip()
+            if response.finish_reason == "length":
+                if response.tool_calls or step == self.max_steps:
+                    raise IncompleteModelOutput(step, results)
+                answer_parts.append(response.content)
+                messages.append(LLMMessage(role="assistant", content=response.content))
+                messages.append(LLMMessage(role="user", content="Продолжи ответ точно с места обрыва, без повторения уже написанного."))
+                continue
+            if response.finish_reason not in (None, "stop", "tool_calls"):
+                raise IncompleteModelOutput(step, results)
 
-                if not answer:
-                    answer = "Модель вернула пустой ответ."
+            if not response.tool_calls:  # Если модель готова ответить пользователю
+                if not response.content.strip():
+                    raise IncompleteModelOutput(step, results)
+                answer = ("".join(answer_parts) + response.content).strip()
 
                 logger.info("Агент вернул итоговый ответ")
                 # Выход из цикла с итоговым ответом модели
@@ -122,6 +172,8 @@ class AgentRuntime:
                     steps=step,
                     tool_results=results,
                 )
+
+            answer_parts.clear()
 
             raw_calls = response.raw_tool_calls
 

@@ -6,6 +6,7 @@ from app.models import SourceSchema
 from app.schema_catalog import SchemaCatalog
 from app.source_service import SourceService
 from app.data_sources.csv_format import PARSER_VERSION, detect_delimiter
+from app.data_sources.csv_adapter import infer_type
 
 
 @pytest.fixture
@@ -64,7 +65,7 @@ def test_semicolon_is_preferred_when_decimal_commas_are_data_not_delimiters():
     assert detect_delimiter(content) == ';'
 
 
-@pytest.mark.parametrize('old_parser_version', [1, 2, 3])
+@pytest.mark.parametrize('old_parser_version', [1, 2, 3, 4])
 def test_legacy_schema_repaired_once_without_reupload(service, old_parser_version):
     source = service.register_csv('synthetic.csv', b'id;value\n001;10\n')
     service.catalog.save_schema(SourceSchema(source_id=source.source_id, parser_version=old_parser_version))
@@ -75,3 +76,9 @@ def test_legacy_schema_repaired_once_without_reupload(service, old_parser_versio
     assert [f.name for f in repaired.objects[0].fields] == ['id', 'value']
     assert service.get_schema(source.source_id).version == 2
     assert (service.data_dir / f'{source.source_id}.csv').read_bytes() == original
+
+
+def test_iso_datetime_columns_are_inferred_without_retyping_identifier_strings():
+    assert infer_type(['2024-10-01 01:12:29', '2024-10-02 02:30:08']) == 'datetime'
+    assert infer_type(['2024-10-01', '2024-10-02']) == 'date'
+    assert infer_type(['ПД-06-000001', 'ПД-06-000002']) == 'string'

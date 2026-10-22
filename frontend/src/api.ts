@@ -141,6 +141,10 @@ const fullProfileSchema = z.object({
 const profileSchema = z.discriminatedUnion("coverage", [fullProfileSchema, sampleProfileSchema]);
 const answerSchema = z.object({
   answer: z.string(),
+  request_id: z.string().optional(),
+  status: z.enum(["answered", "clarification", "error"]).optional(),
+  answer_kind: z.enum(["demo", "model", "computed"]).optional(),
+  analysis: z.object({ intent: z.string(), sql: z.string().nullable(), explanation: z.string() }).nullable().optional(),
   chat_id: z.string().nullable().optional(),
   steps: z.number().int().nonnegative(),
   timing: z.object({

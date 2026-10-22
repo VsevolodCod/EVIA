@@ -123,6 +123,7 @@ class LLMResponse(BaseModel):
     tool_calls: list[ToolCall] = Field(default_factory=list)
     raw_tool_calls: list[dict[str, Any]] = Field(default_factory=list)
     timing: ModelTiming | None = None
+    finish_reason: str | None = None
 
 
 class ToolResult(BaseModel):

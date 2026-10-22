@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 import logging
+from uuid import uuid4
 
 from fastapi import (
     FastAPI,
@@ -14,6 +15,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 
 from app.agent import AgentRuntime
+from app.contracts.v1 import AgentResponse
 from app.config import PROJECT_ROOT, get_settings
 from app.csv_import import CSVImportError
 from app.data_sources.postgresql_adapter import PostgresSourceError, PostgreSQLAdapter
@@ -62,6 +64,7 @@ agent = AgentRuntime(
     llm=llm_provider,
     tools=tool_registry,
     max_steps=settings.agent_max_steps,
+    sources=source_service,
 )
 
 
@@ -238,7 +241,7 @@ def profile_source(source_id: str):
         ) from exc
 
 
-@app.post("/agent/ask", response_model=AskResponse)
+@app.post("/agent/ask", response_model=AgentResponse)
 async def ask_agent(body: AskRequest):
     try:
         return await agent.ask(
@@ -254,7 +257,7 @@ async def ask_agent(body: AskRequest):
         ) from exc
 
 
-@app.post("/agent/chat", response_model=AskResponse)
+@app.post("/agent/chat", response_model=AgentResponse)
 async def chat_agent(
     body: AskRequest,
     http_request: Request,
@@ -291,20 +294,23 @@ async def chat_agent(
             history=chat.messages[:-1],
         )
 
-        # Сохраняем ответ ассистента в истории.
-        chat.messages.append(
-            ChatMessage(
-                role="assistant",
-                content=answer.answer,
+        # Не сохраняем текст ошибки как успешный ответ: незавершённый вопрос
+        # при повторном открытии чата остаётся доступным для повтора.
+        if getattr(answer, "status", "answered") != "error":
+            chat.messages.append(
+                ChatMessage(
+                    role="assistant",
+                    content=answer.answer,
+                )
             )
-        )
-
-        await chat_manager.save(chat)
+            await chat_manager.save(chat)
 
         # Возвращаем обычный ответ агента вместе с идентификатором чата.
         response_data = answer.model_dump()
         response_data["chat_id"] = chat.chat_id
-        return AskResponse.model_validate(response_data)
+        response_data.setdefault("request_id", uuid4().hex)
+        response_data.setdefault("status", "answered")
+        return AgentResponse.model_validate(response_data)
 
     except ChatNotFoundError as exc:
         raise HTTPException(

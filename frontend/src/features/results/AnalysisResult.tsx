@@ -80,11 +80,27 @@ function tabularInput(result: ToolResult): DashboardInput | null {
   return queryResultInput(result.data);
 }
 
+function scalarText(value: unknown, type: string) {
+  if (value === null || value === undefined) return "Нет подходящих значений";
+  if (typeof value === "number") return value.toLocaleString("ru-RU", { maximumFractionDigits: 2 });
+  if (typeof value === "string" && ["date", "datetime"].includes(type)) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}:\d{2}:\d{2}))?/.exec(value);
+    if (match) return `${match[3]}.${match[2]}.${match[1]}${match[4] ? ` ${match[4]}` : ""}`;
+  }
+  return String(value);
+}
+
 export function AnalysisResult({ entry }: { entry?: Entry }) {
   const result = entry?.answer?.tool_results.map(tabularInput).find((input): input is DashboardInput => input !== null);
+  const field = result?.schema.objects[0]?.fields[0];
+  const scalar = result?.rows.length === 1 && result.schema.objects[0]?.fields.length === 1 && field
+    ? { name: field.name, type: field.inferred_type, value: result.rows[0][field.name] }
+    : null;
+  const scalarLabel = scalar?.type === "datetime" && /\bAVG\s*\(/i.test(entry?.answer?.analysis?.sql ?? "")
+    ? "Средняя дата/время" : scalar?.name.replaceAll("_", " ");
   return (
     <div className="analytics-section analysis-result">
-      {!result && <div className="analytics-title">
+      {(!result || scalar) && <div className="analytics-title">
         <div>
           <span className="analytics-kicker">ОТ ВОПРОСА К ВЫВОДУ</span>
           <h2>Результат анализа</h2>
@@ -92,7 +108,20 @@ export function AnalysisResult({ entry }: { entry?: Entry }) {
       </div>}
       {entry?.answer ? (
         <>
-          {result && <Dashboard
+          <div className="analysis-provenance">
+            {entry.answer.status === "error" ? "Запрос не выполнен"
+              : entry.answer.status === "clarification" ? "Нужно уточнение"
+              : entry.answer.answer_kind === "computed" ? "Рассчитано по CSV"
+              : entry.answer.answer_kind === "demo" ? "Демо-ответ"
+              : entry.answer.tool_results.some((item) => item.tool_name === "query_data" && item.ok)
+                ? "Рассчитано по данным"
+                : entry.answer.answer_kind === "model" ? "Ответ модели" : "Ответ из истории"}
+          </div>
+          {scalar && <section className="analysis-scalar" aria-label="Показатель">
+            <span>{scalarLabel}</span>
+            <strong>{scalarText(scalar.value, scalar.type)}</strong>
+          </section>}
+          {result && !scalar && <Dashboard
             title="Результат анализа"
             sourceLabel="Таблица, полученная инструментом EVIA"
             scope={`result-${entry.id}`}
@@ -107,9 +136,16 @@ export function AnalysisResult({ entry }: { entry?: Entry }) {
               {entry.answer.answer || "Модель вернула пустой ответ."}
             </SafeMarkdown>
           </section>
-          {entry.answer.tool_results.length > 0 && (
-            <ToolResults results={entry.answer.tool_results} />
-          )}
+          {entry.answer.analysis?.sql && <details className="analysis-sql">
+            <summary>Показать SQL</summary>
+            <code>{entry.answer.analysis.sql}</code>
+          </details>}
+          {entry.answer.tool_results.length > 0 && (scalar ? (
+            <details className="analysis-details">
+              <summary>Таблица и детали расчёта</summary>
+              <ToolResults results={entry.answer.tool_results} />
+            </details>
+          ) : <ToolResults results={entry.answer.tool_results} />)}
         </>
       ) : (
         <div className="analytics-empty">

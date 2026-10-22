@@ -194,7 +194,7 @@ class AnalysisPlan(BaseModel):
 
 
 class Error(BaseModel):
-    code: Literal['VALIDATION_ERROR', 'SOURCE_NOT_FOUND', 'IMPORT_FAILED', 'QUERY_REJECTED', 'QUERY_TIMEOUT', 'MODEL_UNAVAILABLE', 'INTERNAL_ERROR']
+    code: Literal['VALIDATION_ERROR', 'SOURCE_NOT_FOUND', 'IMPORT_FAILED', 'QUERY_REJECTED', 'QUERY_TIMEOUT', 'MODEL_UNAVAILABLE', 'MODEL_OUTPUT_INCOMPLETE', 'INTERNAL_ERROR']
     message: str
     request_id: Identifier
     retryable: bool = False
@@ -204,6 +204,7 @@ class AgentResponse(AskResponse):
     contract_version: Literal['1.0'] = '1.0'
     request_id: Identifier
     status: Literal['answered', 'clarification', 'error']
+    answer_kind: Literal['demo', 'model', 'computed'] = 'model'
     analysis: AnalysisPlan | None = None
     results: list[QueryResult] = Field(default_factory=list)
     error: Error | None = None

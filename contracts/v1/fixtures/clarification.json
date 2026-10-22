@@ -3,6 +3,7 @@
   "data": {
     "analysis": null,
     "answer": "Which period?",
+    "answer_kind": "model",
     "artifact_ids": [],
     "chat_id": null,
     "contract_version": "1.0",

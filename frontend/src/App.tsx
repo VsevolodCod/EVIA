@@ -488,6 +488,8 @@ export default function App() {
           mascotState: "cancelled",
           error: "Ожидание остановлено. Сервер может продолжать обработку.",
         });
+      else if (answer.status === "error")
+        finish({ state: "error", mascotState: "error", answer, error: answer.answer });
       else finish({ state: "success", answer });
     } catch (error) {
       finish({

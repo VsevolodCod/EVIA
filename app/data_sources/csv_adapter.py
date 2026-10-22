@@ -1,6 +1,8 @@
 import csv
+from datetime import date, datetime
 from itertools import islice
 from pathlib import Path
+import re
 from typing import Any
 
 from app.data_sources.base import DataSourceAdapter
@@ -32,6 +34,22 @@ def infer_type(values: list[str]) -> str:
         if any(len(v) > 1 and v.startswith("0") for v in values):
             return "string"
         return "integer"
+
+    if all(re.fullmatch(r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?", value) for value in values):
+        try:
+            for value in values:
+                datetime.fromisoformat(value)
+            return "datetime"
+        except ValueError:
+            pass
+
+    if all(re.fullmatch(r"\d{4}-\d{2}-\d{2}", value) for value in values):
+        try:
+            for value in values:
+                date.fromisoformat(value)
+            return "date"
+        except ValueError:
+            pass
 
     try:
         for value in values:
