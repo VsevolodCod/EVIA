@@ -5,11 +5,13 @@ import io
 from itertools import islice
 from typing import TextIO
 
-PARSER_VERSION = 4
+PARSER_VERSION = 5
 SAMPLE_CHARS = 65536
 
 
 def detect_delimiter(sample: str) -> str:
+    if sample.lower().startswith("sep=") and len(sample) >= 5 and sample[4] in (',', ';', '\t', '|'):
+        return sample[4]
     candidates = []
     for delimiter in (',', ';', '\t', '|'):
         try:
@@ -43,8 +45,15 @@ def detect_delimiter(sample: str) -> str:
 
 def csv_reader(stream: TextIO):
     position = stream.tell()
+    first_line = stream.readline()
+    if not (first_line.lower().startswith("sep=") and len(first_line.rstrip("\r\n")) == 5
+            and first_line[4] in (',', ';', '\t', '|')):
+        stream.seek(position)
     sample = stream.read(SAMPLE_CHARS)
     stream.seek(position)
+    if first_line.lower().startswith("sep=") and len(first_line.rstrip("\r\n")) == 5:
+        stream.readline()
+        return csv.reader(stream, delimiter=first_line[4], strict=True)
     return csv.reader(stream, delimiter=detect_delimiter(sample), strict=True)
 
 
@@ -52,7 +61,7 @@ def read_header(reader) -> list[str]:
     header = next(reader, None)
     if not header or any(not name.strip() for name in header):
         raise ValueError('CSV must contain non-empty column names')
-    if len(set(header)) != len(header):
+    if len({name.casefold() for name in header}) != len(header):
         raise ValueError('CSV contains duplicate column names')
     return header
 

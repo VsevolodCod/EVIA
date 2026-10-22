@@ -2,22 +2,21 @@ import csv
 import io
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, BinaryIO
 
 from app.data_sources.csv_adapter import CSVAdapter
 from app.data_sources.csv_format import (
     PARSER_VERSION,
     SAMPLE_CHARS,
-    csv_reader,
     detect_delimiter,
-    read_header,
 )
 from app.data_engine import DuckDBDataEngine
+from app.csv_import import CSVImportError, ImportReport, copy_original, scan_csv
 from app.data_sources.postgresql_adapter import PostgreSQLAdapter
 from app.contracts.v1 import Provenance, QueryResult
-from app.models import DataSource, SourceSchema, utc_now
+from app.models import CSVVersion, DataSource, SourceSchema, utc_now
 from app.safe_sql import SafeQueryExecutor
-from app.schema_catalog import SchemaCatalog
+from app.schema_catalog import CatalogConflictError, SchemaCatalog
 
 
 class SourceService:
@@ -67,70 +66,113 @@ class SourceService:
         filename: str,
         content: bytes,
         name: str | None = None,
+        source_id: str | None = None,
+    ) -> DataSource:
+        return self.register_csv_stream(filename, io.BytesIO(content), name=name, source_id=source_id)
+
+    def register_csv_stream(
+        self,
+        filename: str,
+        stream: BinaryIO,
+        name: str | None = None,
+        source_id: str | None = None,
     ) -> DataSource:
 
         if not filename.lower().endswith(".csv"):
             raise ValueError("Only CSV files are supported")
 
-        if not content:
-            raise ValueError("Uploaded CSV is empty")
-
-        try:
-            text = content.decode("utf-8-sig")
-            reader = csv_reader(io.StringIO(text, newline=''))
-            read_header(reader)
-        except (UnicodeDecodeError, csv.Error) as exc:
-            raise ValueError("CSV must be valid UTF-8") from exc
-
-        source_id = uuid.uuid4().hex
+        previous = self.catalog.get_source(source_id) if source_id else None
+        if source_id and (previous is None or previous.source_type != "csv"):
+            raise ValueError("CSV source for reimport was not found")
+        source_id = source_id or uuid.uuid4().hex
+        snapshot_id = uuid.uuid4().hex
         source_name = (
-            name or Path(filename).stem or "uploaded_csv"
+            name or (previous.name if previous else None) or Path(filename).stem or "uploaded_csv"
         ).strip()[:120]
 
-        source = DataSource(
-            source_id=source_id,
-            snapshot_id=uuid.uuid4().hex,
-            name=source_name,
-            source_type="csv",
-            status="importing",
-        )
+        if previous:
+            source = previous.model_copy(deep=True)
+            source.snapshot_id = snapshot_id
+            source.schema_version += 1
+            source.name = source_name
+            source.status = "importing"
+            if not source.csv_versions and previous.snapshot_id:
+                source.csv_versions.append(CSVVersion(
+                    snapshot_id=previous.snapshot_id,
+                    raw_filename=f"{source_id}.csv",
+                    normalized_filename=f"{source_id}.csv",
+                    report=previous.import_report or ImportReport(),
+                ))
+        else:
+            source = DataSource(
+                source_id=source_id,
+                snapshot_id=snapshot_id,
+                name=source_name,
+                source_type="csv",
+                status="importing",
+            )
+        raw_filename = f"{source_id}.csv" if previous is None else f"{source_id}.{snapshot_id}.csv"
+        normalized_filename = f"{source_id}.{snapshot_id}.normalized.csv"
+        target = self.data_dir / raw_filename
+        normalized = self.data_dir / normalized_filename
 
-        target = (self.data_dir / f"{source_id}.csv").resolve()
-
-        if target.parent != self.data_dir:
-            raise ValueError("Invalid target path")
-
-        target.write_bytes(content)
-
+        report: ImportReport | None = None
         try:
-            # Validate the complete file before publishing it to DuckDB.  A
-            # malformed tail therefore cannot leave a table that looks ready.
+            report = scan_csv(target, normalized, copy_original(stream, target))
+            source.import_report = report
+            source.csv_versions.append(CSVVersion(
+                snapshot_id=snapshot_id,
+                raw_filename=raw_filename,
+                normalized_filename=normalized_filename,
+                report=report,
+            ))
             schema = self.csv_adapter.introspect_schema(source)
             self.data_engine.import_csv(
                 source,
-                target,
-                delimiter=detect_delimiter(text),
+                normalized,
+                delimiter=",",
+                typed_sql_types=report.typed_sql_types,
             )
+            if self.data_engine.row_count(source) != report.accepted_rows:
+                raise CSVImportError("Imported row count does not match validated CSV", report)
             source.schema_version = schema.version
             source.status = "available"
 
-            self.catalog.upsert_source(source)
-            self.catalog.save_schema(schema)
+            self.catalog.save_source_and_schema(
+                source, schema, expected_snapshot_id=previous.snapshot_id if previous else None,
+            )
 
-        except (csv.Error, UnicodeDecodeError) as exc:
+        except Exception as exc:
             self.data_engine.discard(source)
             target.unlink(missing_ok=True)
-            raise ValueError('CSV contains invalid encoding or quoting') from exc
-        except ValueError:
-            self.data_engine.discard(source)
-            target.unlink(missing_ok=True)
-            raise
-        except Exception:
-            self.data_engine.discard(source)
-            target.unlink(missing_ok=True)
+            normalized.unlink(missing_ok=True)
+            if isinstance(exc, CatalogConflictError):
+                raise CSVImportError("CSV source changed during import; retry with the latest version",
+                                     report or ImportReport(), status_code=409) from exc
             raise
 
         return source
+
+    def list_csv_versions(self, source_id: str) -> list[CSVVersion]:
+        source = self.catalog.get_source(source_id)
+        if source is None or source.source_type != "csv":
+            raise KeyError(f"Unknown CSV source: {source_id}")
+        return source.csv_versions
+
+    def raw_csv_path(self, source_id: str, snapshot_id: str | None = None) -> Path:
+        source = self.catalog.get_source(source_id)
+        if source is None or source.source_type != "csv":
+            raise KeyError(f"Unknown CSV source: {source_id}")
+        if snapshot_id is None:
+            snapshot_id = source.snapshot_id
+        version = next((item for item in source.csv_versions if item.snapshot_id == snapshot_id), None)
+        if version is None and (source.csv_versions or snapshot_id != source.snapshot_id):
+            raise KeyError(f"Unknown CSV snapshot: {snapshot_id}")
+        filename = version.raw_filename if version else f"{source_id}.csv"
+        path = (self.data_dir / filename).resolve()
+        if path.parent != self.data_dir:
+            raise ValueError("Invalid source path")
+        return path
 
     def get_schema(self, source_id: str) -> SourceSchema:
         source = self.catalog.get_source(source_id)
@@ -214,7 +256,9 @@ class SourceService:
             sql,
             allowed_tables={
                 "source": self.data_engine.table_name(source),
+                **({"source_typed": self.data_engine.typed_table_name(source)} if source.import_report else {}),
                 self.data_engine.table_name(source): self.data_engine.table_name(source),
+                **({self.data_engine.typed_table_name(source): self.data_engine.typed_table_name(source)} if source.import_report else {}),
             },
             provenance=Provenance(
                 source_id=source.source_id,
@@ -229,16 +273,28 @@ class SourceService:
 
     def _ensure_materialized(self, source: DataSource) -> DataSource:
         """Repair pre-DuckDB catalog entries from their retained CSV artifact."""
-        if self.data_engine.has_table(source):
+        raw_ready = self.data_engine.has_table(source)
+        typed_ready = not source.import_report or self.data_engine.has_typed_table(source)
+        if raw_ready and typed_ready:
             return source
         if source.status != "available":
             raise ValueError("Source is not ready for analytics")
+        if raw_ready and source.import_report:
+            self.data_engine.repair_typed_table(source, source.import_report.typed_sql_types)
+            return source
 
         path = self.csv_adapter._path(source)
         if not path.is_file():
             raise FileNotFoundError(f"Source file not found: {source.source_id}")
-        with path.open("r", encoding="utf-8-sig", newline="") as csv_file:
-            text = csv_file.read(SAMPLE_CHARS)
+        if source.csv_versions:
+            normalized = self.data_dir / source.csv_versions[-1].normalized_filename
+            import_path = normalized
+            delimiter = ","
+        else:
+            with path.open("r", encoding="utf-8-sig", newline="") as csv_file:
+                text = csv_file.read(SAMPLE_CHARS)
+            import_path = path
+            delimiter = detect_delimiter(text)
         assigned_snapshot = source.snapshot_id is None
         if assigned_snapshot:
             # The physical table is keyed by snapshot_id, so legacy records
@@ -246,8 +302,9 @@ class SourceService:
             source.snapshot_id = uuid.uuid4().hex
         self.data_engine.import_csv(
             source,
-            path,
-            delimiter=detect_delimiter(text),
+            import_path,
+            delimiter=delimiter,
+            typed_sql_types=source.import_report.typed_sql_types if source.import_report else None,
         )
         if assigned_snapshot:
             self.catalog.upsert_source(source)

@@ -111,6 +111,25 @@ it("keeps the section navigation above every analytics view", async () => {
   expect(navigation!.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
+it("shows import accounting and allows replacing a CSV with a new snapshot", async () => {
+  setup();
+  const onReimport = vi.fn();
+  render(<SourceInspector source={{
+    ...source,
+    snapshot_id: "snapshot-1",
+    import_report: {
+      sha256: "abc", size_bytes: 18, encoding: "utf-16", delimiter: ";",
+      rows_read: 2, accepted_rows: 2, rejected_rows: 0, blank_lines: 0,
+      warnings: [], errors: [],
+    },
+  }} view="schema" setView={() => {}} onReimport={onReimport} />);
+  await screen.findByText("Структура источника");
+  expect(screen.getByText(/Принято 2 из 2 строк/)).toBeInTheDocument();
+  const file = new File(["id\n1\n"], "replacement.csv", { type: "text/csv" });
+  fireEvent.change(screen.getByLabelText("Повторно импортировать CSV"), { target: { files: [file] } });
+  expect(onReimport).toHaveBeenCalledWith(file, "A");
+});
+
 it("drills down from missing cells to a column and searches columns", async () => {
   setup();
   render(<Workspace />);

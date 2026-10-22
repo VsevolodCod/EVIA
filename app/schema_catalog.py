@@ -1,12 +1,16 @@
 from pathlib import Path
 
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, select, update
 from sqlalchemy.engine import URL
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.db.catalog.models import DataSourceORM, SourceSchemaORM
 from app.db.base import CatalogBase
 from app.models import DataSource, SourceSchema
+
+
+class CatalogConflictError(ValueError):
+    """The source was updated after an import read its previous snapshot."""
 
 
 class SchemaCatalog:
@@ -46,6 +50,33 @@ class SchemaCatalog:
                 session.add(record)
             else:
                 record.payload = source.model_dump_json()
+
+    def save_source_and_schema(
+        self, source: DataSource, schema: SourceSchema, *, expected_snapshot_id: str | None,
+    ) -> None:
+        """Publish a CSV snapshot and its schema in one catalog transaction."""
+        with self.session_factory.begin() as session:
+            record = session.get(DataSourceORM, source.source_id)
+            current_snapshot = DataSource.model_validate_json(record.payload).snapshot_id if record else None
+            if current_snapshot != expected_snapshot_id:
+                raise CatalogConflictError("CSV source changed during import")
+            if record is None:
+                session.add(DataSourceORM(source_id=source.source_id, payload=source.model_dump_json()))
+            else:
+                changed = session.execute(
+                    update(DataSourceORM)
+                    .where(DataSourceORM.source_id == source.source_id, DataSourceORM.payload == record.payload)
+                    .values(payload=source.model_dump_json())
+                )
+                if changed.rowcount != 1:
+                    raise CatalogConflictError("CSV source changed during import")
+            schema_record = session.get(SourceSchemaORM, schema.source_id)
+            if schema_record is None:
+                session.add(SourceSchemaORM(source_id=schema.source_id, version=schema.version,
+                                            payload=schema.model_dump_json()))
+            else:
+                schema_record.version = schema.version
+                schema_record.payload = schema.model_dump_json()
 
     def get_source(self, source_id: str) -> DataSource | None:
         with self.session_factory() as session:

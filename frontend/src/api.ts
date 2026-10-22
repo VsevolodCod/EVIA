@@ -1,5 +1,17 @@
 import { z } from "zod";
 
+const importReportSchema = z.object({
+  sha256: z.string(),
+  size_bytes: z.number().int().nonnegative(),
+  encoding: z.string(),
+  delimiter: z.string(),
+  rows_read: z.number().int().nonnegative(),
+  accepted_rows: z.number().int().nonnegative(),
+  rejected_rows: z.number().int().nonnegative(),
+  blank_lines: z.number().int().nonnegative(),
+  warnings: z.array(z.string()),
+  errors: z.array(z.string()),
+});
 const sourceSchema = z.object({
   source_id: z.string().min(1),
   name: z.string(),
@@ -7,6 +19,9 @@ const sourceSchema = z.object({
   status: z.string(),
   created_at: z.string(),
   schema_version: z.number().int(),
+  snapshot_id: z.string().nullable().optional(),
+  import_report: importReportSchema.nullable().optional(),
+  csv_versions: z.array(z.object({ snapshot_id: z.string() })).optional(),
 });
 const schemaSchema = z.object({
   source_id: z.string(),
@@ -100,6 +115,7 @@ const chatHistorySchema = z.object({
   has_more: z.boolean(),
 });
 export type Source = z.infer<typeof sourceSchema>;
+export type ImportReport = z.infer<typeof importReportSchema>;
 export type SourceSchema = z.infer<typeof schemaSchema>;
 export type Profile = z.infer<typeof profileSchema>;
 export type Answer = z.infer<typeof answerSchema>;
@@ -143,7 +159,19 @@ const knownErrors: Record<string, string> = {
     "Сохраните CSV в кодировке UTF-8 и загрузите снова.",
   "CSV must contain a header row":
     "Первая строка CSV должна содержать названия столбцов.",
+  "CSV contains invalid encoding": "Не удалось прочитать кодировку CSV. Проверьте файл.",
+  "CSV exceeds the 512 MiB upload limit": "Файл превышает лимит 512 МиБ.",
+  "CSV source changed during import; retry with the latest version":
+    "Источник уже обновили. Обновите страницу и повторите импорт.",
 };
+function readableImportError(message: string): string {
+  if (knownErrors[message]) return knownErrors[message];
+  const width = /^CSV row ending at line (\d+) has (\d+) fields; expected (\d+)$/.exec(message);
+  if (width) return `Строка CSV около строки ${width[1]}: полей ${width[2]}, ожидается ${width[3]}.`;
+  const quote = /^CSV quoting error near line (\d+):/.exec(message);
+  if (quote) return `Ошибка кавычек в CSV около строки ${quote[1]}.`;
+  return message;
+}
 async function request<T>(
   path: string,
   validator: z.ZodType<T>,
@@ -168,6 +196,19 @@ async function request<T>(
       body && typeof body === "object" && "detail" in body ? body.detail : null;
     if (typeof detail === "string" && knownErrors[detail])
       throw new ApiError(knownErrors[detail], response.status);
+    if (detail && typeof detail === "object" && "report" in detail) {
+      const report = importReportSchema.pick({
+        rows_read: true, accepted_rows: true, rejected_rows: true, errors: true,
+      }).safeParse(detail.report);
+      if (report.success) {
+        const { rows_read, accepted_rows, rejected_rows, errors } = report.data;
+        const counts = rows_read
+          ? `Принято ${accepted_rows} из ${rows_read} строк, отклонено ${rejected_rows}.`
+          : "CSV не принят.";
+        const reason = errors[0] ?? ("message" in detail && typeof detail.message === "string" ? detail.message : "Проверьте файл.");
+        throw new ApiError(`${counts} ${readableImportError(reason)}`, response.status);
+      }
+    }
     const errors: Record<number, string> = {
       400: "Не удалось прочитать данные. Проверьте формат файла и повторите запрос.",
       404: "Источник больше не доступен. Обновите список источников.",
@@ -231,9 +272,10 @@ export const api = {
     request(`${path(id)}/preview?limit=100`, rowsSchema, { signal }),
   profile: (id: string, signal?: AbortSignal) =>
     request(`${path(id)}/profile`, profileSchema, { signal }),
-  upload: (file: File, signal?: AbortSignal) => {
+  upload: (file: File, signal?: AbortSignal, sourceId?: string) => {
     const body = new FormData();
     body.append("file", file);
+    if (sourceId) body.append("source_id", sourceId);
     return request("/sources/csv", sourceSchema, {
       method: "POST",
       body,

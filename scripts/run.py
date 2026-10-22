@@ -50,7 +50,7 @@ def stop_processes(processes: list[subprocess.Popen]) -> None:
         else:
             try:
                 os.killpg(process.pid, signal.SIGTERM)
-            except ProcessLookupError:
+            except (ProcessLookupError, PermissionError):
                 pass
     if os.name != 'nt':
         # A reaped group leader does not imply that its descendants have stopped.
@@ -64,7 +64,7 @@ def stop_processes(processes: list[subprocess.Popen]) -> None:
                 try:
                     os.killpg(process.pid, 0)
                     alive.append(process)
-                except ProcessLookupError:
+                except (ProcessLookupError, PermissionError):
                     pass
             remaining = alive
             if remaining:
@@ -72,7 +72,7 @@ def stop_processes(processes: list[subprocess.Popen]) -> None:
         for process in remaining:
             try:
                 os.killpg(process.pid, signal.SIGKILL)
-            except ProcessLookupError:
+            except (ProcessLookupError, PermissionError):
                 pass
     for process in reversed(processes):
         try:
