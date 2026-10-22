@@ -5,6 +5,8 @@ import importlib
 from httpx import ASGITransport, AsyncClient
 import pytest
 
+from app.contracts.v1 import Profile
+
 
 @pytest.mark.asyncio
 async def test_workspace_csv_to_agent_contract(tmp_path, monkeypatch):
@@ -13,7 +15,11 @@ async def test_workspace_csv_to_agent_contract(tmp_path, monkeypatch):
     monkeypatch.setenv('CATALOG_DB_PATH', str(tmp_path / 'catalog.sqlite3'))
     monkeypatch.setenv('CHAT_DB_PATH', str(tmp_path / 'chats.sqlite3'))
     module = importlib.import_module('app.main')
-    async with module.app.router.lifespan_context(module.app), AsyncClient(transport=ASGITransport(app=module.app), base_url='http://test') as client:
+    route = next(route for route in module.app.routes if route.path == '/sources/{source_id}/profile')
+    assert route.response_model is Profile
+    async with module.app.router.lifespan_context(module.app), AsyncClient(
+        transport=ASGITransport(app=module.app, raise_app_exceptions=False), base_url='http://test'
+    ) as client:
         assert (await client.get('/health')).json()['llm_provider'] == 'mock'
         assert (await client.get('/sources')).json() == []
         assert (await client.get('/chats')).json() == []
@@ -29,6 +35,9 @@ async def test_workspace_csv_to_agent_contract(tmp_path, monkeypatch):
         preview = (await client.get(f'/sources/{source_id}/preview?limit=100')).json()
         assert preview == [{'id': '001', 'revenue': '10'}, {'id': '002', 'revenue': '20'}]
         profile = (await client.get(f'/sources/{source_id}/profile')).json()
+        Profile.model_validate(profile)
+        assert profile['coverage'] == 'full'
+        assert profile['snapshot_id'] == upload.json()['snapshot_id']
         assert profile['sample_size'] == 2
         assert profile['columns']['id']['sample_null_count'] == 0
         result = await client.post('/agent/ask', json={'question': 'Что есть в данных?', 'source_ids': [source_id]})
@@ -41,3 +50,6 @@ async def test_workspace_csv_to_agent_contract(tmp_path, monkeypatch):
         assert (await client.get('/chats')).json() == [], 'Stateless UI questions must not create persistent chats'
         assert (await client.post('/agent/ask', json={'question': '', 'source_ids': [source_id]})).status_code == 422
         assert (await client.get('/sources/missing/schema')).status_code == 404
+        assert (await client.get('/sources/missing/profile')).status_code == 404
+        monkeypatch.setattr(module.source_service, 'profile', lambda _source_id: {'coverage': 'full'})
+        assert (await client.get(f'/sources/{source_id}/profile')).status_code == 500

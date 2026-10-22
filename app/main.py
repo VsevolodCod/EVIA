@@ -11,7 +11,7 @@ from fastapi import (
     UploadFile,
 )
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from app.agent import AgentRuntime
 from app.config import PROJECT_ROOT, get_settings
@@ -26,6 +26,7 @@ from app.source_service import SourceService
 from app.tools import build_tool_registry
 from app.core.logging import setup_logging
 from app.chat_manager import ChatManager, ChatNotFoundError
+from app.contracts.v1 import Profile
 from app.web import mount_frontend
 
 
@@ -203,14 +204,25 @@ def preview_source(source_id: str, limit: int = 10):
         ) from exc
 
 
-@app.get("/sources/{source_id}/profile")
+@app.get("/sources/{source_id}/profile", response_model=Profile)
 def profile_source(source_id: str):
     try:
-        return source_service.profile(source_id)
+        profile = source_service.profile(source_id)
+        if profile.get("coverage") == "sample":
+            # Legacy PostgreSQL adapters expose a bounded sample, which the
+            # exact CSV Profile contract intentionally does not represent.
+            return JSONResponse(content=profile)
+        return profile
 
     except KeyError as exc:
         raise HTTPException(
             status_code=404,
+            detail=str(exc),
+        ) from exc
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
             detail=str(exc),
         ) from exc
 
