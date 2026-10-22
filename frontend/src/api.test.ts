@@ -60,7 +60,7 @@ it("retains exact full-snapshot statistics while labeling top values as sample d
         top_values_coverage: "sample",
         non_null_count: 10,
         null_count: 2,
-        empty_count: 1,
+        empty_count: 0,
         distinct_count: 8,
         uniqueness_ratio: 0.8,
         is_identifier_candidate: false,
@@ -169,10 +169,15 @@ it("rejects profiles that omit or null required full-snapshot facts", async () =
 
   for (const invalid of [
     { ...fullProfile(), sample_limit: 0 },
+    { ...fullProfile(), sample_size: 501 },
     withInvalid((profile) => { delete profile.processed_rows; }),
     withInvalid((profile) => { profile.snapshot_id = null; }),
     withInvalid((profile) => { delete profile.columns.amount.distinct_count; }),
     withInvalid((profile) => { profile.columns.amount.uniqueness_ratio = null; }),
+    withInvalid((profile) => { profile.columns.amount.non_null_count = 9; }),
+    withInvalid((profile) => { profile.columns.amount.numeric = {
+      count: 11, minimum: "1", maximum: "2", total: "3", average: "1.5",
+    }; }),
   ]) {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json(invalid)));
     await expect(api.profile("snapshot-source")).rejects.toThrow("формат");

@@ -86,6 +86,15 @@ export function SourceInspector({
     let loadedProfile: Profile | undefined;
     void api.profile(source.source_id, controller.signal)
       .then((profile) => {
+        if (profile.coverage === "full" && profile.snapshot_id !== source.snapshot_id) {
+          if (!controller.signal.aborted) {
+            setProfileFailure({
+              id: source.source_id,
+              message: "Профиль относится к другой версии источника. Обновите данные и повторите расчёт.",
+            });
+          }
+          return;
+        }
         loadedProfile = profile;
         if (!controller.signal.aborted) {
           setData((previous) => previous?.id === source.source_id

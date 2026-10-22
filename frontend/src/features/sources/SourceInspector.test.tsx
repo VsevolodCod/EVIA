@@ -18,6 +18,7 @@ const source: Source = {
   status: "available",
   created_at: "2026-10-18",
   schema_version: 1,
+  snapshot_id: "sales-snapshot-001",
 };
 const schema: SourceSchema = {
   source_id: "A",
@@ -282,6 +283,14 @@ it("keeps PostgreSQL sample profiles visibly limited to sampled statistics", asy
   expect(within(region).queryByText("NULL")).not.toBeInTheDocument();
   expect(within(region).queryByText("Пустые строки")).not.toBeInTheDocument();
   expect(within(region).queryByText("Уникальность")).not.toBeInTheDocument();
+});
+
+it("rejects an exact profile created for a different source snapshot", async () => {
+  setup({ ...profile, snapshot_id: "stale-snapshot" });
+  render(<Workspace current={{ ...source, snapshot_id: "current-snapshot" }} initial="profile" />);
+
+  expect(await screen.findByText(/другой версии источника/i)).toBeInTheDocument();
+  expect(screen.queryByText("Статистика по всему датасету")).not.toBeInTheDocument();
 });
 
 it("keeps an empty preview distinct from an incomplete profile", async () => {

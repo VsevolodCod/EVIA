@@ -8,7 +8,7 @@ executed only through :mod:`app.safe_sql`; callers here never accept SQL text.
 from __future__ import annotations
 
 from contextlib import contextmanager
-from decimal import Decimal, localcontext
+from decimal import Decimal
 from hashlib import sha256
 from pathlib import Path
 import re
@@ -258,23 +258,20 @@ class DuckDBDataEngine:
                 }
                 typed_type = typed_types.get(name)
                 if typed_type in {"BIGINT"} or (typed_type and typed_type.startswith("DECIMAL(")):
-                    values = [
-                        Decimal(str(row[0]))
-                        for row in connection.execute(
-                            f"SELECT {quoted} FROM {typed_table} WHERE {quoted} IS NOT NULL"
-                        ).fetchall()
-                    ]
-                    if values:
-                        with localcontext() as context:
-                            context.prec = 100
-                            total = sum(values, Decimal(0))
-                            average = total / len(values)
+                    count, minimum, maximum, total, average = connection.execute(
+                        f"SELECT COUNT({quoted}), MIN({quoted}), MAX({quoted}), SUM({quoted}), AVG({quoted}) "
+                        f"FROM {typed_table}"
+                    ).fetchone()
+                    if count:
                         column["numeric"] = {
-                            "count": len(values),
-                            "minimum": format(min(values), "f"),
-                            "maximum": format(max(values), "f"),
-                            "total": format(total, "f"),
-                            "average": format(average, "f"),
+                            "count": int(count),
+                            "minimum": format(Decimal(str(minimum)), "f"),
+                            "maximum": format(Decimal(str(maximum)), "f"),
+                            "total": format(Decimal(str(total)), "f"),
+                            # DuckDB returns AVG(BIGINT) as a float. The
+                            # public contract uses a canonical decimal string
+                            # so an integral mean remains "100", not "100.0".
+                            "average": format(Decimal(str(average)).normalize(), "f"),
                         }
                     else:
                         column["numeric"] = {
@@ -285,16 +282,13 @@ class DuckDBDataEngine:
                             "average": "",
                         }
                 elif typed_type in {"DATE", "TIMESTAMP"}:
-                    values = [
-                        row[0]
-                        for row in connection.execute(
-                            f"SELECT {quoted} FROM {typed_table} WHERE {quoted} IS NOT NULL"
-                        ).fetchall()
-                    ]
+                    count, minimum, maximum = connection.execute(
+                        f"SELECT COUNT({quoted}), MIN({quoted}), MAX({quoted}) FROM {typed_table}"
+                    ).fetchone()
                     column["temporal"] = {
-                        "count": len(values),
-                        "minimum": min(values).isoformat() if values else "",
-                        "maximum": max(values).isoformat() if values else "",
+                        "count": int(count),
+                        "minimum": minimum.isoformat() if count else "",
+                        "maximum": maximum.isoformat() if count else "",
                     }
                 columns[name] = column
         return {

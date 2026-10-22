@@ -42,7 +42,7 @@ def full_profile_data():
                 'top_values_coverage': 'sample',
                 'non_null_count': 10,
                 'null_count': 2,
-                'empty_count': 1,
+                'empty_count': 0,
                 'distinct_count': 8,
                 'uniqueness_ratio': 0.8,
                 'is_identifier_candidate': False,
@@ -165,6 +165,41 @@ def test_sample_profile_rejects_dataset_wide_statistics():
                 'distinct_sample_values': 2,
                 'top_values': [],
                 'distinct_count': 2,
+            },
+        },
+    }
+    with pytest.raises(ValidationError):
+        Profile.model_validate(data)
+
+
+@pytest.mark.parametrize('mutate', [
+    lambda data: data.update(sample_size=501),
+    lambda data: data['columns']['amount'].update(non_null_count=9),
+    lambda data: data['columns']['amount'].update(empty_count=11),
+    lambda data: data['columns']['amount']['numeric'].update(count=11),
+    lambda data: data['columns']['amount'].update(temporal={
+        'count': 10, 'minimum': '2026-01-01', 'maximum': '2026-01-02',
+    }),
+])
+def test_full_profile_rejects_inconsistent_exact_statistics(mutate):
+    data = full_profile_data()
+    mutate(data)
+    with pytest.raises(ValidationError):
+        Profile.model_validate(data)
+
+
+def test_sample_profile_rejects_counts_outside_its_bounded_sample():
+    data = {
+        'sample_size': 101,
+        'sample_limit': 100,
+        'coverage': 'sample',
+        'note': 'Column statistics use a bounded sample.',
+        'columns': {
+            'id': {
+                'sample_non_null_count': 101,
+                'sample_null_count': 0,
+                'distinct_sample_values': 101,
+                'top_values': [],
             },
         },
     }

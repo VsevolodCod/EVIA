@@ -61,8 +61,26 @@ const sampleColumnProfileSchema = z.object({
     z.object({ value: z.string(), count: z.number().int().nonnegative() }).strict(),
   ),
 }).strict();
-const profileSchema = z.discriminatedUnion("coverage", [
-  z.object({
+const sampleProfileSchema = z.object({
+  sample_size: z.number().int().nonnegative(),
+  sample_limit: z.number().int().min(1),
+  coverage: z.literal("sample"),
+  note: z.string(),
+  columns: z.record(z.string(), sampleColumnProfileSchema),
+}).strict().superRefine((profile, context) => {
+  if (profile.sample_size > profile.sample_limit) {
+    context.addIssue({ code: "custom", path: ["sample_size"], message: "sample_size exceeds sample_limit" });
+  }
+  for (const [name, column] of Object.entries(profile.columns)) {
+    if (column.sample_non_null_count + column.sample_null_count !== profile.sample_size) {
+      context.addIssue({ code: "custom", path: ["columns", name], message: "sample counts do not match sample_size" });
+    }
+    if (column.distinct_sample_values > column.sample_non_null_count || column.top_values.reduce((total, value) => total + value.count, 0) > column.sample_non_null_count) {
+      context.addIssue({ code: "custom", path: ["columns", name], message: "sample values exceed non-null values" });
+    }
+  }
+});
+const fullProfileSchema = z.object({
   sample_size: z.number().int().nonnegative(),
   sample_limit: z.number().int().min(1),
   processed_rows: z.number().int().nonnegative(),
@@ -94,15 +112,33 @@ const profileSchema = z.discriminatedUnion("coverage", [
       }).nullable().optional(),
     }).strict(),
   ),
-}).strict(),
-  z.object({
-    sample_size: z.number().int().nonnegative(),
-    sample_limit: z.number().int().min(1),
-    coverage: z.literal("sample"),
-    note: z.string(),
-    columns: z.record(z.string(), sampleColumnProfileSchema),
-  }).strict(),
-]);
+}).strict().superRefine((profile, context) => {
+  if (profile.sample_size > profile.sample_limit) {
+    context.addIssue({ code: "custom", path: ["sample_size"], message: "sample_size exceeds sample_limit" });
+  }
+  if (profile.snapshot?.row_count != null && profile.snapshot.row_count !== profile.processed_rows) {
+    context.addIssue({ code: "custom", path: ["processed_rows"], message: "processed_rows does not match snapshot" });
+  }
+  if (profile.snapshot && profile.snapshot.snapshot_id !== profile.snapshot_id) {
+    context.addIssue({ code: "custom", path: ["snapshot_id"], message: "profile snapshot does not match attached snapshot" });
+  }
+  for (const [name, column] of Object.entries(profile.columns)) {
+    if (column.sample_non_null_count + column.sample_null_count !== profile.sample_size || column.distinct_sample_values > column.sample_non_null_count || column.top_values.reduce((total, value) => total + value.count, 0) > column.sample_non_null_count) {
+      context.addIssue({ code: "custom", path: ["columns", name], message: "sample values are inconsistent" });
+    }
+    if (column.non_null_count + column.null_count !== profile.processed_rows || column.empty_count > column.non_null_count || column.distinct_count > column.non_null_count) {
+      context.addIssue({ code: "custom", path: ["columns", name], message: "exact counts are inconsistent" });
+    }
+    const typedCount = column.non_null_count - column.empty_count;
+    if ((column.numeric && column.temporal) || (column.numeric && column.numeric.count !== typedCount) || (column.temporal && column.temporal.count !== typedCount)) {
+      context.addIssue({ code: "custom", path: ["columns", name], message: "typed counts are inconsistent" });
+    }
+    if (column.is_identifier_candidate && (column.non_null_count !== profile.processed_rows || column.empty_count !== 0 || column.distinct_count !== profile.processed_rows)) {
+      context.addIssue({ code: "custom", path: ["columns", name], message: "identifier candidate is inconsistent" });
+    }
+  }
+});
+const profileSchema = z.discriminatedUnion("coverage", [fullProfileSchema, sampleProfileSchema]);
 const answerSchema = z.object({
   answer: z.string(),
   chat_id: z.string().nullable().optional(),
