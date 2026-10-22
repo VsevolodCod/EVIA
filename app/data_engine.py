@@ -8,6 +8,7 @@ executed only through :mod:`app.safe_sql`; callers here never accept SQL text.
 from __future__ import annotations
 
 from contextlib import contextmanager
+from decimal import Decimal, localcontext
 from hashlib import sha256
 from pathlib import Path
 import re
@@ -187,29 +188,123 @@ class DuckDBDataEngine:
             return [dict(zip(names, row)) for row in cursor.fetchall()]
 
     def profile(self, source: DataSource, sample_size: int = 500) -> dict[str, Any]:
-        rows = self._rows(source, sample_size)
-        columns: dict[str, dict[str, Any]] = {}
-        for name in rows[0] if rows else self.columns(source):
-            values = [row.get(name) for row in rows]
-            nonempty = [value for value in values if value not in (None, "")]
-            counts: dict[str, int] = {}
-            for value in nonempty:
-                text = str(value)
-                counts[text] = counts.get(text, 0) + 1
-            columns[name] = {
-                "sample_non_null_count": len(nonempty),
-                "sample_null_count": len(values) - len(nonempty),
-                "distinct_sample_values": len(set(map(str, nonempty))),
-                "top_values": [
-                    {"value": value, "count": count}
-                    for value, count in sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:5]
-                ],
-            }
+        if sample_size < 1:
+            raise ValueError("sample_size must be positive")
+
+        raw_table = self._quote_identifier(self.table_name(source))
+        typed_table_name = self.typed_table_name(source)
+        typed_table = self._quote_identifier(typed_table_name)
+        with self._connect() as connection:
+            raw_columns = [row[0] for row in connection.execute(f"DESCRIBE {raw_table}").fetchall()]
+            sample_cursor = connection.execute(f"SELECT * FROM {raw_table} LIMIT ?", [sample_size])
+            sample_rows = [dict(zip(raw_columns, row)) for row in sample_cursor.fetchall()]
+            processed_rows = int(connection.execute(f"SELECT COUNT(*) FROM {raw_table}").fetchone()[0])
+            has_typed_table = connection.execute(
+                "SELECT COUNT(*) FROM information_schema.tables "
+                "WHERE table_schema = 'main' AND table_name = ?",
+                [typed_table_name],
+            ).fetchone()[0] == 1
+            typed_types = {
+                row[0]: str(row[1]).upper()
+                for row in connection.execute(f"DESCRIBE {typed_table}").fetchall()
+            } if has_typed_table else {}
+
+            columns: dict[str, dict[str, Any]] = {}
+            for name in raw_columns:
+                quoted = self._quote_identifier(name)
+                non_null_count, null_count, empty_count, distinct_count = connection.execute(
+                    f"""
+                    SELECT
+                        COUNT({quoted}),
+                        COUNT(*) - COUNT({quoted}),
+                        COUNT(*) FILTER (WHERE {quoted} = ''),
+                        COUNT(DISTINCT {quoted})
+                    FROM {raw_table}
+                    """
+                ).fetchone()
+                non_null_count = int(non_null_count)
+                null_count = int(null_count)
+                empty_count = int(empty_count)
+                distinct_count = int(distinct_count)
+                sample_values = [row[name] for row in sample_rows]
+                sample_nonempty = [value for value in sample_values if value not in (None, "")]
+                sample_counts: dict[str, int] = {}
+                for value in sample_nonempty:
+                    text = str(value)
+                    sample_counts[text] = sample_counts.get(text, 0) + 1
+
+                column: dict[str, Any] = {
+                    "sample_non_null_count": len(sample_nonempty),
+                    "sample_null_count": len(sample_values) - len(sample_nonempty),
+                    "distinct_sample_values": len(set(map(str, sample_nonempty))),
+                    "top_values": [
+                        {"value": value, "count": count}
+                        for value, count in sorted(sample_counts.items(), key=lambda item: (-item[1], item[0]))[:5]
+                    ],
+                    "top_values_coverage": "sample",
+                    "non_null_count": non_null_count,
+                    "null_count": null_count,
+                    "empty_count": empty_count,
+                    "distinct_count": distinct_count,
+                    "uniqueness_ratio": distinct_count / non_null_count if non_null_count else 0.0,
+                    "is_identifier_candidate": (
+                        processed_rows > 0
+                        and non_null_count == processed_rows
+                        and empty_count == 0
+                        and distinct_count == processed_rows
+                    ),
+                    "numeric": None,
+                    "temporal": None,
+                }
+                typed_type = typed_types.get(name)
+                if typed_type in {"BIGINT"} or (typed_type and typed_type.startswith("DECIMAL(")):
+                    values = [
+                        Decimal(str(row[0]))
+                        for row in connection.execute(
+                            f"SELECT {quoted} FROM {typed_table} WHERE {quoted} IS NOT NULL"
+                        ).fetchall()
+                    ]
+                    if values:
+                        with localcontext() as context:
+                            context.prec = 100
+                            total = sum(values, Decimal(0))
+                            average = total / len(values)
+                        column["numeric"] = {
+                            "count": len(values),
+                            "minimum": format(min(values), "f"),
+                            "maximum": format(max(values), "f"),
+                            "total": format(total, "f"),
+                            "average": format(average, "f"),
+                        }
+                    else:
+                        column["numeric"] = {
+                            "count": 0,
+                            "minimum": "",
+                            "maximum": "",
+                            "total": "",
+                            "average": "",
+                        }
+                elif typed_type in {"DATE", "TIMESTAMP"}:
+                    values = [
+                        row[0]
+                        for row in connection.execute(
+                            f"SELECT {quoted} FROM {typed_table} WHERE {quoted} IS NOT NULL"
+                        ).fetchall()
+                    ]
+                    column["temporal"] = {
+                        "count": len(values),
+                        "minimum": min(values).isoformat() if values else "",
+                        "maximum": max(values).isoformat() if values else "",
+                    }
+                columns[name] = column
         return {
-            "sample_size": len(rows),
+            "sample_size": len(sample_rows),
             "sample_limit": sample_size,
+            "processed_rows": processed_rows,
+            "coverage": "full",
+            "snapshot_id": source.snapshot_id or "legacy",
             "columns": columns,
-            "note": "Column statistics use a bounded DuckDB sample.",
+            "note": "Full snapshot statistics; top values use a bounded sample.",
         }
 
     def columns(self, source: DataSource) -> list[str]:
