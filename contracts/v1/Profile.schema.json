@@ -2,10 +2,45 @@
   "$defs": {
     "ColumnProfile": {
       "properties": {
+        "distinct_count": {
+          "minimum": 0,
+          "title": "Distinct Count",
+          "type": "integer"
+        },
         "distinct_sample_values": {
           "minimum": 0,
           "title": "Distinct Sample Values",
           "type": "integer"
+        },
+        "empty_count": {
+          "minimum": 0,
+          "title": "Empty Count",
+          "type": "integer"
+        },
+        "is_identifier_candidate": {
+          "title": "Is Identifier Candidate",
+          "type": "boolean"
+        },
+        "non_null_count": {
+          "minimum": 0,
+          "title": "Non Null Count",
+          "type": "integer"
+        },
+        "null_count": {
+          "minimum": 0,
+          "title": "Null Count",
+          "type": "integer"
+        },
+        "numeric": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NumericProfile"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "sample_non_null_count": {
           "minimum": 0,
@@ -17,19 +52,48 @@
           "title": "Sample Null Count",
           "type": "integer"
         },
+        "temporal": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TemporalProfile"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "top_values": {
           "items": {
             "$ref": "#/$defs/TopValue"
           },
           "title": "Top Values",
           "type": "array"
+        },
+        "top_values_coverage": {
+          "const": "sample",
+          "title": "Top Values Coverage",
+          "type": "string"
+        },
+        "uniqueness_ratio": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Uniqueness Ratio",
+          "type": "number"
         }
       },
       "required": [
         "sample_non_null_count",
         "sample_null_count",
         "distinct_sample_values",
-        "top_values"
+        "top_values",
+        "non_null_count",
+        "null_count",
+        "empty_count",
+        "distinct_count",
+        "uniqueness_ratio",
+        "is_identifier_candidate",
+        "top_values_coverage"
       ],
       "title": "ColumnProfile",
       "type": "object"
@@ -97,6 +161,64 @@
       "title": "DatasetSnapshot",
       "type": "object"
     },
+    "NumericProfile": {
+      "properties": {
+        "average": {
+          "title": "Average",
+          "type": "string"
+        },
+        "count": {
+          "minimum": 0,
+          "title": "Count",
+          "type": "integer"
+        },
+        "maximum": {
+          "title": "Maximum",
+          "type": "string"
+        },
+        "minimum": {
+          "title": "Minimum",
+          "type": "string"
+        },
+        "total": {
+          "title": "Total",
+          "type": "string"
+        }
+      },
+      "required": [
+        "count",
+        "minimum",
+        "maximum",
+        "total",
+        "average"
+      ],
+      "title": "NumericProfile",
+      "type": "object"
+    },
+    "TemporalProfile": {
+      "properties": {
+        "count": {
+          "minimum": 0,
+          "title": "Count",
+          "type": "integer"
+        },
+        "maximum": {
+          "title": "Maximum",
+          "type": "string"
+        },
+        "minimum": {
+          "title": "Minimum",
+          "type": "string"
+        }
+      },
+      "required": [
+        "count",
+        "minimum",
+        "maximum"
+      ],
+      "title": "TemporalProfile",
+      "type": "object"
+    },
     "TopValue": {
       "properties": {
         "count": {
@@ -127,9 +249,19 @@
       "title": "Columns",
       "type": "object"
     },
+    "coverage": {
+      "const": "full",
+      "title": "Coverage",
+      "type": "string"
+    },
     "note": {
       "title": "Note",
       "type": "string"
+    },
+    "processed_rows": {
+      "minimum": 0,
+      "title": "Processed Rows",
+      "type": "integer"
     },
     "sample_limit": {
       "minimum": 1,
@@ -151,11 +283,20 @@
         }
       ],
       "default": null
+    },
+    "snapshot_id": {
+      "maxLength": 200,
+      "minLength": 1,
+      "title": "Snapshot Id",
+      "type": "string"
     }
   },
   "required": [
     "sample_size",
     "sample_limit",
+    "processed_rows",
+    "coverage",
+    "snapshot_id",
     "columns",
     "note"
   ],

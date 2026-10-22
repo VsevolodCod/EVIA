@@ -25,8 +25,8 @@ def test_legacy_agent_reader_accepts_additive_contract():
     assert AskResponse.model_validate(data).answer == data['answer']
 
 
-def test_profile_distinguishes_exact_snapshot_statistics_from_sample_top_values():
-    profile = Profile.model_validate({
+def full_profile_data():
+    return {
         'sample_size': 5,
         'sample_limit': 500,
         'processed_rows': 12,
@@ -73,7 +73,11 @@ def test_profile_distinguishes_exact_snapshot_statistics_from_sample_top_values(
                 },
             },
         },
-    })
+    }
+
+
+def test_profile_distinguishes_exact_snapshot_statistics_from_sample_top_values():
+    profile = Profile.model_validate(full_profile_data())
 
     assert profile.processed_rows == 12
     assert profile.coverage == 'full'
@@ -81,6 +85,38 @@ def test_profile_distinguishes_exact_snapshot_statistics_from_sample_top_values(
     assert profile.columns['amount'].numeric.minimum == '0.01'
     assert profile.columns['amount'].top_values_coverage == 'sample'
     assert profile.columns['created_at'].temporal.maximum == '2026-01-12T00:00:00Z'
+
+
+@pytest.mark.parametrize('path', [
+    ('processed_rows',),
+    ('snapshot_id',),
+    ('columns', 'amount', 'non_null_count'),
+    ('columns', 'amount', 'null_count'),
+    ('columns', 'amount', 'empty_count'),
+    ('columns', 'amount', 'distinct_count'),
+    ('columns', 'amount', 'uniqueness_ratio'),
+    ('columns', 'amount', 'is_identifier_candidate'),
+    ('columns', 'amount', 'top_values_coverage'),
+])
+def test_full_profile_rejects_missing_or_null_exact_statistics(path):
+    for invalid_value in (None, ...):
+        data = copy.deepcopy(full_profile_data())
+        target = data
+        for key in path[:-1]:
+            target = target[key]
+        if invalid_value is ...:
+            target.pop(path[-1])
+        else:
+            target[path[-1]] = invalid_value
+        with pytest.raises(ValidationError):
+            Profile.model_validate(data)
+
+
+def test_profile_without_explicit_coverage_is_rejected():
+    data = full_profile_data()
+    data.pop('coverage')
+    with pytest.raises(ValidationError):
+        Profile.model_validate(data)
 
 
 @pytest.mark.parametrize('mutation', ['width', 'limit', 'count', 'decimal'])

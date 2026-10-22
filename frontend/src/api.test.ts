@@ -97,6 +97,48 @@ it("retains exact full-snapshot statistics while labeling top values as sample d
   await expect(api.profile("snapshot-source")).resolves.toEqual(profile);
 });
 
+it("rejects profiles that omit or null required full-snapshot facts", async () => {
+  const fullProfile = () => ({
+    sample_size: 5,
+    sample_limit: 500,
+    processed_rows: 12,
+    coverage: "full",
+    snapshot_id: "snapshot-001",
+    note: "Top values use a bounded sample.",
+    columns: {
+      amount: {
+        sample_non_null_count: 5,
+        sample_null_count: 0,
+        distinct_sample_values: 4,
+        top_values: [],
+        top_values_coverage: "sample",
+        non_null_count: 10,
+        null_count: 2,
+        empty_count: 1,
+        distinct_count: 8,
+        uniqueness_ratio: 0.8,
+        is_identifier_candidate: false,
+      },
+    },
+  });
+  const withInvalid = (change: (profile: Record<string, any>) => void) => {
+    const invalid = fullProfile() as Record<string, any>;
+    change(invalid);
+    return invalid;
+  };
+
+  for (const invalid of [
+    { ...fullProfile(), sample_limit: 0 },
+    withInvalid((profile) => { delete profile.processed_rows; }),
+    withInvalid((profile) => { profile.snapshot_id = null; }),
+    withInvalid((profile) => { delete profile.columns.amount.distinct_count; }),
+    withInvalid((profile) => { profile.columns.amount.uniqueness_ratio = null; }),
+  ]) {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json(invalid)));
+    await expect(api.profile("snapshot-source")).rejects.toThrow("формат");
+  }
+});
+
 it("accepts valid source responses and rejects an invalid response shape", async () => {
   vi.stubGlobal(
     "fetch",

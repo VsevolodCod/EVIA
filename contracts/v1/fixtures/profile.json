@@ -3,9 +3,16 @@
   "data": {
     "columns": {
       "id": {
+        "distinct_count": 2,
         "distinct_sample_values": 2,
+        "empty_count": 0,
+        "is_identifier_candidate": true,
+        "non_null_count": 2,
+        "null_count": 0,
+        "numeric": null,
         "sample_non_null_count": 2,
         "sample_null_count": 0,
+        "temporal": null,
         "top_values": [
           {
             "count": 1,
@@ -15,12 +22,17 @@
             "count": 1,
             "value": "0002"
           }
-        ]
+        ],
+        "top_values_coverage": "sample",
+        "uniqueness_ratio": 1.0
       }
     },
-    "note": "Bounded sample",
+    "coverage": "full",
+    "note": "Full dataset statistics; top values are sampled.",
+    "processed_rows": 2,
     "sample_limit": 500,
     "sample_size": 2,
-    "snapshot": null
+    "snapshot": null,
+    "snapshot_id": "snapshot-001"
   }
 }

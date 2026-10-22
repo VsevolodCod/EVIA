@@ -41,7 +41,10 @@ const schema: SourceSchema = {
 const profile: Profile = {
   sample_size: 4,
   sample_limit: 500,
-  note: "Bounded sample",
+  processed_rows: 4,
+  coverage: "full",
+  snapshot_id: "sales-snapshot-001",
+  note: "Full dataset statistics; top values are sampled.",
   columns: {
     region: {
       sample_null_count: 1,
@@ -51,6 +54,13 @@ const profile: Profile = {
         { value: "Север", count: 2 },
         { value: "Юг", count: 1 },
       ],
+      non_null_count: 3,
+      null_count: 1,
+      empty_count: 0,
+      distinct_count: 2,
+      uniqueness_ratio: 2 / 3,
+      is_identifier_candidate: false,
+      top_values_coverage: "sample",
     },
     revenue: {
       sample_null_count: 0,
@@ -60,6 +70,13 @@ const profile: Profile = {
         { value: "100", count: 1 },
         { value: "200", count: 1 },
       ],
+      non_null_count: 4,
+      null_count: 0,
+      empty_count: 0,
+      distinct_count: 4,
+      uniqueness_ratio: 1,
+      is_identifier_candidate: true,
+      top_values_coverage: "sample",
     },
   },
 };
