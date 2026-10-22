@@ -11,12 +11,12 @@ from fastapi import (
     UploadFile,
 )
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse
 
 from app.agent import AgentRuntime
 from app.config import PROJECT_ROOT, get_settings
 from app.csv_import import CSVImportError
-from app.data_sources.postgresql_adapter import PostgreSQLAdapter
+from app.data_sources.postgresql_adapter import PostgresSourceError, PostgreSQLAdapter
 from app.db import create_chat_database, initialize_chat_database
 from app.llm.factory import create_llm_provider
 from app.models import AskRequest, AskResponse, ChatMessage, DataSource, CSVVersion, Chat, ChatCreateRequest, ChatSummary, \
@@ -207,12 +207,7 @@ def preview_source(source_id: str, limit: int = 10):
 @app.get("/sources/{source_id}/profile", response_model=Profile)
 def profile_source(source_id: str):
     try:
-        profile = source_service.profile(source_id)
-        if profile.get("coverage") == "sample":
-            # Legacy PostgreSQL adapters expose a bounded sample, which the
-            # exact CSV Profile contract intentionally does not represent.
-            return JSONResponse(content=profile)
-        return profile
+        return source_service.profile(source_id)
 
     except KeyError as exc:
         raise HTTPException(
@@ -224,6 +219,22 @@ def profile_source(source_id: str):
         raise HTTPException(
             status_code=400,
             detail=str(exc),
+        ) from exc
+
+    except PostgresSourceError as exc:
+        status_code, message = {
+            "CONNECTION_FAILED": (503, "PostgreSQL source is temporarily unavailable."),
+            "QUERY_TIMEOUT": (504, "PostgreSQL source timed out."),
+            "INTERNAL_ERROR": (503, "PostgreSQL source is temporarily unavailable."),
+            "SOURCE_FORBIDDEN": (403, "PostgreSQL source is not available to this request."),
+        }[exc.code]
+        raise HTTPException(
+            status_code=status_code,
+            detail={
+                "code": exc.code,
+                "message": message,
+                "retryable": status_code in {503, 504},
+            },
         ) from exc
 
 

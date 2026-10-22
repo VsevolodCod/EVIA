@@ -44,22 +44,35 @@ const schemaSchema = z.object({
     }),
   ),
 });
-const profileSchema = z.object({
+const datasetSnapshotSchema = z.object({
+  source_id: z.string().min(1).max(200),
+  snapshot_id: z.string().min(1).max(200),
+  schema_version: z.number().int().min(1),
+  content_sha256: z.string().regex(/^[0-9a-f]{64}$/),
+  created_at: z.string(),
+  state: z.enum(["importing", "ready", "failed"]),
+  row_count: z.number().int().nonnegative().nullable().optional(),
+});
+const sampleColumnProfileSchema = z.object({
+  sample_non_null_count: z.number().int().nonnegative(),
+  sample_null_count: z.number().int().nonnegative(),
+  distinct_sample_values: z.number().int().nonnegative(),
+  top_values: z.array(
+    z.object({ value: z.string(), count: z.number().int().nonnegative() }).strict(),
+  ),
+}).strict();
+const profileSchema = z.discriminatedUnion("coverage", [
+  z.object({
   sample_size: z.number().int().nonnegative(),
   sample_limit: z.number().int().min(1),
   processed_rows: z.number().int().nonnegative(),
   coverage: z.literal("full"),
   snapshot_id: z.string().min(1),
   note: z.string(),
+  snapshot: datasetSnapshotSchema.nullable().optional(),
   columns: z.record(
     z.string(),
-    z.object({
-      sample_non_null_count: z.number().int().nonnegative(),
-      sample_null_count: z.number().int().nonnegative(),
-      distinct_sample_values: z.number().int().nonnegative(),
-      top_values: z.array(
-        z.object({ value: z.string(), count: z.number().int().nonnegative() }),
-      ),
+    sampleColumnProfileSchema.extend({
       non_null_count: z.number().int().nonnegative(),
       null_count: z.number().int().nonnegative(),
       empty_count: z.number().int().nonnegative(),
@@ -79,9 +92,17 @@ const profileSchema = z.object({
         minimum: z.string(),
         maximum: z.string(),
       }).nullable().optional(),
-    }),
+    }).strict(),
   ),
-});
+}).strict(),
+  z.object({
+    sample_size: z.number().int().nonnegative(),
+    sample_limit: z.number().int().min(1),
+    coverage: z.literal("sample"),
+    note: z.string(),
+    columns: z.record(z.string(), sampleColumnProfileSchema),
+  }).strict(),
+]);
 const answerSchema = z.object({
   answer: z.string(),
   chat_id: z.string().nullable().optional(),

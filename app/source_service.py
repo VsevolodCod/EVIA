@@ -1,5 +1,4 @@
 import csv
-import hashlib
 import io
 import uuid
 from pathlib import Path
@@ -235,7 +234,9 @@ class SourceService:
             try:
                 return Profile.model_validate(profile).model_dump(mode="json")
             except ValidationError:
-                return self._sampled_postgresql_profile(source, profile)
+                return Profile.model_validate(
+                    self._sampled_postgresql_profile(profile)
+                ).model_dump(mode="json")
 
         source = self._ensure_materialized(source)
         return Profile.model_validate(
@@ -243,7 +244,7 @@ class SourceService:
         ).model_dump(mode="json")
 
     @staticmethod
-    def _sampled_postgresql_profile(source: DataSource, profile: dict[str, Any]) -> dict[str, Any]:
+    def _sampled_postgresql_profile(profile: dict[str, Any]) -> dict[str, Any]:
         """Make the legacy bounded PostgreSQL sample explicit without mutating its source."""
         sample_size = profile.get("sample_size", 0)
         if not isinstance(sample_size, int) or sample_size < 0:
@@ -272,30 +273,13 @@ class SourceService:
                     "sample_null_count": null_count,
                     "distinct_sample_values": distinct_count,
                     "top_values": top_values if isinstance(top_values, list) else [],
-                    "non_null_count": non_null_count,
-                    "null_count": null_count,
-                    "empty_count": SourceService._nonnegative_int(
-                        column.get("empty_count"), default=0
-                    ),
-                    "distinct_count": distinct_count,
-                    "uniqueness_ratio": distinct_count / non_null_count if non_null_count else 0.0,
-                    # A bounded sample cannot establish dataset-wide uniqueness.
-                    "is_identifier_candidate": False,
-                    "top_values_coverage": "sample",
-                    "numeric": column.get("numeric"),
-                    "temporal": column.get("temporal"),
                 }
 
-        snapshot_id = source.snapshot_id or "live-" + hashlib.sha256(
-            source.source_id.encode("utf-8")
-        ).hexdigest()
         note = profile.get("note")
         return {
             "sample_size": sample_size,
             "sample_limit": sample_limit,
-            "processed_rows": sample_size,
             "coverage": "sample",
-            "snapshot_id": snapshot_id,
             "columns": columns,
             "note": note if isinstance(note, str) else "Column statistics use a bounded sample.",
         }

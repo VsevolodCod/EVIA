@@ -77,7 +77,7 @@ def full_profile_data():
 
 
 def test_profile_distinguishes_exact_snapshot_statistics_from_sample_top_values():
-    profile = Profile.model_validate(full_profile_data())
+    profile = Profile.model_validate(full_profile_data()).root
 
     assert profile.processed_rows == 12
     assert profile.coverage == 'full'
@@ -115,6 +115,59 @@ def test_full_profile_rejects_missing_or_null_exact_statistics(path):
 def test_profile_without_explicit_coverage_is_rejected():
     data = full_profile_data()
     data.pop('coverage')
+    with pytest.raises(ValidationError):
+        Profile.model_validate(data)
+
+
+def test_profile_accepts_bounded_sample_without_exact_snapshot_claims():
+    profile = Profile.model_validate({
+        'sample_size': 2,
+        'sample_limit': 100,
+        'coverage': 'sample',
+        'note': 'Column statistics use a bounded sample.',
+        'columns': {
+            'id': {
+                'sample_non_null_count': 2,
+                'sample_null_count': 0,
+                'distinct_sample_values': 2,
+                'top_values': [{'value': '1', 'count': 1}],
+            },
+        },
+    })
+
+    assert profile.root.coverage == 'sample'
+    assert profile.model_dump() == {
+        'sample_size': 2,
+        'sample_limit': 100,
+        'coverage': 'sample',
+        'note': 'Column statistics use a bounded sample.',
+        'columns': {
+            'id': {
+                'sample_non_null_count': 2,
+                'sample_null_count': 0,
+                'distinct_sample_values': 2,
+                'top_values': [{'value': '1', 'count': 1}],
+            },
+        },
+    }
+
+
+def test_sample_profile_rejects_dataset_wide_statistics():
+    data = {
+        'sample_size': 2,
+        'sample_limit': 100,
+        'coverage': 'sample',
+        'note': 'Column statistics use a bounded sample.',
+        'columns': {
+            'id': {
+                'sample_non_null_count': 2,
+                'sample_null_count': 0,
+                'distinct_sample_values': 2,
+                'top_values': [],
+                'distinct_count': 2,
+            },
+        },
+    }
     with pytest.raises(ValidationError):
         Profile.model_validate(data)
 

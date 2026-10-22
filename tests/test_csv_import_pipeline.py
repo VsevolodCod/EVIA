@@ -234,13 +234,17 @@ def test_legacy_postgresql_profile_is_explicitly_sampled_with_a_stable_snapshot(
         service = SourceService(tmp_path / "data", catalog, postgres_adapter=LegacyAdapter())
 
         first = service.profile(source.source_id)
-        second = service.profile(source.source_id)
-
         assert first["coverage"] == "sample"
-        assert first["snapshot_id"] == second["snapshot_id"]
-        assert first["processed_rows"] == 1
-        assert first["columns"]["id"]["distinct_count"] == 1
-        assert first["columns"]["id"]["is_identifier_candidate"] is False
+        assert first["sample_size"] == 1
+        assert first["sample_limit"] == 100
+        assert first["columns"]["id"] == {
+            "sample_non_null_count": 1,
+            "sample_null_count": 0,
+            "distinct_sample_values": 1,
+            "top_values": [{"value": "1", "count": 1}],
+        }
+        assert "processed_rows" not in first
+        assert "snapshot_id" not in first
     finally:
         catalog.close()
 

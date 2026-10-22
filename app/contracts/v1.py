@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field, JsonValue, model_validator
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, RootModel, model_validator
 
 from app.models import AskResponse, DataSource, SourceSchema
 
@@ -38,11 +38,19 @@ class TemporalProfile(BaseModel):
     maximum: str
 
 
-class ColumnProfile(BaseModel):
+class SampleColumnProfile(BaseModel):
+    """Facts calculated only from a bounded sample."""
+
+    model_config = ConfigDict(extra='forbid')
     sample_non_null_count: int = Field(ge=0)
     sample_null_count: int = Field(ge=0)
     distinct_sample_values: int = Field(ge=0)
     top_values: list[TopValue]
+
+
+class ColumnProfile(SampleColumnProfile):
+    """Sample facts plus statistics calculated across an exact snapshot."""
+
     non_null_count: int = Field(ge=0)
     null_count: int = Field(ge=0)
     empty_count: int = Field(ge=0)
@@ -54,7 +62,10 @@ class ColumnProfile(BaseModel):
     temporal: TemporalProfile | None = None
 
 
-class Profile(BaseModel):
+class FullProfile(BaseModel):
+    """Profile with exact statistics for an immutable CSV snapshot."""
+
+    model_config = ConfigDict(extra='forbid')
     sample_size: int = Field(ge=0)
     sample_limit: int = Field(ge=1)
     processed_rows: int = Field(ge=0)
@@ -63,6 +74,26 @@ class Profile(BaseModel):
     columns: dict[str, ColumnProfile]
     note: str
     snapshot: DatasetSnapshot | None = None
+
+
+class SampleProfile(BaseModel):
+    """Profile whose facts are limited to a bounded live PostgreSQL sample."""
+
+    model_config = ConfigDict(extra='forbid')
+    sample_size: int = Field(ge=0)
+    sample_limit: int = Field(ge=1)
+    coverage: Literal['sample']
+    columns: dict[str, SampleColumnProfile]
+    note: str
+
+
+ProfileVariant = Annotated[FullProfile | SampleProfile, Field(discriminator='coverage')]
+
+
+class Profile(RootModel[ProfileVariant]):
+    """A response that distinguishes exact snapshot facts from sample facts."""
+
+    root: ProfileVariant
 
 
 class ResultColumn(BaseModel):

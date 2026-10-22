@@ -1,6 +1,8 @@
 {
   "$defs": {
     "ColumnProfile": {
+      "additionalProperties": false,
+      "description": "Sample facts plus statistics calculated across an exact snapshot.",
       "properties": {
         "distinct_count": {
           "minimum": 0,
@@ -161,6 +163,71 @@
       "title": "DatasetSnapshot",
       "type": "object"
     },
+    "FullProfile": {
+      "additionalProperties": false,
+      "description": "Profile with exact statistics for an immutable CSV snapshot.",
+      "properties": {
+        "columns": {
+          "additionalProperties": {
+            "$ref": "#/$defs/ColumnProfile"
+          },
+          "title": "Columns",
+          "type": "object"
+        },
+        "coverage": {
+          "const": "full",
+          "title": "Coverage",
+          "type": "string"
+        },
+        "note": {
+          "title": "Note",
+          "type": "string"
+        },
+        "processed_rows": {
+          "minimum": 0,
+          "title": "Processed Rows",
+          "type": "integer"
+        },
+        "sample_limit": {
+          "minimum": 1,
+          "title": "Sample Limit",
+          "type": "integer"
+        },
+        "sample_size": {
+          "minimum": 0,
+          "title": "Sample Size",
+          "type": "integer"
+        },
+        "snapshot": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DatasetSnapshot"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "snapshot_id": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Snapshot Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sample_size",
+        "sample_limit",
+        "processed_rows",
+        "coverage",
+        "snapshot_id",
+        "columns",
+        "note"
+      ],
+      "title": "FullProfile",
+      "type": "object"
+    },
     "NumericProfile": {
       "properties": {
         "average": {
@@ -193,6 +260,83 @@
         "average"
       ],
       "title": "NumericProfile",
+      "type": "object"
+    },
+    "SampleColumnProfile": {
+      "additionalProperties": false,
+      "description": "Facts calculated only from a bounded sample.",
+      "properties": {
+        "distinct_sample_values": {
+          "minimum": 0,
+          "title": "Distinct Sample Values",
+          "type": "integer"
+        },
+        "sample_non_null_count": {
+          "minimum": 0,
+          "title": "Sample Non Null Count",
+          "type": "integer"
+        },
+        "sample_null_count": {
+          "minimum": 0,
+          "title": "Sample Null Count",
+          "type": "integer"
+        },
+        "top_values": {
+          "items": {
+            "$ref": "#/$defs/TopValue"
+          },
+          "title": "Top Values",
+          "type": "array"
+        }
+      },
+      "required": [
+        "sample_non_null_count",
+        "sample_null_count",
+        "distinct_sample_values",
+        "top_values"
+      ],
+      "title": "SampleColumnProfile",
+      "type": "object"
+    },
+    "SampleProfile": {
+      "additionalProperties": false,
+      "description": "Profile whose facts are limited to a bounded live PostgreSQL sample.",
+      "properties": {
+        "columns": {
+          "additionalProperties": {
+            "$ref": "#/$defs/SampleColumnProfile"
+          },
+          "title": "Columns",
+          "type": "object"
+        },
+        "coverage": {
+          "const": "sample",
+          "title": "Coverage",
+          "type": "string"
+        },
+        "note": {
+          "title": "Note",
+          "type": "string"
+        },
+        "sample_limit": {
+          "minimum": 1,
+          "title": "Sample Limit",
+          "type": "integer"
+        },
+        "sample_size": {
+          "minimum": 0,
+          "title": "Sample Size",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "sample_size",
+        "sample_limit",
+        "coverage",
+        "columns",
+        "note"
+      ],
+      "title": "SampleProfile",
       "type": "object"
     },
     "TemporalProfile": {
@@ -241,65 +385,21 @@
   },
   "$id": "urn:evia:contracts:1.0:Profile",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "properties": {
-    "columns": {
-      "additionalProperties": {
-        "$ref": "#/$defs/ColumnProfile"
-      },
-      "title": "Columns",
-      "type": "object"
+  "description": "A response that distinguishes exact snapshot facts from sample facts.",
+  "discriminator": {
+    "mapping": {
+      "full": "#/$defs/FullProfile",
+      "sample": "#/$defs/SampleProfile"
     },
-    "coverage": {
-      "const": "full",
-      "title": "Coverage",
-      "type": "string"
-    },
-    "note": {
-      "title": "Note",
-      "type": "string"
-    },
-    "processed_rows": {
-      "minimum": 0,
-      "title": "Processed Rows",
-      "type": "integer"
-    },
-    "sample_limit": {
-      "minimum": 1,
-      "title": "Sample Limit",
-      "type": "integer"
-    },
-    "sample_size": {
-      "minimum": 0,
-      "title": "Sample Size",
-      "type": "integer"
-    },
-    "snapshot": {
-      "anyOf": [
-        {
-          "$ref": "#/$defs/DatasetSnapshot"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null
-    },
-    "snapshot_id": {
-      "maxLength": 200,
-      "minLength": 1,
-      "title": "Snapshot Id",
-      "type": "string"
-    }
+    "propertyName": "coverage"
   },
-  "required": [
-    "sample_size",
-    "sample_limit",
-    "processed_rows",
-    "coverage",
-    "snapshot_id",
-    "columns",
-    "note"
+  "oneOf": [
+    {
+      "$ref": "#/$defs/FullProfile"
+    },
+    {
+      "$ref": "#/$defs/SampleProfile"
+    }
   ],
-  "title": "Profile",
-  "type": "object"
+  "title": "Profile"
 }

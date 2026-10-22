@@ -97,6 +97,46 @@ it("retains exact full-snapshot statistics while labeling top values as sample d
   await expect(api.profile("snapshot-source")).resolves.toEqual(profile);
 });
 
+it("accepts bounded PostgreSQL samples without dataset-wide claims", async () => {
+  const profile = {
+    sample_size: 2,
+    sample_limit: 100,
+    coverage: "sample",
+    note: "Column statistics use a bounded sample.",
+    columns: {
+      id: {
+        sample_non_null_count: 2,
+        sample_null_count: 0,
+        distinct_sample_values: 2,
+        top_values: [{ value: "1", count: 1 }],
+      },
+    },
+  };
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json(profile)));
+
+  await expect(api.profile("postgresql:public:orders")).resolves.toEqual(profile);
+});
+
+it("rejects sampled profiles that claim exact snapshot statistics", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({
+    sample_size: 2,
+    sample_limit: 100,
+    coverage: "sample",
+    note: "Column statistics use a bounded sample.",
+    processed_rows: 2,
+    columns: {
+      id: {
+        sample_non_null_count: 2,
+        sample_null_count: 0,
+        distinct_sample_values: 2,
+        top_values: [],
+      },
+    },
+  })));
+
+  await expect(api.profile("postgresql:public:orders")).rejects.toThrow("формат");
+});
+
 it("rejects profiles that omit or null required full-snapshot facts", async () => {
   const fullProfile = () => ({
     sample_size: 5,
