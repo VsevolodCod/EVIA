@@ -1,7 +1,10 @@
 from types import SimpleNamespace
 
+import pytest
+
 from app.evaluation import EvaluationCase
-from app.model_benchmark import score_response, summarize_runs
+from app.evaluation import load_corpus
+from app.model_benchmark import BenchmarkRunner, score_response, summarize_runs
 
 
 COMPUTED = EvaluationCase(
@@ -83,3 +86,57 @@ def test_summary_uses_all_runs_for_ex_json_errors_and_nearest_rank_latency():
     assert summary.timeouts == 0
     assert summary.p50_latency_ms == 20
     assert summary.p95_latency_ms == 40
+
+
+class FakeMetadata:
+    def __init__(self, unload_result=True):
+        self.unload_result = unload_result
+        self.described = []
+        self.unloaded = []
+
+    async def describe(self, model):
+        self.described.append(model)
+        return {"name": model, "digest": f"digest-{model}"}
+
+    async def unload(self, model):
+        self.unloaded.append(model)
+        return self.unload_result
+
+
+class FakeAgent:
+    def __init__(self):
+        self.questions = []
+
+    async def ask(self, question, source_ids):
+        self.questions.append((question, source_ids))
+        return response(status="error", sql=None, error_code="MODEL_UNAVAILABLE")
+
+
+async def _fake_agent_factory(_model, _sources):
+    return FakeAgent()
+
+
+@pytest.mark.asyncio
+async def test_runner_imports_each_fixture_and_runs_each_case_for_every_model(tmp_path):
+    corpus = load_corpus(__import__("pathlib").Path(__file__).parents[1] / "evals" / "v1")
+    runner = BenchmarkRunner(corpus, tmp_path, _fake_agent_factory, FakeMetadata())
+
+    report = await runner.run(["first", "second"], warm_repeats=1, cold=False)
+
+    expected_ids = [case.case_id for case in corpus.cases]
+    assert [item.case_id for item in report.models[0].outcomes] == expected_ids
+    assert [item.case_id for item in report.models[1].outcomes] == expected_ids
+    assert all(item.mode == "warm" for model in report.models for item in model.outcomes)
+
+
+@pytest.mark.asyncio
+async def test_cold_mode_marks_run_invalid_when_ollama_does_not_confirm_unload(tmp_path):
+    corpus = load_corpus(__import__("pathlib").Path(__file__).parents[1] / "evals" / "v1")
+    metadata = FakeMetadata(unload_result=False)
+    runner = BenchmarkRunner(corpus, tmp_path, _fake_agent_factory, metadata)
+
+    report = await runner.run(["first"], warm_repeats=0, cold=True)
+
+    assert len(report.models[0].outcomes) == len(corpus.cases)
+    assert {item.error_code for item in report.models[0].outcomes} == {"MODEL_UNLOAD_FAILED"}
+    assert metadata.unloaded == ["first"] * len(corpus.cases)
