@@ -4,7 +4,7 @@ import pytest
 
 from app.evaluation import EvaluationCase
 from app.evaluation import load_corpus
-from app.model_benchmark import BenchmarkRunner, score_response, summarize_runs
+from app.model_benchmark import BenchmarkReport, BenchmarkRunner, ModelBenchmark, score_response, summarize_runs
 
 
 COMPUTED = EvaluationCase(
@@ -140,3 +140,28 @@ async def test_cold_mode_marks_run_invalid_when_ollama_does_not_confirm_unload(t
     assert len(report.models[0].outcomes) == len(corpus.cases)
     assert {item.error_code for item in report.models[0].outcomes} == {"MODEL_UNLOAD_FAILED"}
     assert metadata.unloaded == ["first"] * len(corpus.cases)
+
+
+def test_cli_writes_versioned_json_and_short_markdown_report(tmp_path):
+    from scripts.benchmark_local_models import write_reports
+
+    outcome = score_response(COMPUTED, response(rows=[["450.00"]]), mode="warm")
+    report = BenchmarkReport(
+        schema_version=1,
+        corpus_version=1,
+        models=[ModelBenchmark(
+            model="first",
+            metadata={"name": "first", "ollama_version": "0.12"},
+            outcomes=[outcome],
+            summary=summarize_runs([outcome]),
+            modes={"warm": summarize_runs([outcome])},
+        )],
+    )
+    output = tmp_path / "report.json"
+    markdown = tmp_path / "report.md"
+
+    write_reports(report, output=output, markdown=markdown)
+
+    assert __import__("json").loads(output.read_text(encoding="utf-8"))["schema_version"] == 1
+    assert "p95" in markdown.read_text(encoding="utf-8")
+    assert "first" in markdown.read_text(encoding="utf-8")

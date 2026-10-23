@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 from math import ceil
 from pathlib import Path
@@ -101,11 +101,13 @@ class BenchmarkReport:
     schema_version: int
     corpus_version: int
     models: list[ModelBenchmark]
+    run_metadata: dict[str, Any] = field(default_factory=dict)
 
     def as_dict(self) -> dict[str, Any]:
         return {
             "schema_version": self.schema_version,
             "corpus_version": self.corpus_version,
+            "run_metadata": self.run_metadata,
             "models": [model.as_dict() for model in self.models],
         }
 
