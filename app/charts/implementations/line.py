@@ -53,7 +53,7 @@ class LineImplementation(ChartImplementation):
 
         sql = (
             f"SELECT {', '.join(select_parts)} "
-            f"FROM source"
+            f"FROM {plan.table_name}"
             f"{where_clause(filters)} "
             f"GROUP BY {', '.join(group_parts)} "
             f"ORDER BY {x_field} {direction}"

@@ -301,6 +301,7 @@ async def chat_agent(
                 ChatMessage(
                     role="assistant",
                     content=answer.answer,
+                    response=answer.model_dump(mode="json"),
                 )
             )
             await chat_manager.save(chat)

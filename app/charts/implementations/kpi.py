@@ -35,7 +35,7 @@ class KPIImplementation(ChartImplementation):
         sql = (
             f"SELECT {expression} AS {quote_identifier('value')}, "
             f"COUNT(*) AS {quote_identifier('row_count')} "
-            f"FROM source"
+            f"FROM {plan.table_name}"
             f"{where_clause(filters)}"
         )
 

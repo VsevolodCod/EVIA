@@ -4,6 +4,7 @@ import { SafeMarkdown } from "../chat/SafeMarkdown";
 import { ToolResults } from "./ToolResults";
 import { EviaMascot } from "../../components/EviaMascot";
 import { Dashboard } from "../analytics/Dashboard";
+import { GeneratedDashboard, generatedDashboardFrom } from "./GeneratedDashboard";
 
 type DashboardInput = { rows: Row[]; schema: SourceSchema };
 
@@ -91,7 +92,9 @@ function scalarText(value: unknown, type: string) {
 }
 
 export function AnalysisResult({ entry }: { entry?: Entry }) {
-  const result = entry?.answer?.tool_results.map(tabularInput).find((input): input is DashboardInput => input !== null);
+  const generated = entry?.answer?.tool_results.map(generatedDashboardFrom).filter((item) => item !== null).at(-1);
+  const otherResults = entry?.answer?.tool_results.filter((item) => item.tool_name !== "create_dashboard") ?? [];
+  const result = otherResults.map(tabularInput).find((input): input is DashboardInput => input !== null);
   const field = result?.schema.objects[0]?.fields[0];
   const scalar = result?.rows.length === 1 && result.schema.objects[0]?.fields.length === 1 && field
     ? { name: field.name, type: field.inferred_type, value: result.rows[0][field.name] }
@@ -100,7 +103,7 @@ export function AnalysisResult({ entry }: { entry?: Entry }) {
     ? "Средняя дата/время" : scalar?.name.replaceAll("_", " ");
   return (
     <div className="analytics-section analysis-result">
-      {(!result || scalar) && <div className="analytics-title">
+      {(!result && !generated || scalar) && <div className="analytics-title">
         <div>
           <span className="analytics-kicker">ОТ ВОПРОСА К ВЫВОДУ</span>
           <h2>Результат анализа</h2>
@@ -111,12 +114,13 @@ export function AnalysisResult({ entry }: { entry?: Entry }) {
           <div className="analysis-provenance">
             {entry.answer.status === "error" ? "Запрос не выполнен"
               : entry.answer.status === "clarification" ? "Нужно уточнение"
-              : entry.answer.answer_kind === "computed" ? "Рассчитано по CSV"
+              : entry.answer.answer_kind === "computed" ? "Рассчитано по источнику"
               : entry.answer.answer_kind === "demo" ? "Демо-ответ"
               : entry.answer.tool_results.some((item) => item.tool_name === "query_data" && item.ok)
                 ? "Рассчитано по данным"
                 : entry.answer.answer_kind === "model" ? "Ответ модели" : "Ответ из истории"}
           </div>
+          {generated && <GeneratedDashboard dashboard={generated} scope={`generated-${entry.id}`} />}
           {scalar && <section className="analysis-scalar" aria-label="Показатель">
             <span>{scalarLabel}</span>
             <strong>{scalarText(scalar.value, scalar.type)}</strong>
@@ -140,12 +144,12 @@ export function AnalysisResult({ entry }: { entry?: Entry }) {
             <summary>Показать SQL</summary>
             <code>{entry.answer.analysis.sql}</code>
           </details>}
-          {entry.answer.tool_results.length > 0 && (scalar ? (
+          {otherResults.length > 0 && (scalar ? (
             <details className="analysis-details">
               <summary>Таблица и детали расчёта</summary>
-              <ToolResults results={entry.answer.tool_results} />
+              <ToolResults results={otherResults} />
             </details>
-          ) : <ToolResults results={entry.answer.tool_results} />)}
+          ) : <ToolResults results={otherResults} />)}
         </>
       ) : (
         <div className="analytics-empty">

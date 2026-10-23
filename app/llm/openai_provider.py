@@ -184,14 +184,8 @@ class OpenAIProvider(LLMProvider):
         }
 
         if tools:
-            # Без этих строчек отказывается генерировать дашборд, пока не знаю, почему
             payload["tools"] = tools
-            tool_choice = {
-                "type": "function",
-                "function": {"name": "create_dashboard"},
-            }
-            payload["tool_choice"] = tool_choice
-            # payload["tool_choice"] = "auto"
+            payload["tool_choice"] = "auto"
 
         data = await self.model.generate(payload)
 

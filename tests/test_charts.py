@@ -679,3 +679,56 @@ def test_engine_keeps_successful_cards_when_another_card_fails(
 
     assert result["cards"][1]["status"] == "error"
     assert result["cards"][1]["error"]["code"] == "unknown_field"
+
+
+def test_dashboard_computes_kpi_and_line_from_real_csv(tmp_path):
+    from app.schema_catalog import SchemaCatalog
+    from app.source_service import SourceService
+
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    sources = SourceService(tmp_path / "data", catalog)
+    try:
+        source = sources.register_csv(
+            "sales.csv",
+            b"month;revenue\n2026-01;120,5\n2026-02;180.5\n",
+        )
+        result = DashboardEngine(catalog, sources).create_dashboard({
+            "title": "Продажи",
+            "cards": [
+                {"id": "total", "type": "kpi", "title": "Выручка",
+                 "field": {"source_id": source.source_id, "field": "revenue"}, "aggregate": "sum"},
+                {"id": "monthly", "type": "line", "title": "По месяцам",
+                 "x": {"source_id": source.source_id, "field": "month"},
+                 "y": {"source_id": source.source_id, "field": "revenue", "aggregate": "sum"}},
+            ],
+        })
+        assert [card["status"] for card in result["cards"]] == ["success", "success"]
+        assert result["cards"][0]["data"]["value"] == "301.0"
+        assert result["cards"][1]["data"]["points"] == [
+            {"x": "2026-01", "y": "120.5"},
+            {"x": "2026-02", "y": "180.5"},
+        ]
+        assert sources.preview(source.source_id, 1)[0]["revenue"] == "120,5"
+    finally:
+        catalog.close()
+
+
+def test_line_rejects_text_aggregate_that_cannot_be_drawn(tmp_path):
+    from app.schema_catalog import SchemaCatalog
+    from app.source_service import SourceService
+
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    sources = SourceService(tmp_path / "data", catalog)
+    try:
+        source = sources.register_csv("status.csv", b"month,status\nJan,Alpha\nFeb,Beta\n")
+        result = DashboardEngine(catalog, sources).create_dashboard({
+            "title": "Статусы", "cards": [{
+                "id": "status", "type": "line", "title": "Статус по месяцам",
+                "x": {"source_id": source.source_id, "field": "month"},
+                "y": {"source_id": source.source_id, "field": "status", "aggregate": "max"},
+            }],
+        })
+        assert result["cards"][0]["status"] == "error"
+        assert result["cards"][0]["error"]["code"] == "unsupported_type"
+    finally:
+        catalog.close()

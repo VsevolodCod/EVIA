@@ -42,6 +42,7 @@ class ResolvedField:
 @dataclass(frozen=True)
 class QueryPlan:
     source_id: str
+    table_name: str
     fields: dict[str, ResolvedField]
     filters: list[DashboardFilter]
 
@@ -195,6 +196,7 @@ class QueryPlanner:
             )
 
         source_id = next(iter(source_ids))
+        source = self.catalog.get_source(source_id)
 
         # Общие фильтры и фильтры карточки работают вместе.
         self.validate_filters(filters, source_id)
@@ -205,8 +207,16 @@ class QueryPlanner:
         if card.type == "line" and card.y.aggregate in {"sum", "avg"}:
             self._validate_aggregate(card.y.aggregate, resolved_fields[1])
 
+        if card.type == "line" and card.y.aggregate != "count":
+            y_type = resolved_fields[1].inferred_type
+            if not any(token in y_type for token in NUMERIC_TYPES):
+                raise UnsupportedTypeError(
+                    f"Line chart requires a numeric Y field; '{resolved_fields[1].field_name}' has type '{y_type}'"
+                )
+
         return QueryPlan(
             source_id=source_id,
+            table_name="source_typed" if source.source_type == "csv" and source.import_report else "source",
             fields={
                 f"{field.source_id}.{field.field_name}": field
                 for field in resolved_fields

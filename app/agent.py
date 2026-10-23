@@ -4,6 +4,7 @@ from uuid import uuid4
 
 from app.contracts.v1 import AgentResponse, Error
 from app.csv_query_agent import CSVQueryAgent
+from app.dashboard_query_agent import DashboardQueryAgent, is_dashboard_question
 from app.llm.base import LLMProvider
 from app.llm.mock import MockLLMProvider
 from app.source_service import SourceService
@@ -56,6 +57,7 @@ class AgentRuntime:
         self.max_steps = max(1, max_steps)
         self.sources = sources
         self.csv_query = CSVQueryAgent(llm, sources) if sources is not None else None
+        self.dashboard_query = DashboardQueryAgent(llm, sources, tools) if sources is not None else None
 
     async def ask(
             self,
@@ -74,6 +76,8 @@ class AgentRuntime:
                     request_id=request_id, status="error", answer="Выбранный источник не найден.", steps=0,
                     timing=timing, error=Error(code="SOURCE_NOT_FOUND", message="Источник не найден.", request_id=request_id),
                 )
+            elif selected and not isinstance(self.llm, MockLLMProvider) and is_dashboard_question(question):
+                result = await self.dashboard_query.ask(question, selected.source_id, timing, request_id, history)
             elif selected and selected.source_type == "csv" and not isinstance(self.llm, MockLLMProvider):
                 result = await self.csv_query.ask(question, selected.source_id, timing, request_id, history)
                 result.answer_kind = "computed" if result.status == "answered" else "model"
@@ -149,10 +153,6 @@ class AgentRuntime:
             call_timing = response.timing.model_copy() if response.timing else ModelTiming()
             call_timing.elapsed_ms = elapsed
             timing.calls.append(call_timing)
-
-            logger.info("LLM content: %s", response.content)
-            logger.info("LLM tool calls: %s", response.tool_calls)
-            logger.info("LLM raw tool calls: %s", response.raw_tool_calls)
 
             if response.finish_reason == "length":
                 if response.tool_calls or step == self.max_steps:

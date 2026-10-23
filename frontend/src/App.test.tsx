@@ -157,7 +157,11 @@ it("reopens a server conversation after reload without mixing it into another so
       title: "Продажи по месяцам",
       messages: [
         { message_id: "question-a", role: "user", content: "Покажи продажи", created_at: "2026-10-18T08:00:00Z" },
-        { message_id: "answer-a", role: "assistant", content: "Продажи выросли.", created_at: "2026-10-18T08:00:01Z" },
+        { message_id: "answer-a", role: "assistant", content: "Продажи выросли.", created_at: "2026-10-18T08:00:01Z",
+          response: { answer: "Продажи выросли.", steps: 1, status: "answered", answer_kind: "computed", tool_results: [{
+            tool_name: "create_dashboard", ok: true, error: null,
+            data: { version: 1, title: "Сохранённый дашборд", cards: [{ id: "revenue", type: "kpi", title: "Выручка", status: "success", data: { value: "301.0" } }] },
+          }] } },
       ],
       total_messages: 2,
       next_offset: null,
@@ -178,6 +182,7 @@ it("reopens a server conversation after reload without mixing it into another so
       screen.getByRole("complementary", { name: "Чат с EVIA" }),
     ).findByText("Продажи выросли."),
   ).toBeInTheDocument();
+  expect(await screen.findByText("Сохранённый дашборд")).toBeInTheDocument();
   await select("B");
   expect(screen.queryByText("Продажи выросли.")).not.toBeInTheDocument();
 });

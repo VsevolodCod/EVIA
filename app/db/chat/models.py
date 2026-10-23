@@ -81,6 +81,7 @@ class ChatMessageORM(ChatBase):
         JSON,
         nullable=True,
     )
+    response: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
