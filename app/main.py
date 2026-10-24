@@ -21,13 +21,13 @@ from app.csv_import import CSVImportError
 from app.data_sources.postgresql_adapter import PostgresSourceError, PostgreSQLAdapter
 from app.db import create_chat_database, initialize_chat_database
 from app.llm.factory import create_llm_provider
-from app.models import AskRequest, AskResponse, ChatMessage, DataSource, CSVVersion, Chat, ChatCreateRequest, ChatSummary, \
+from app.models import AnalysisPayload, LLMMessage, AskRequest, AskResponse, ChatMessage, DataSource, CSVVersion, Chat, ChatCreateRequest, ChatSummary, \
     ChatHistoryResponse
 from app.schema_catalog import SchemaCatalog
 from app.source_service import SourceService
 from app.tools import build_tool_registry
 from app.core.logging import setup_logging
-from app.chat_manager import ChatManager, ChatNotFoundError
+from app.chat_manager import ChatManager, ChatNotFoundError, ChatSourceConflictError
 from app.contracts.v1 import Profile
 from app.web import mount_frontend
 
@@ -267,12 +267,21 @@ async def chat_agent(
     chat_manager: ChatManager = http_request.app.state.chat_manager
 
     try:
+        if len(body.source_ids) > 1 or (not chat_id and not body.source_ids):
+            raise ValueError('Select exactly one source before asking in this chat')
         # Получаем существующий чат или создаём новый.
         chat = await chat_manager.get_or_create(
             chat_id=chat_id,
             temporary=temporary_chat,
         )
         logger.info(f"Начат чат с айди {chat.chat_id}")
+
+        selected_source = body.source_ids[0] if body.source_ids else None
+        if chat.source_id is None and selected_source is not None and catalog.get_source(selected_source) is None:
+            raise HTTPException(status_code=404, detail='Selected source not found')
+        chat.source_id = await chat_manager.bind_source(
+            chat.chat_id, selected_source, temporary=temporary_chat,
+        )
 
         # Добавляем вопрос пользователя в историю.
         chat.messages.append(
@@ -290,27 +299,37 @@ async def chat_agent(
         # текущий вопрос отдельно передаётся через question.
         answer = await agent.ask(
             question=body.question,
-            source_ids=body.source_ids,
-            history=chat.messages[:-1],
+            source_ids=[chat.source_id],
+            # Only provider message fields enter the prompt, never saved artifacts.
+            history=[LLMMessage.model_validate(message.model_dump()) for message in chat.messages[:-1]],
         )
+
+        response_data = answer.model_dump()
+        response_data['chat_id'] = chat.chat_id
+        response_data.setdefault('request_id', uuid4().hex)
+        response_data.setdefault('status', 'answered')
+        response = AgentResponse.model_validate(response_data)
 
         # Не сохраняем текст ошибки как успешный ответ: незавершённый вопрос
         # при повторном открытии чата остаётся доступным для повтора.
-        if getattr(answer, "status", "answered") != "error":
+        if response.status != "error":
             chat.messages.append(
                 ChatMessage(
                     role="assistant",
-                    content=answer.answer,
+                    content=response.answer,
+                    analysis_payload=AnalysisPayload(version=1, response=response.model_dump(mode='json')),
                 )
             )
             await chat_manager.save(chat)
 
         # Возвращаем обычный ответ агента вместе с идентификатором чата.
-        response_data = answer.model_dump()
-        response_data["chat_id"] = chat.chat_id
-        response_data.setdefault("request_id", uuid4().hex)
-        response_data.setdefault("status", "answered")
-        return AgentResponse.model_validate(response_data)
+        return response
+
+    except HTTPException:
+        raise
+
+    except ChatSourceConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     except ChatNotFoundError as exc:
         raise HTTPException(

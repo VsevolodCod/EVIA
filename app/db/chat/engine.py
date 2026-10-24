@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from sqlalchemy import text
 from sqlalchemy.engine import URL
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -33,4 +34,13 @@ def create_chat_database(
 
 async def initialize_chat_database(engine: AsyncEngine) -> None:
     async with engine.begin() as connection:
+        # Serialize schema inspection/ALTER across simultaneous process starts.
+        await connection.execute(text('BEGIN IMMEDIATE'))
         await connection.run_sync(ChatBase.metadata.create_all)
+        for table, column, definition in (
+            ('chats', 'source_id', 'VARCHAR(200)'),
+            ('chat_messages', 'analysis_payload', 'JSON'),
+        ):
+            columns = await connection.execute(text(f'PRAGMA table_info({table})'))
+            if column not in {row[1] for row in columns}:
+                await connection.execute(text(f'ALTER TABLE {table} ADD COLUMN {column} {definition}'))
