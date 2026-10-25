@@ -128,20 +128,33 @@ def _question_route(question: str) -> str | None:
         or re.fullmatch(r"пол(?:е|я|ей|ях|ем|ями)", word)
         for word in words
     )
-    calculation = any(word.startswith((
-        "значен", "средн", "сумм", "максим", "миним", "итог", "выруч",
-        "пропуск", "дублик", "уникальн", "заполн", "частот", "распредел", "групп",
-    )) for word in words)
+    schema_words = {
+        "а", "какие", "какова", "каковы", "есть", "перечисли", "назови", "покажи",
+        "список", "в", "у", "из", "этой", "этого", "этом", "здесь",
+        "csv", "таблицы", "таблице", "источника", "источнике", "данных", "файла",
+        "поля", "поле", "полей", "столбцы", "столбцов", "колонки", "колонок",
+        "структура", "структуру", "схема", "схему", "данные",
+    }
     asks_listing = any(word in words[:3] for word in ("какие", "какова", "каковы", "перечисли", "назови", "покажи", "список"))
-    if names_field and not calculation and (asks_listing or words[:1] in (["структура"], ["схема"])):
+    if names_field and all(word in schema_words for word in words) and (asks_listing or words[:1] in (["структура"], ["схема"])):
         return "schema"
 
     names_dataset = any(word.startswith(("данн", "источник", "файл", "датасет", "таблиц")) for word in words)
+    overview_words = {
+        "что", "есть", "в", "этих", "эти", "это", "за", "какой", "период",
+        "они", "и", "сколько", "их", "еще", "можешь", "сказать", "скзаать",
+        "про", "передо", "мной", "здесь", "данные", "данных", "данными",
+        "источник", "источнике", "источника", "файл", "файле", "файла",
+        "датасет", "датасете", "таблица", "таблице", "таблицы", "обзор",
+        "о", "чем", "расскажи", "опиши", "содержится", "содержат", "какие",
+    }
+    if not all(word in overview_words for word in words):
+        return None
     if phrase.startswith(("что передо мной", "что это за", "что здесь")):
         return "overview"
     if phrase.startswith("за какой период") and ("сколько" in words or names_dataset or "они" in words):
         return "overview"
-    if names_dataset and not calculation and (
+    if names_dataset and (
         phrase.startswith(("что есть", "что содерж", "какие данные", "обзор", "о чем данные", "расскажи", "опиши"))
         or (words[:3] == ["что", "еще", "можешь"])
     ):
@@ -163,13 +176,22 @@ class CSVQueryAgent:
 
     async def ask(self, question: str, source_id: str, timing: AgentTiming, request_id: str,
                   history: list[ChatMessage] | None = None) -> AgentResponse:
-        schema_started = perf_counter()
-        schema = self.sources.get_schema(source_id)
-        timing.tools_ms += (perf_counter() - schema_started) * 1000
-        fields = schema.objects[0].fields if schema.objects else []
         route = _question_route(question)
-        if route is not None:
-            return self._metadata_answer(route, source_id, schema, fields, timing, request_id)
+        for _ in range(3):
+            schema_started = perf_counter()
+            schema = self.sources.get_schema(source_id)
+            source = self.sources.catalog.get_source(source_id) if route is not None else None
+            timing.tools_ms += (perf_counter() - schema_started) * 1000
+            if route is not None and (source is None or source.schema_version != schema.version):
+                continue
+            fields = schema.objects[0].fields if schema.objects else []
+            if route is None:
+                break
+            response = self._metadata_answer(route, source_id, source, schema, fields, timing, request_id)
+            if not (response.error and response.error.code == "INTERNAL_ERROR"):
+                return response
+        else:
+            return self._error(request_id, timing, 0, [], "INTERNAL_ERROR", None)
         field_types = {field.name: field.inferred_type for field in fields}
         columns = ", ".join(f'"{field.name}" ({field.inferred_type})' for field in fields)
         system = (
@@ -287,8 +309,7 @@ class CSVQueryAgent:
             )
         return self._error(request_id, timing, 2, trace, "VALIDATION_ERROR", last_plan)
 
-    def _metadata_answer(self, route, source_id, schema, fields, timing, request_id) -> AgentResponse:
-        source = self.sources.catalog.get_source(source_id)
+    def _metadata_answer(self, route, source_id, source, schema, fields, timing, request_id) -> AgentResponse:
         row_count = schema.objects[0].row_count if schema.objects else None
         field_names = ", ".join(f"«{field.name}» ({field.inferred_type})" for field in fields)
         trace = [ToolResult(tool_name="get_schema", ok=True, data={
@@ -327,6 +348,9 @@ class CSVQueryAgent:
                 trace.append(ToolResult(tool_name="query_data", ok=False, error=exc.code))
                 return self._error(request_id, timing, 0, trace, exc.code, None)
             timing.tools_ms += (perf_counter() - query_started) * 1000
+            if not result.provenance or result.provenance[0].snapshot_id != (source.snapshot_id or "legacy"):
+                trace.append(ToolResult(tool_name="query_data", ok=False, error="INTERNAL_ERROR"))
+                return self._error(request_id, timing, 0, trace, "INTERNAL_ERROR", None)
             trace.append(ToolResult(tool_name="query_data", ok=True, data=result))
             results.append(result)
             row = result.rows[0]
