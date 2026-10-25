@@ -4,6 +4,7 @@ import {
   ApiError,
   waitForChat,
   errorMessage,
+  storedAnalysis,
   type ChatMessage,
   type ChatSummary,
   type PostgresStatus,
@@ -53,12 +54,19 @@ function entriesFromMessages(chatId: string, messages: ChatMessage[]): Entry[] {
       continue;
     }
     if (message.role === "assistant" && user) {
+      const restored = storedAnalysis(message);
       entries.push({
         id: user.message_id,
         conversationId: chatId,
         question: user.content,
         state: "success",
-        answer: { answer: message.content, steps: 0, tool_results: [] },
+        answer: restored.kind === "restored"
+          ? restored.answer
+          : { answer: message.content, steps: 0, tool_results: [] },
+        historyDetail: restored.kind === "restored" ? undefined : restored.kind,
+        elapsedMs: restored.kind === "restored"
+          ? restored.answer.timing?.elapsed_ms
+          : undefined,
       });
       user = undefined;
     }
@@ -100,6 +108,7 @@ export default function App() {
   const [histories, setHistories] = useState<Record<string, Entry[]>>({});
   const [chatSummaries, setChatSummaries] = useState<ChatSummary[]>([]);
   const [chatSources, setChatSources] = useState<Record<string, string>>(savedChatSources);
+  const [archivedChatId, setArchivedChatId] = useState<string | null>(null);
   const [historyPages, setHistoryPages] = useState<Record<string, ChatPage>>({});
   const [historyListLoading, setHistoryListLoading] = useState(true);
   const [historyListError, setHistoryListError] = useState("");
@@ -129,9 +138,13 @@ export default function App() {
   const mounted = useRef(true);
   const source = sources.find((item) => item.source_id === selectedId);
   const postgresSources = sources.filter((item) => item.source_type === "postgresql");
-  const history = selectedId ? (histories[selectedId] ?? []) : [];
+  const archivedChat = archivedChatId
+    ? chatSummaries.find((chat) => chat.chat_id === archivedChatId)
+    : undefined;
+  const historyKey = selectedId ?? (archivedChat ? `archive:${archivedChat.chat_id}` : null);
+  const history = historyKey ? (histories[historyKey] ?? []) : [];
   const activeEntry = history.find(
-    (entry) => entry.id === (selectedId ? activeIds[selectedId] : undefined),
+    (entry) => entry.id === (historyKey ? activeIds[historyKey] : undefined),
   );
   const conversationEntries = activeEntry
     ? history.filter((entry) => entry.conversationId === activeEntry.conversationId)
@@ -139,8 +152,13 @@ export default function App() {
   const conversations = history.filter((entry, index) =>
     history.findIndex((item) => item.conversationId === entry.conversationId) === index);
   const selectedServerChats = selectedId
-    ? chatSummaries.filter((chat) => chatSources[chat.chat_id] === selectedId)
-    : [];
+    ? chatSummaries.filter((chat) =>
+      (chat.source_id ?? chatSources[chat.chat_id]) === selectedId)
+    : archivedChat ? [archivedChat] : [];
+  const archivedChats = chatSummaries.filter((chat) =>
+    Boolean(chat.source_id) && !sources.some((source) => source.source_id === chat.source_id));
+  const unboundChats = chatSummaries.filter((chat) =>
+    !chat.source_id && !chatSources[chat.chat_id]);
   const failedServerChat = selectedServerChats.find(
     (chat) => historyPages[chat.chat_id]?.error,
   );
@@ -254,15 +272,26 @@ export default function App() {
       const page = await api.chatHistory(chatId, before, controller.signal);
       if (controller.signal.aborted || !mounted.current) return;
       const entries = entriesFromMessages(chatId, page.messages);
+      const serverSourceId = sourceId.startsWith("archive:")
+        ? sourceId
+        : page.source_id ?? sourceId;
+      if (page.source_id) {
+        setChatSummaries((previous) => previous.map((chat) =>
+          chat.chat_id === chatId ? { ...chat, source_id: page.source_id } : chat));
+        rememberChatSource(chatId, page.source_id);
+      }
       setHistories((previous) => ({
         ...previous,
-        [sourceId]: before
-          ? mergeEntries(previous[sourceId] ?? [], entries)
+        [serverSourceId]: before
+          ? mergeEntries(previous[serverSourceId] ?? [], entries)
           : [
-              ...(previous[sourceId] ?? []).filter((entry) => entry.conversationId !== chatId),
+              ...(previous[serverSourceId] ?? []).filter((entry) => entry.conversationId !== chatId),
               ...entries,
             ],
       }));
+      if (!before && sourceId.startsWith("archive:")) {
+        setActiveIds((previous) => ({ ...previous, [serverSourceId]: entries.at(-1)?.id }));
+      }
       setHistoryPages((previous) => ({
         ...previous,
         [chatId]: {
@@ -317,7 +346,7 @@ export default function App() {
   useEffect(() => {
     if (!selectedId || historyListLoading) return;
     chatSummaries
-      .filter((chat) => chatSources[chat.chat_id] === selectedId)
+      .filter((chat) => (chat.source_id ?? chatSources[chat.chat_id]) === selectedId)
       .forEach((chat) => {
         if (!loadedChats.current.has(chat.chat_id))
           void loadChatHistory(selectedId, chat.chat_id);
@@ -325,7 +354,21 @@ export default function App() {
   }, [selectedId, chatSummaries, chatSources, historyListLoading]);
 
   function selectSource(id: string) {
+    if (archivedChat && (archivedChat.source_id === null || archivedChat.source_id === undefined)) {
+      const archivedKey = `archive:${archivedChat.chat_id}`;
+      const existingEntries = histories[archivedKey] ?? [];
+      setHistories((previous) => ({
+        ...previous,
+        [id]: mergeEntries(previous[id] ?? [], existingEntries),
+      }));
+      setActiveIds((previous) => ({
+        ...previous,
+        [id]: activeIds[archivedKey] ?? existingEntries.at(-1)?.id,
+      }));
+      activeConversations.current.set(id, archivedChat.chat_id);
+    }
     setSelectedId(id);
+    setArchivedChatId(null);
     setSourceSetup("csv");
     setMobilePanel("analytics");
     setMobileOverlay(null);
@@ -345,6 +388,7 @@ export default function App() {
     }
 
     setSelectedId(null);
+    setArchivedChatId(null);
     setUploadedId(null);
     setUploadFailure(null);
     setUploadError("");
@@ -354,6 +398,18 @@ export default function App() {
     setSourceSetup("csv");
     setMobilePanel("analytics");
     setView("overview");
+  }
+  function openArchivedChat(chat: ChatSummary) {
+    const key = `archive:${chat.chat_id}`;
+    setSelectedId(null);
+    setArchivedChatId(chat.chat_id);
+    setActiveIds((previous) => ({
+      ...previous,
+      [key]: (histories[key] ?? []).filter((entry) => entry.conversationId === chat.chat_id).at(-1)?.id,
+    }));
+    setView("results");
+    setMobilePanel("analytics");
+    if (!loadedChats.current.has(chat.chat_id)) void loadChatHistory(key, chat.chat_id);
   }
   function newAnalysis() {
     if (window.matchMedia?.("(max-width: 640px)").matches) {
@@ -429,7 +485,8 @@ export default function App() {
     setUploadError("");
     const sourceId = selectedId;
     const retried = retryId ? histories[sourceId]?.find((item) => item.id === retryId) : undefined;
-    const conversationId = retried?.conversationId ?? activeConversations.current.get(sourceId) ?? crypto.randomUUID();
+    const existingConversationId = retried?.conversationId ?? activeConversations.current.get(sourceId);
+    const conversationId = existingConversationId ?? crypto.randomUUID();
     if (askControllers.current.has(conversationId)) return;
     activeConversations.current.set(sourceId, conversationId);
     const id = retryId ?? `question-${++sequence.current}`;
@@ -468,14 +525,17 @@ export default function App() {
       // Let creation finish even if waiting is cancelled; reuse it on retry.
       let chat = pendingChats.current.get(conversationId);
       if (!chat) {
-        chat = api.createChat(entry.question.slice(0, 200)).then((result) => {
-          rememberChatSource(result.chat_id, sourceId);
-          setChatSummaries((previous) => [
-            result,
-            ...previous.filter((item) => item.chat_id !== result.chat_id),
-          ]);
-          return result.chat_id;
-        });
+        const existingChatId = existingConversationId;
+        chat = existingChatId
+          ? Promise.resolve(existingChatId)
+          : api.createChat(entry.question.slice(0, 200)).then((result) => {
+              rememberChatSource(result.chat_id, sourceId);
+              setChatSummaries((previous) => [
+                result,
+                ...previous.filter((item) => item.chat_id !== result.chat_id),
+              ]);
+              return result.chat_id;
+            });
         pendingChats.current.set(conversationId, chat);
         chat.catch(() => pendingChats.current.delete(conversationId));
       }
@@ -490,7 +550,11 @@ export default function App() {
         });
       else if (answer.status === "error")
         finish({ state: "error", mascotState: "error", answer, error: answer.answer });
-      else finish({ state: "success", answer });
+      else {
+        setChatSummaries((previous) => previous.map((chat) =>
+          chat.chat_id === chatId ? { ...chat, source_id: sourceId } : chat));
+        finish({ state: "success", answer, elapsedMs: answer.timing?.elapsed_ms });
+      }
     } catch (error) {
       finish({
         state: "error",
@@ -654,7 +718,7 @@ export default function App() {
             ) : failedServerChat && !history.length ? (
               <ErrorNotice
                 message={historyPages[failedServerChat.chat_id]?.error ?? "Не удалось загрузить историю."}
-                onRetry={() => selectedId && void loadChatHistory(selectedId, failedServerChat.chat_id)}
+                onRetry={() => historyKey && void loadChatHistory(historyKey, failedServerChat.chat_id)}
                 label="Повторить загрузку истории"
               />
             ) : history.length ? (
@@ -667,11 +731,11 @@ export default function App() {
                     title={entry.question}
                     aria-pressed={activeEntry?.conversationId === entry.conversationId}
                     onClick={() => {
-                      if (selectedId) {
-                        activeConversations.current.set(selectedId, entry.conversationId!);
+                      if (historyKey) {
+                        activeConversations.current.set(historyKey, entry.conversationId!);
                         setActiveIds((previous) => ({
                           ...previous,
-                          [selectedId]: history.filter((item) => item.conversationId === entry.conversationId).at(-1)?.id,
+                          [historyKey]: history.filter((item) => item.conversationId === entry.conversationId).at(-1)?.id,
                         }));
                       }
                       setView("results");
@@ -690,6 +754,44 @@ export default function App() {
               <p className="sidebar-note">Нет диалогов</p>
             )}
           </section>
+          {archivedChats.length > 0 && (
+            <section className="nav-section history-section" aria-label="Архивные диалоги">
+              <div className="nav-heading"><h2>Архивные диалоги</h2></div>
+              <p className="sidebar-note">Источник больше недоступен. Сохранённые ответы можно открыть, но новый расчёт невозможен.</p>
+              <div className="history-list">
+                {archivedChats.map((chat) => (
+                  <button
+                    key={chat.chat_id}
+                    className={`history-item ${archivedChatId === chat.chat_id ? "active" : ""}`}
+                    aria-label={`Архив: ${chat.title}`}
+                    onClick={() => openArchivedChat(chat)}
+                  >
+                    <Icon name="chat" size={16} />
+                    <span>{chat.title}</span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
+          {unboundChats.length > 0 && (
+            <section className="nav-section history-section" aria-label="Диалоги без источника">
+              <div className="nav-heading"><h2>Диалоги без источника</h2></div>
+              <p className="sidebar-note">Старые записи можно прочитать. Для продолжения выберите источник после открытия чата.</p>
+              <div className="history-list">
+                {unboundChats.map((chat) => (
+                  <button
+                    key={chat.chat_id}
+                    className={`history-item ${archivedChatId === chat.chat_id ? "active" : ""}`}
+                    aria-label={`Без источника: ${chat.title}`}
+                    onClick={() => openArchivedChat(chat)}
+                  >
+                    <Icon name="chat" size={16} />
+                    <span>{chat.title}</span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
         </aside>
         <main
           className={`analysis ${source ? "" : "analysis-empty"}`}
@@ -799,13 +901,13 @@ export default function App() {
                   ) : activePage.error ? (
                     <ErrorNotice
                       message={activePage.error}
-                      onRetry={() => selectedId && activePage.nextBefore !== null && void loadChatHistory(selectedId, activeConversationId!, activePage.nextBefore)}
+                      onRetry={() => historyKey && activePage.nextBefore !== null && void loadChatHistory(historyKey, activeConversationId!, activePage.nextBefore)}
                       label="Повторить загрузку истории"
                     />
                   ) : (
                     <button
                       className="text-button"
-                      onClick={() => selectedId && activePage.nextBefore !== null && void loadChatHistory(selectedId, activeConversationId!, activePage.nextBefore)}
+                      onClick={() => historyKey && activePage.nextBefore !== null && void loadChatHistory(historyKey, activeConversationId!, activePage.nextBefore)}
                     >
                       Показать предыдущие сообщения
                     </button>
@@ -839,10 +941,19 @@ export default function App() {
                         {message.answer?.answer ||
                           "Модель вернула пустой ответ."}
                       </SafeMarkdown>
-                      <button
+                      {message.historyDetail && (
+                        <p className="history-details-notice" role="status">
+                          {message.historyDetail === "legacy"
+                            ? "Это старый текстовый ответ: SQL, таблица и время тогда не сохранялись."
+                            : message.historyDetail === "unsupported"
+                              ? "Сохранённые детали созданы более новой версией EVIA и пока показаны только текстом."
+                              : "Сохранённые детали этого ответа повреждены, поэтому показан только текст."}
+                        </p>
+                      )}
+                      {!message.historyDetail && <button
                         className="result-link"
                         onClick={() => {
-                          if (selectedId) setActiveIds((previous) => ({ ...previous, [selectedId]: message.id }));
+                          if (historyKey) setActiveIds((previous) => ({ ...previous, [historyKey]: message.id }));
                           setView("results");
                           setMobilePanel("analytics");
                         }}
@@ -851,6 +962,7 @@ export default function App() {
                         Результаты инструментов
                         <Icon name="chevron" size={15} />
                       </button>
+                      }
                     </>
                   )}
                   <ResponseTiming key={`${message.id}-${message.startedAt}`} entry={message} />
@@ -899,6 +1011,11 @@ export default function App() {
                   <strong>{eviaStatus(mascotState)}</strong>
                 </div>
               </div>
+            )}
+            {archivedChat && !archivedChat.source_id && (
+              <p className="history-details-notice">
+                Для продолжения этого старого диалога выберите источник в левой панели.
+              </p>
             )}
             <form className="composer" onSubmit={submit}>
               <label className="visually-hidden" htmlFor="question">

@@ -9,6 +9,7 @@ export type Entry = {
   answer?: Answer;
   error?: string;
   mascotState?: EviaState;
+  historyDetail?: "legacy" | "unsupported" | "invalid";
   startedAt?: number;
   elapsedMs?: number;
   conversationId?: string;

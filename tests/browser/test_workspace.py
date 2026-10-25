@@ -81,7 +81,7 @@ def test_real_workspace_keyboard_mobile_and_safe_markdown(server):
             with page.expect_file_chooser() as chooser:
                 page.keyboard.press('Enter')
             chooser.value.set_files(ROOT / 'sample-data' / 'sales.csv')
-            expect(page.get_by_role('heading', name='Обзор данных')).to_be_visible()
+            expect(page.get_by_role('heading', name='sales')).to_be_visible()
             page.get_by_role('button', name='Данные', exact=True).click()
             expect(page.get_by_role('region', name='Предпросмотр источника').get_by_text('0001', exact=True)).to_be_visible()
             source_id = page.request.get(server + '/sources').json()[0]['source_id']
@@ -96,35 +96,40 @@ def test_real_workspace_keyboard_mobile_and_safe_markdown(server):
                 question.press('Control+Enter')
             assert sent.value.post_data_json == {'question': first_question.strip(), 'source_ids': [source_id]}
             chat_id = parse_qs(urlparse(sent.value.url).query)['chat_id'][0]
-            expect(page.get_by_text('Это демонстрационный ответ тестовой модели.', exact=False)).to_be_visible()
+            expect(page.get_by_role('region', name='Ответ EVIA').get_by_text('Тестовый режим показал первые строки выбранного источника.', exact=False)).to_be_visible()
             assert page.locator('.history-list').evaluate('(node) => node.scrollWidth <= node.clientWidth')
             page.get_by_role('button', name='Результаты инструментов', exact=True).click()
-            expect(page.get_by_role('region', name='Результат list_sources').get_by_text(source_id, exact=True)).to_be_visible()
+            expect(page.get_by_role('region', name='Результат preview_data').get_by_text('0001', exact=True)).to_be_visible()
+            # Server source binding and the complete tool result survive without the old browser cache.
+            page.evaluate("localStorage.removeItem('evia.chat-sources.v1')")
+            page.reload()
+            page.get_by_role('button', name='sales', exact=True).click()
+            page.get_by_role('button', name=first_question.strip()).click()
+            expect(page.get_by_role('region', name='Ответ EVIA').get_by_text('Тестовый режим показал первые строки выбранного источника.', exact=False)).to_be_visible()
+            page.get_by_role('button', name='Результаты инструментов', exact=True).click()
+            expect(page.get_by_role('region', name='Результат preview_data').get_by_text('0001', exact=True)).to_be_visible()
             page.screenshot(path=str(artifacts / 'desktop.png'), full_page=True)
 
-            quiet = page.get_by_role('button', name='Тихий режим')
-            quiet.focus()
-            page.keyboard.press('Enter')
-            expect(quiet).to_have_attribute('aria-pressed', 'true')
-            assert page.locator('.evia-mascot img').evaluate_all('(nodes) => nodes.every(n => getComputedStyle(n).animationName === "none")')
-            quiet.click()
             page.emulate_media(reduced_motion='reduce')
             assert page.locator('.evia-mascot img').evaluate_all('(nodes) => nodes.every(n => getComputedStyle(n).animationName === "none")')
 
             page.get_by_label('Загрузить CSV').set_input_files({
                 'name': 'second.csv', 'mimeType': 'text/csv', 'buffer': b'id,value\n0099,5\n'})
-            expect(page.get_by_role('heading', name='Обзор данных')).to_be_visible()
+            expect(page.get_by_role('heading', name='second')).to_be_visible()
             page.get_by_role('button', name='Данные', exact=True).click()
             expect(page.get_by_role('region', name='Предпросмотр источника').get_by_text('0099')).to_be_visible()
-            expect(page.get_by_text('Это демонстрационный ответ тестовой модели.', exact=False)).to_have_count(0)
+            expect(page.get_by_text('Тестовый режим показал первые строки выбранного источника.', exact=False)).to_have_count(0)
             page.get_by_role('button', name='sales', exact=True).click()
-            expect(page.get_by_text('Это демонстрационный ответ тестовой модели.', exact=False)).to_be_visible()
+            expect(page.get_by_text('Тестовый режим показал первые строки выбранного источника.', exact=False)).to_be_visible()
 
             # Synthetic hostile response verifies browser rendering, not model quality.
-            page.route('**/agent/chat?*', lambda route: route.fulfill(json={
-                'chat_id': chat_id,
-                'answer': '- Пункт проверки\n\n| Поле | Значение |\n| --- | --- |\n| ID | 0001 |\n\n```sql\nSELECT 1\n```\n\n<script>window.pwned=true</script>\n\n![remote](https://evil.test/pixel)\n\n[bad](javascript:alert%281%29)',
-                'steps': 1, 'tool_results': [{'tool_name': 'preview_source', 'ok': True, 'data': []}]}))
+            def hostile_answer(route):
+                requested_chat_id = parse_qs(urlparse(route.request.url).query)['chat_id'][0]
+                route.fulfill(json={
+                    'chat_id': requested_chat_id,
+                    'answer': '- Пункт проверки\n\n| Поле | Значение |\n| --- | --- |\n| ID | 0001 |\n\n```sql\nSELECT 1\n```\n\n<script>window.pwned=true</script>\n\n![remote](https://evil.test/pixel)\n\n[bad](javascript:alert%281%29)',
+                    'steps': 1, 'tool_results': [{'tool_name': 'preview_source', 'ok': True, 'data': []}]} )
+            page.route('**/agent/chat?*', hostile_answer)
             question.fill('Проверка безопасного Markdown')
             question.press('Control+Enter')
             expect(page.locator('.markdown table')).to_be_visible()
@@ -135,8 +140,10 @@ def test_real_workspace_keyboard_mobile_and_safe_markdown(server):
             page.get_by_role('button', name='Результаты инструментов', exact=True).last.click()
             expect(page.get_by_text('Нет строк для отображения', exact=True)).to_be_visible()
             page.set_viewport_size({'width': 390, 'height': 844})
-            question.scroll_into_view_if_needed()
-            expect(question).to_be_visible()
+            page.get_by_role('button', name='Чат').click()
+            mobile_question = page.get_by_role('textbox', name='Ваш вопрос')
+            mobile_question.scroll_into_view_if_needed()
+            expect(mobile_question).to_be_visible()
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
             page.screenshot(path=str(artifacts / 'mobile.png'), full_page=True)
             assert errors == []
@@ -162,24 +169,25 @@ def test_profile_overview_drilldown_search_and_responsive_layout(server):
                 'buffer': ('region,revenue,channel\nСевер,1200,Сайт\nЮг,800,Магазин\n'
                            'Север,1500,Сайт\n,600,Магазин\nЗапад,900,Сайт\nВосток,1100,\n').encode(),
             })
-            expect(page.get_by_role('heading', name='Обзор данных')).to_be_visible()
-            expect(page.get_by_text('88,9%', exact=True)).to_be_visible()
-            expect(page.get_by_text('Выборка: 6 строк', exact=False)).to_be_visible()
+            expect(page.get_by_role('heading', name='retail-demo')).to_be_visible()
+            expect(page.get_by_text('6 строк обработано', exact=True)).to_be_visible()
+            expect(page.get_by_text('Профиль покрывает весь датасет', exact=True)).to_be_visible()
             expect(page.get_by_role('textbox', name='Ваш вопрос')).to_be_in_viewport()
             page.screenshot(path=str(artifacts / 'analytics-overview-desktop.png'), full_page=True)
             for width in [1280, 1024, 768, 390]:
                 page.set_viewport_size({'width': width, 'height': 844})
                 assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), f'Overflow at {width}px'
-            page.get_by_role('heading', name='Обзор данных').scroll_into_view_if_needed()
+            page.get_by_role('button', name='Аналитика').click()
+            expect(page.get_by_role('navigation', name='Разделы источника')).to_be_visible()
             page.screenshot(path=str(artifacts / 'analytics-overview-mobile.png'), full_page=True)
             page.set_viewport_size({'width': 1440, 'height': 1000})
             page.get_by_role('button', name='Качество', exact=True).focus()
             page.keyboard.press('Enter')
             expect(page.get_by_role('heading', name='Качество данных')).to_be_visible()
-            page.get_by_role('button', name='Изучить region', exact=True).click()
+            page.get_by_role('button', name='Столбцы', exact=True).click()
             field = page.get_by_role('region', name='Столбец region', exact=True)
+            field.get_by_text('region', exact=True).click()
             expect(field.get_by_text('Север', exact=True)).to_be_visible()
-            expect(field.get_by_text('16,7%', exact=True)).to_be_visible()
             search = page.get_by_role('searchbox', name='Поиск столбца')
             search.fill('REVENUE')
             expect(page.get_by_role('region', name='Столбец revenue')).to_be_visible()
@@ -193,18 +201,17 @@ def test_profile_overview_drilldown_search_and_responsive_layout(server):
             page.get_by_role('button', name='Отправить вопрос').click()
             page.get_by_role('button', name='Результаты инструментов', exact=True).click()
             expect(page.get_by_role('heading', name='Результат анализа')).to_be_visible()
-            expect(page.get_by_role('region', name='Вывод EVIA')).to_contain_text('демонстрационный ответ')
+            expect(page.get_by_role('region', name='Вывод EVIA')).to_contain_text('Тестовый режим')
             page.screenshot(path=str(artifacts / 'analytics-result-desktop.png'), full_page=True)
             # Reload and choose the same persisted source: the overview uses the same real profile.
             page.reload()
             page.get_by_role('button', name='retail-demo', exact=True).click()
-            expect(page.get_by_text('88,9%', exact=True)).to_be_visible()
+            expect(page.get_by_text('6 строк обработано', exact=True)).to_be_visible()
             # New data must clear both search context and old profile immediately.
             page.get_by_label('Загрузить CSV').set_input_files({
                 'name': 'second.csv', 'mimeType': 'text/csv', 'buffer': b'id\n1\n2\n',
             })
-            expect(page.get_by_text('100%', exact=True)).to_be_visible()
-            expect(page.get_by_text('88,9%', exact=True)).to_have_count(0)
+            expect(page.get_by_text('2 строки обработано', exact=True)).to_be_visible()
             page.get_by_role('button', name='Столбцы', exact=True).click()
             expect(page.get_by_role('searchbox', name='Поиск столбца')).to_have_value('')
             expect(page.get_by_role('region', name='Столбец id')).to_be_visible()

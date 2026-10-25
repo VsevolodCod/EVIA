@@ -145,19 +145,28 @@ it("keeps late answers and history bound to their source", async () => {
   expect(screen.getByRole("button", { name: "Вопрос A" })).toBeInTheDocument();
 });
 it("reopens a server conversation after reload without mixing it into another source", async () => {
-  localStorage.setItem("evia.chat-sources.v1", JSON.stringify({ "chat-a": "A" }));
+  // A stale browser cache must not move a server-bound chat to another source.
+  localStorage.setItem("evia.chat-sources.v1", JSON.stringify({ "chat-a": "B" }));
   const fetcher = vi.fn((url: string) => {
     if (url === "/health") return Promise.resolve(Response.json({ status: "ok", llm_provider: "mock" }));
     if (url === "/sources") return Promise.resolve(Response.json([source("A"), source("B")]));
     if (url === "/chats?limit=100") return Promise.resolve(Response.json([
-      { chat_id: "chat-a", title: "Продажи по месяцам", created_at: "2026-10-18T08:00:00Z", updated_at: "2026-10-18T08:01:00Z" },
+      { chat_id: "chat-a", title: "Продажи по месяцам", source_id: "A", created_at: "2026-10-18T08:00:00Z", updated_at: "2026-10-18T08:01:00Z" },
     ]));
     if (url === "/chats/chat-a?limit=50") return Promise.resolve(Response.json({
       chat_id: "chat-a",
       title: "Продажи по месяцам",
+      source_id: "A",
       messages: [
         { message_id: "question-a", role: "user", content: "Покажи продажи", created_at: "2026-10-18T08:00:00Z" },
-        { message_id: "answer-a", role: "assistant", content: "Продажи выросли.", created_at: "2026-10-18T08:00:01Z" },
+        { message_id: "answer-a", role: "assistant", content: "Продажи выросли.", created_at: "2026-10-18T08:00:01Z", analysis_payload: {
+          version: 1, response: {
+            answer: "Продажи выросли.", steps: 1, request_id: "saved-request", answer_kind: "computed",
+            analysis: { intent: "sales", sql: "SELECT SUM(revenue) FROM sales", explanation: "Сумма продаж" },
+            timing: { elapsed_ms: 1200, llm_ms: 600, tools_ms: 400, calls: [] },
+            tool_results: [{ tool_name: "query_data", ok: true, data: { columns: [{ name: "total", data_type: "number" }], rows: [[300]] } }],
+          },
+        } },
       ],
       total_messages: 2,
       next_offset: null,
@@ -178,6 +187,9 @@ it("reopens a server conversation after reload without mixing it into another so
       screen.getByRole("complementary", { name: "Чат с EVIA" }),
     ).findByText("Продажи выросли."),
   ).toBeInTheDocument();
+  expect(screen.getByText("Ответ за 1,2 с")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Результаты инструментов" }));
+  expect(await screen.findByText("SELECT SUM(revenue) FROM sales")).toBeInTheDocument();
   await select("B");
   expect(screen.queryByText("Продажи выросли.")).not.toBeInTheDocument();
 });
@@ -206,6 +218,68 @@ it("reopens an unanswered question with retry instead of a successful answer", a
   fireEvent.click(await screen.findByRole("button", { name: "Сколько строк?" }));
   expect(await screen.findByRole("button", { name: "Повторить вопрос" })).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: /Результаты инструментов/ })).not.toBeInTheDocument();
+});
+
+it("opens an archived result after its source is no longer available", async () => {
+  const fetcher = vi.fn((url: string) => {
+    if (url === "/health") return Promise.resolve(Response.json({ status: "ok", llm_provider: "mock" }));
+    if (url === "/sources") return Promise.resolve(Response.json([source("A")]));
+    if (url === "/chats?limit=100") return Promise.resolve(Response.json([
+      { chat_id: "archived", title: "Итог удалённого CSV", source_id: "deleted-source", created_at: "2026-10-18T08:00:00Z", updated_at: "2026-10-18T08:01:00Z" },
+    ]));
+    if (url === "/chats/archived?limit=50") return Promise.resolve(Response.json({
+      chat_id: "archived", title: "Итог удалённого CSV", source_id: "deleted-source",
+      messages: [
+        { message_id: "old-question", role: "user", content: "Какая сумма?", created_at: "2026-10-18T08:00:00Z" },
+        { message_id: "old-answer", role: "assistant", content: "300", created_at: "2026-10-18T08:00:01Z", analysis_payload: {
+          version: 1, response: { answer: "300", steps: 1, tool_results: [], timing: { elapsed_ms: 750, llm_ms: 300, tools_ms: 200, calls: [] } },
+        } },
+      ], total_messages: 2, next_offset: null, next_before: null, has_more: false,
+    }));
+    return Promise.reject(new Error("Unexpected route " + url));
+  });
+  vi.stubGlobal("fetch", fetcher);
+  render(<App />);
+  fireEvent.click(await screen.findByRole("button", { name: "Архив: Итог удалённого CSV" }));
+  expect(await screen.findByText("300")).toBeInTheDocument();
+  expect(screen.getByRole("textbox", { name: "Ваш вопрос" })).toBeDisabled();
+  expect(screen.getByText("Ответ за 0,8 с")).toBeInTheDocument();
+});
+
+it("continues an unbound legacy chat only after the user explicitly chooses a source", async () => {
+  const sent: { url: string; body: { source_ids: string[] } }[] = [];
+  const fetcher = vi.fn((url: string, init?: RequestInit) => {
+    if (url === "/health") return Promise.resolve(Response.json({ status: "ok", llm_provider: "mock" }));
+    if (url === "/sources") return Promise.resolve(Response.json([source("A")]));
+    if (url === "/chats?limit=100") return Promise.resolve(Response.json([
+      { chat_id: "legacy", title: "Старый диалог", source_id: null, created_at: "2026-10-18T08:00:00Z", updated_at: "2026-10-18T08:01:00Z" },
+    ]));
+    if (url === "/chats/legacy?limit=50") return Promise.resolve(Response.json({
+      chat_id: "legacy", title: "Старый диалог", source_id: null,
+      messages: [
+        { message_id: "old-question", role: "user", content: "Что было?", created_at: "2026-10-18T08:00:00Z" },
+        { message_id: "old-answer", role: "assistant", content: "Только текст", created_at: "2026-10-18T08:00:01Z" },
+      ], total_messages: 2, next_offset: null, next_before: null, has_more: false,
+    }));
+    if (url === "/agent/chat?chat_id=legacy") {
+      sent.push({ url, body: JSON.parse(String(init?.body)) });
+      return Promise.resolve(Response.json({ chat_id: "legacy", answer: "Продолжение", steps: 1, tool_results: [] }));
+    }
+    if (url.endsWith("/schema")) return Promise.resolve(Response.json(schema("A")));
+    if (url.includes("/preview")) return Promise.resolve(Response.json([{ product: "row" }]));
+    if (url.endsWith("/profile")) return Promise.resolve(Response.json(profile));
+    return Promise.reject(new Error("Unexpected route " + url));
+  });
+  vi.stubGlobal("fetch", fetcher);
+  render(<App />);
+  fireEvent.click(await screen.findByRole("button", { name: "Без источника: Старый диалог" }));
+  expect(await screen.findByText("Только текст")).toBeInTheDocument();
+  expect(screen.getByText("Для продолжения этого старого диалога выберите источник в левой панели.")).toBeInTheDocument();
+  expect(screen.getByRole("textbox", { name: "Ваш вопрос" })).toBeDisabled();
+  await select("A");
+  await ask("Продолжи");
+  expect(await screen.findByText("Продолжение")).toBeInTheDocument();
+  expect(sent).toEqual([{ url: "/agent/chat?chat_id=legacy", body: { question: "Продолжи", source_ids: ["A"] } }]);
 });
 
 it("silently forgets a stale local chat mapping when its server history is gone", async () => {
