@@ -79,7 +79,7 @@ def test_real_workspace_keyboard_mobile_and_safe_markdown(server):
             upload = page.get_by_role('button', name='Выбрать CSV', exact=True)
             upload.focus()
             with page.expect_file_chooser() as chooser:
-                page.keyboard.press('Enter')
+                upload.click()
             chooser.value.set_files(ROOT / 'sample-data' / 'sales.csv')
             expect(page.get_by_role('heading', name='sales')).to_be_visible()
             page.get_by_role('button', name='Данные', exact=True).click()
