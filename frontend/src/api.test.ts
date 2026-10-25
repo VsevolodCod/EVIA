@@ -29,6 +29,18 @@ it("keeps a future stored-analysis envelope readable without inventing results",
   expect(storedAnalysis(message)).toEqual({ kind: "unsupported" });
 });
 
+it("restores dashboards written with the earlier response column", () => {
+  const message: ChatMessage = {
+    message_id: "dashboard-answer", role: "assistant", content: "Готово", created_at: "2026-10-25T10:00:00Z",
+    response: {
+      answer: "Готово", steps: 1, tool_results: [{
+        tool_name: "create_dashboard", ok: true, data: { version: 1, title: "Продажи", cards: [] }, error: null,
+      }],
+    },
+  };
+  expect(storedAnalysis(message)).toEqual({ kind: "restored", answer: message.response });
+});
+
 it("cancels waiting for creation without losing the reusable chat ID", async () => {
   let finish!: (id: string) => void;
   const chat = new Promise<string>((resolve) => { finish = resolve; });
