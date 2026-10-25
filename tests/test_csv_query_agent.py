@@ -310,6 +310,7 @@ async def test_general_dataset_question_gets_count_and_period_even_if_model_asks
     "Перечисли поля в CSV",
     "Какова структура таблицы?",
     "Назови колонки этого источника",
+    "Какие поля содержатся в таблице?",
 ])
 async def test_schema_questions_use_current_header_without_model_or_rows(tmp_path, question):
     catalog = SchemaCatalog(tmp_path / "catalog.db")

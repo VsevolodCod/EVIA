@@ -136,7 +136,9 @@ def _question_route(question: str) -> str | None:
         "структура", "структуру", "схема", "схему",
     }
     asks_listing = any(word in words[:3] for word in ("какие", "какова", "каковы", "перечисли", "назови", "покажи", "список"))
-    if names_field and all(word in schema_words for word in words) and (asks_listing or words[:1] in (["структура"], ["схема"])):
+    if names_field and all(word in schema_words or word.startswith(("содерж", "име", "доступ")) for word in words) and (
+        asks_listing or words[:1] in (["структура"], ["схема"])
+    ):
         return "schema"
 
     names_dataset = any(word.startswith(("данн", "источник", "файл", "датасет", "таблиц")) for word in words)
