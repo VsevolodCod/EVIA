@@ -35,7 +35,7 @@ def runtime(sources, catalog, provider=None):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('question', ['какие значения встречаются чаще всего?', 'Покажи наиболее частые значения', 'Какие значения чаще встречаются?'])
+@pytest.mark.parametrize('question', ['какие значения встречаются чаще всего?', 'Покажи наиболее частые значения', 'Какие значения чаще встречаются?', 'А какие значения встречаются чаще всего?', 'А теперь покажи наиболее частые значения'])
 async def test_generic_frequency_is_exact_and_states_default_fields(setup, question):
     sources, source, catalog = setup
     response = await runtime(sources, catalog).ask(question, [source.source_id])
@@ -90,7 +90,9 @@ async def test_empty_dataset_and_all_empty_field_are_not_model_errors(setup):
 
 
 @pytest.mark.parametrize('question', ['Какие значения встречаются чаще всего за июль?', 'Найди дубликаты только за 2024 год',
-                                    'Покажи первые 20 строк', 'Какие значения чаще встречаются? Посчитай сумму amount'])
+                                    'Покажи первые 20 строк', 'Какие значения чаще встречаются? Посчитай сумму amount',
+                                    'А какие значения встречаются чаще всего за июль?',
+                                    'А теперь покажи первые строки только по региону A'])
 def test_filtered_queries_are_not_replaced_by_default_actions(question):
     assert descriptive_route(question) is None
 

@@ -13,6 +13,9 @@ ACTION_NAMES = frozenset({'frequencies', 'duplicates', 'preview'})
 def descriptive_route(question: str) -> str | None:
     """Bypass inference only for complete unfiltered requests; never substrings."""
     phrase = re.sub(r'\s+', ' ', question.casefold().replace('ё', 'е')).strip().rstrip('?! .')
+    # Strip only a conversational prefix; still require a complete unfiltered
+    # request. "А ... за июль" must keep its filter and go through planning.
+    phrase = re.sub(r'^(?:а(?: теперь)?|теперь)\s+', '', phrase)
     patterns = {
         'frequencies': r'(?:какие значения (?:встречаются|попадаются) чаще всего|(?:покажи |выведи )?(?:самые частые|наиболее частые) значения|какие значения чаще встречаются|покажи частоты значений)',
         'duplicates': r'(?:есть ли (?:тут |здесь )?(?:повторяющиеся данные|дубликаты|повторяющиеся строки)|найди (?:полные )?дубликаты(?: строк)?)',

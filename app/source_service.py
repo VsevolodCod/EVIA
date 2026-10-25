@@ -17,6 +17,7 @@ from app.csv_import import CSVImportError, ImportReport, copy_original, scan_csv
 from app.data_sources.postgresql_adapter import PostgreSQLAdapter
 from app.contracts.v1 import Profile, Provenance, QueryResult
 from app.models import CSVVersion, DataSource, SourceSchema, utc_now
+from app.profile_cache import ProfileCache
 from app.safe_sql import SafeQueryExecutor
 from app.schema_catalog import CatalogConflictError, SchemaCatalog
 
@@ -38,6 +39,7 @@ class SourceService:
         self.data_engine = DuckDBDataEngine(self.data_dir / "analytics.duckdb")
         self.sql_executor = SafeQueryExecutor(self.data_engine.database_path)
         self.postgres_adapter = postgres_adapter
+        self._profile_cache = ProfileCache()
 
     def register_postgresql_sources(self) -> list[DataSource]:
         """Discover configured live PostgreSQL tables and cache non-secret metadata."""
@@ -239,9 +241,20 @@ class SourceService:
                 ).model_dump(mode="json")
 
         source = self._ensure_materialized(source)
-        return Profile.model_validate(
-            self.data_engine.profile(source, self.csv_adapter.sample_size)
-        ).model_dump(mode="json")
+        sample_size = self.csv_adapter.sample_size
+        # CSV snapshots are immutable. Reimports, schema changes and sampling
+        # changes get different keys. Live PostgreSQL deliberately bypasses this.
+        key = (source.source_id, source.snapshot_id, source.schema_version, PARSER_VERSION, sample_size)
+
+        def compute():
+            profile = Profile.model_validate(
+                self.data_engine.profile(source, sample_size)
+            ).model_dump(mode="json")
+            if profile.get("snapshot_id") != source.snapshot_id:
+                raise ValueError("Profile does not match the requested CSV snapshot")
+            return profile
+
+        return self._profile_cache.get_or_compute(key, compute)
 
     @staticmethod
     def _sampled_postgresql_profile(profile: dict[str, Any]) -> dict[str, Any]:
