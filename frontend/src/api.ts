@@ -155,6 +155,12 @@ const answerSchema = z.object({
   answer: z.string(),
   request_id: z.string().optional(),
   status: z.enum(["answered", "clarification", "error"]).optional(),
+  outcome: z.enum(["answer", "clarification", "unsupported", "error"]).optional(),
+  clarification: z.object({
+    original_question: z.string(),
+    reason: z.string(),
+    options: z.array(z.string()).min(1).max(3),
+  }).nullable().optional(),
   answer_kind: z.enum(["demo", "model", "computed"]).optional(),
   analysis: z.object({ intent: z.string(), sql: z.string().nullable(), explanation: z.string() }).nullable().optional(),
   chat_id: z.string().nullable().optional(),

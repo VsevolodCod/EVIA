@@ -208,6 +208,14 @@ class AnalysisPlan(BaseModel):
     explanation: str
 
 
+class Clarification(BaseModel):
+    """A resumable, non-executing choice presented before an ambiguous query."""
+
+    original_question: str = Field(min_length=1, max_length=4000)
+    reason: str = Field(min_length=1, max_length=1000)
+    options: list[str] = Field(min_length=1, max_length=3)
+
+
 class Error(BaseModel):
     code: Literal['VALIDATION_ERROR', 'SOURCE_NOT_FOUND', 'IMPORT_FAILED', 'QUERY_REJECTED', 'QUERY_TIMEOUT', 'MODEL_UNAVAILABLE', 'MODEL_OUTPUT_INCOMPLETE', 'INTERNAL_ERROR']
     message: str
@@ -221,6 +229,11 @@ class AgentResponse(AskResponse):
     status: Literal['answered', 'clarification', 'error']
     answer_kind: Literal['demo', 'model', 'computed'] = 'model'
     analysis: AnalysisPlan | None = None
+    # ``status`` remains backwards-compatible for existing clients. ``outcome``
+    # tells a client whether a clarification is a normal ambiguous choice or a
+    # request that EVIA deliberately does not support.
+    outcome: Literal['answer', 'clarification', 'unsupported', 'error'] | None = None
+    clarification: Clarification | None = None
     results: list[QueryResult] = Field(default_factory=list)
     error: Error | None = None
     artifact_ids: list[Identifier] = Field(default_factory=list)
@@ -234,8 +247,18 @@ class AgentResponse(AskResponse):
             raise ValueError('error request_id must match response')
         if self.status == 'clarification' and self.results:
             raise ValueError('clarification must not claim executed results')
+        expected = {
+            'answered': {'answer'},
+            'clarification': {'clarification', 'unsupported'},
+            'error': {'error'},
+        }[self.status]
+        if self.outcome is not None and self.outcome not in expected:
+            raise ValueError('outcome must agree with status')
+        if self.clarification is not None and self.status != 'clarification':
+            raise ValueError('clarification payload requires clarification status')
         return self
 
 
 CONTRACTS = {'Source': Source, 'SourceSchema': SourceSchema, 'DatasetSnapshot': DatasetSnapshot,
-             'Profile': Profile, 'QueryResult': QueryResult, 'AgentResponse': AgentResponse, 'Error': Error}
+             'Profile': Profile, 'QueryResult': QueryResult, 'AgentResponse': AgentResponse, 'Error': Error,
+             'Clarification': Clarification}

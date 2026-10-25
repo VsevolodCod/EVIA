@@ -941,6 +941,19 @@ export default function App() {
                         {message.answer?.answer ||
                           "Модель вернула пустой ответ."}
                       </SafeMarkdown>
+                      {message.answer?.clarification?.options && (
+                        <div className="clarification-options" aria-label="Варианты уточнения">
+                          {message.answer.clarification.options.map((option, index) => (
+                            <button
+                              className="text-button"
+                              key={option}
+                              onClick={() => void send(String(index + 1))}
+                            >
+                              {index + 1}. {option}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                       {message.historyDetail && (
                         <p className="history-details-notice" role="status">
                           {message.historyDetail === "legacy"

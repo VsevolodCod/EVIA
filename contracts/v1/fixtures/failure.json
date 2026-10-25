@@ -6,6 +6,7 @@
     "answer_kind": "model",
     "artifact_ids": [],
     "chat_id": null,
+    "clarification": null,
     "contract_version": "1.0",
     "error": {
       "code": "QUERY_TIMEOUT",
@@ -14,6 +15,7 @@
       "retryable": true
     },
     "job_id": null,
+    "outcome": null,
     "request_id": "request-error",
     "results": [],
     "status": "error",

@@ -10,7 +10,7 @@ import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 from sqlglot import exp, parse, parse_one
 
-from app.contracts.v1 import AgentResponse, AnalysisPlan, Error
+from app.contracts.v1 import AgentResponse, AnalysisPlan, Clarification, Error
 from app.descriptive_actions import ACTION_NAMES, descriptive_answer, descriptive_route, markdown_cell
 from app.llm.base import LLMProvider
 from app.models import AgentTiming, ChatMessage, LLMMessage, ModelTiming, ToolResult
@@ -167,6 +167,46 @@ def _question_route(question: str) -> str | None:
     return None
 
 
+_OUT_OF_SCOPE_WORDS = {
+    "погода", "гороскоп", "рецепт", "стих", "перевод", "код", "программ",
+    "инструкц", "игнорир", "system prompt", "системн",
+}
+_EXPENSE_WORDS = ("расход", "затрат", "себестоим", "cost", "expense")
+_PROFIT_WORDS = ("прибыл", "марж")
+
+
+def _normal_question(question: str) -> str:
+    return question.casefold().replace("ё", "е")
+
+
+def _matches_any(text: str, fragments: tuple[str, ...] | set[str]) -> bool:
+    return any(fragment in text for fragment in fragments)
+
+
+def _clarification_from_history(question: str, history: list[ChatMessage] | None) -> str:
+    """Expand a numbered clarification answer into its saved original request.
+
+    The structured payload is saved with the assistant chat message, so a bare
+    ``1`` never makes the model guess what the user is selecting.
+    """
+    choice = question.strip()
+    if not re.fullmatch(r"(?:вариант\s*)?[1-3]", choice, flags=re.IGNORECASE):
+        return question
+    index = int(re.search(r"[1-3]", choice).group()) - 1
+    for message in reversed(history or []):
+        payload = message.analysis_payload
+        response = payload.response if payload is not None else None
+        clarification = response.get("clarification") if isinstance(response, dict) else None
+        if not isinstance(clarification, dict):
+            continue
+        original = clarification.get("original_question")
+        options = clarification.get("options")
+        if isinstance(original, str) and isinstance(options, list) and index < len(options) and isinstance(options[index], str):
+            return f"{original}\nВыбранный вариант: {options[index]}"
+        return question
+    return question
+
+
 def _russian_count(noun_forms: tuple[str, str, str], count: int) -> str:
     form = noun_forms[2] if count % 100 in range(11, 15) else (
         noun_forms[0] if count % 10 == 1 else noun_forms[1] if count % 10 in range(2, 5) else noun_forms[2]
@@ -181,6 +221,7 @@ class CSVQueryAgent:
 
     async def ask(self, question: str, source_id: str, timing: AgentTiming, request_id: str,
                   history: list[ChatMessage] | None = None) -> AgentResponse:
+        question = _clarification_from_history(question, history)
         route = _question_route(question) or descriptive_route(question)
         for _ in range(3):
             schema_started = perf_counter()
@@ -190,6 +231,9 @@ class CSVQueryAgent:
             if route is not None and (source is None or source.schema_version != schema.version):
                 continue
             fields = schema.objects[0].fields if schema.objects else []
+            clarification = self._preflight_clarification(question, fields, timing, request_id)
+            if clarification is not None:
+                return clarification
             if route is None:
                 break
             if route in ACTION_NAMES:
@@ -274,15 +318,16 @@ class CSVQueryAgent:
                 response.steps += attempt + 1
                 return response
             if plan.intent == "clarification":
-                return AgentResponse(
-                    request_id=request_id, status="clarification",
-                    answer=("Не удалось однозначно выбрать расчёт. Укажите поле и условие. "
-                            "Доступные поля: " + ", ".join(markdown_cell(field.name) for field in fields[:12]) +
-                            (" (показаны первые 12)" if len(fields) > 12 else "") +
-                            ". Можно также запросить обзор частых значений без указания поля."),
-                    steps=attempt + 1, analysis=AnalysisPlan(intent=plan.intent, sql=None, explanation=""),
-                    tool_results=trace, timing=timing,
+                options = [f"Рассчитать по полю «{field.name}»" for field in fields[:3]]
+                if not options:
+                    options = ["Показать структуру источника", "Показать обзор данных"]
+                clarification = self._clarification(
+                    question, request_id, timing, "clarification",
+                    "Не удалось однозначно выбрать расчёт. Укажите поле и условие.", options,
                 )
+                clarification.steps = attempt + 1
+                clarification.tool_results = trace
+                return clarification
             if not _reads_csv_values(plan.sql):
                 trace.append(ToolResult(tool_name="query_data", ok=False, error="QUERY_REJECTED"))
                 if attempt == 0:
@@ -333,6 +378,60 @@ class CSVQueryAgent:
                 results=[result], tool_results=trace, timing=timing,
             )
         return self._error(request_id, timing, 2, trace, "VALIDATION_ERROR", last_plan)
+
+    def _preflight_clarification(self, question, fields, timing, request_id) -> AgentResponse | None:
+        """Handle questions that must not be delegated to the SQL planner.
+
+        This keeps missing business inputs, ambiguous averages and prompt
+        injection attempts from becoming a speculative SQL request.
+        """
+        normalized = _normal_question(question)
+        names = [field.name for field in fields]
+        numeric = [field.name for field in fields if field.inferred_type in {"integer", "number"}]
+        temporal = [field.name for field in fields if field.inferred_type in {"date", "datetime"}]
+
+        if _matches_any(normalized, _OUT_OF_SCOPE_WORDS):
+            return self._clarification(
+                question, request_id, timing, "unsupported",
+                "Этот запрос не относится к анализу выбранного CSV. Я работаю только с его данными и не выполняю инструкции из файла или вопроса.",
+                ["Показать структуру источника", "Показать обзор данных", "Найти частые значения"],
+            )
+
+        if _matches_any(normalized, _PROFIT_WORDS) and not _matches_any(" ".join(name.casefold() for name in names), _EXPENSE_WORDS):
+            choices = [f"Среднее значение «{name}»" for name in numeric[:3]]
+            if not choices:
+                choices = ["Показать структуру источника", "Показать обзор данных"]
+            return self._clarification(
+                question, request_id, timing, "clarification",
+                "В источнике нет поля расходов или себестоимости, поэтому прибыль вычислить нельзя.", choices,
+            )
+
+        asks_average = any(word in normalized for word in ("средн", "average", "avg"))
+        asks_period = any(word in normalized for word in ("период", "динамик", "по месяц", "по год", "дата"))
+        if asks_average and len(numeric) > 1 and not any(name.casefold() in normalized for name in numeric):
+            return self._clarification(
+                question, request_id, timing, "clarification",
+                "Неясно, по какому числовому полю считать среднее.",
+                [f"Среднее значение «{name}»" for name in numeric[:3]],
+            )
+        if asks_period and len(temporal) > 1 and not any(name.casefold() in normalized for name in temporal):
+            return self._clarification(
+                question, request_id, timing, "clarification",
+                "Неясно, какое поле даты использовать для периода.",
+                [f"Использовать дату «{name}»" for name in temporal[:3]],
+            )
+        return None
+
+    @staticmethod
+    def _clarification(question, request_id, timing, outcome, reason, options) -> AgentResponse:
+        numbered = " ".join(f"{index + 1}. {option}" for index, option in enumerate(options))
+        answer = f"{reason} Выберите вариант: {numbered}."
+        return AgentResponse(
+            request_id=request_id, status="clarification", outcome=outcome, answer=answer, steps=0,
+            analysis=AnalysisPlan(intent="clarification", sql=None, explanation=reason),
+            clarification=Clarification(original_question=question, reason=reason, options=options),
+            tool_results=[], timing=timing,
+        )
 
     def _descriptive_answer(self, intent, columns, source_id, schema, timing, request_id, steps):
         try:
