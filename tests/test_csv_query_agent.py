@@ -555,7 +555,7 @@ async def test_overview_counts_legacy_schema_without_saved_row_count(tmp_path):
         answer = await agent.ask("Что есть в этих данных?", [source.source_id])
         assert answer.status == "answered"
         assert "2 строки" in answer.answer
-        assert answer.tool_results[-1].tool_name == "query_data"
+        assert answer.tool_results[-1].tool_name == "get_profile"
         assert provider.messages == []
     finally:
         catalog.close()
