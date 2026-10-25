@@ -24,8 +24,7 @@ from app.models import DataSource
 
 
 _GRAIN_NAME = re.compile(r"(^|[_\s-])(id|code|identifier|date|time|дата|время|код|идентификатор)([_\s-]|$)", re.IGNORECASE)
-_MAX_GRAIN_COLUMNS = 8
-_MAX_GRAIN_COMBINATIONS = 40
+_MAX_GRAIN_COLUMNS = 3
 
 
 class DuckDBDataEngine:
@@ -239,20 +238,16 @@ class DuckDBDataEngine:
         if single_keys:
             return single_keys
 
-        # Prefer columns whose names suggest identifiers or time dimensions;
-        # remaining complete columns are deterministic fallbacks.
+        # Composite grain hypotheses only use fields with an ID/code/date-like
+        # name.  This keeps a unique measurement from masquerading as part of
+        # a key and bounds the full-snapshot query cost to four scans.
         eligible = [
             name for name in complete_fields
-            if columns[name]["distinct_count"] > 1
+            if _GRAIN_NAME.search(name) and columns[name]["distinct_count"] > 1
         ]
-        eligible.sort(key=lambda name: (not bool(_GRAIN_NAME.search(name)), raw_columns.index(name)))
         eligible = eligible[:_MAX_GRAIN_COLUMNS]
-        checked = 0
-        for width in (2, 3):
+        for width in (3, 2):
             for fields in combinations(eligible, width):
-                if checked >= _MAX_GRAIN_COMBINATIONS:
-                    return []
-                checked += 1
                 quoted = [self._quote_identifier(field) for field in fields]
                 projection = ", ".join(quoted)
                 distinct_rows = int(connection.execute(

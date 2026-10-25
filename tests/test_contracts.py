@@ -104,6 +104,14 @@ def test_full_profile_rejects_invalid_candidate_grain_key():
         Profile.model_validate(data)
 
 
+def test_full_profile_rejects_non_unique_single_field_grain_candidate():
+    data = full_profile_data()
+    data['candidate_grain_keys'] = [['amount']]
+
+    with pytest.raises(ValidationError):
+        Profile.model_validate(data)
+
+
 @pytest.mark.parametrize('path', [
     ('processed_rows',),
     ('snapshot_id',),

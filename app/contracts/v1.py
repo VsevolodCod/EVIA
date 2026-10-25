@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue, RootModel, model_v
 from app.models import AskResponse, DataSource, SourceSchema
 
 Identifier = Annotated[str, Field(min_length=1, max_length=200)]
+GrainKey = Annotated[list[Identifier], Field(min_length=1, max_length=3)]
 Source = DataSource
 
 
@@ -72,7 +73,7 @@ class FullProfile(BaseModel):
     coverage: Literal['full']
     snapshot_id: Identifier
     columns: dict[str, ColumnProfile]
-    candidate_grain_keys: list[list[Identifier]] = Field(default_factory=list)
+    candidate_grain_keys: list[GrainKey] = Field(default_factory=list)
     note: str
     snapshot: DatasetSnapshot | None = None
 
@@ -114,6 +115,8 @@ class FullProfile(BaseModel):
                     raise ValueError('candidate grain key must reference a profiled field')
                 if column.non_null_count != self.processed_rows or column.empty_count:
                     raise ValueError('candidate grain key fields must be complete')
+                if len(candidate) == 1 and column.distinct_count != self.processed_rows:
+                    raise ValueError('single-field candidate grain key must be unique')
         return self
 
 
