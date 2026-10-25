@@ -5,6 +5,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.agent import AgentRuntime
+from app.csv_query_agent import _question_route
 from app.models import LLMResponse
 from app.models import ChatMessage
 from app.schema_catalog import SchemaCatalog
@@ -301,6 +302,299 @@ async def test_general_dataset_question_gets_count_and_period_even_if_model_asks
         assert answer.tool_results[0].ok
     finally:
         catalog.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("question", [
+    "Какие есть столбцы?",
+    "Перечисли поля в CSV",
+    "Какова структура таблицы?",
+    "Назови колонки этого источника",
+    "Какие поля содержатся в таблице?",
+])
+async def test_schema_questions_use_current_header_without_model_or_rows(tmp_path, question):
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    sources = SourceService(tmp_path / "data", catalog)
+    source = sources.register_csv("empty.csv", "Номер,Дата ответа\n".encode())
+    provider = ScriptedProvider()
+    agent = AgentRuntime(provider, build_tool_registry(catalog, sources), sources=sources)
+    try:
+        answer = await agent.ask(question, [source.source_id])
+        assert answer.status == "answered"
+        assert answer.answer_kind == "computed"
+        assert "Номер" in answer.answer
+        assert "Дата ответа" in answer.answer
+        assert "нет строк" not in answer.answer.lower()
+        assert answer.steps == 0
+        assert answer.timing.calls == []
+        assert provider.messages == []
+        assert answer.tool_results[0].tool_name == "get_schema"
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("question", [
+    "Что передо мной?",
+    "Что есть в этих данных?",
+    "Что ещё можешь скзаать про эти данные?",
+    "Что еще можешь сказать про эти данные?",
+    "За какой период они и сколько их?",
+])
+async def test_overview_questions_use_verified_count_period_and_fields_without_model(tmp_path, question):
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    sources = SourceService(tmp_path / "data", catalog)
+    source = sources.register_csv(
+        "tickets.csv",
+        b"created_at,ticket\n2024-10-01T09:00:00,A\n2024-10-03T10:30:00,B\n",
+    )
+    provider = ScriptedProvider()
+    agent = AgentRuntime(provider, build_tool_registry(catalog, sources), sources=sources)
+    try:
+        answer = await agent.ask(question, [source.source_id])
+        assert answer.status == "answered"
+        assert answer.answer_kind == "computed"
+        assert "2 строки" in answer.answer
+        assert "created_at" in answer.answer
+        assert "ticket" in answer.answer
+        assert "01.10.2024" in answer.answer
+        assert "03.10.2024" in answer.answer
+        assert answer.steps == 0
+        assert provider.messages == []
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
+async def test_schema_route_does_not_steal_a_calculation_about_one_column(tmp_path):
+    provider = ScriptedProvider({
+        "intent": "average_revenue",
+        "sql": 'SELECT AVG(TRY_CAST("revenue" AS DOUBLE)) AS average FROM source',
+        "explanation": "",
+    })
+    agent, source, catalog = agent_with_csv(tmp_path, provider)
+    try:
+        answer = await agent.ask("Покажи среднее значение в столбце revenue", [source.source_id])
+        assert answer.results[0].rows == [[150.0]]
+        assert len(provider.messages) == 1
+    finally:
+        catalog.close()
+
+
+@pytest.mark.parametrize("question", [
+    "Какие поля содержат пропуски?",
+    "Покажи значения в столбце revenue",
+    "Какие колонки имеют дубликаты?",
+    "Опиши распределение данных по категориям",
+    "Расскажи про среднюю выручку в данных",
+    "Что здесь с продажами по регионам?",
+    "Покажи колонки с пустыми строками",
+    "А за какой период заявки со статусом закрыто и сколько их?",
+    "А за какой период данные по closed_at и сколько их?",
+    "Покажи данные из столбцов",
+])
+def test_schema_route_keeps_analysis_questions_for_the_sql_path(question):
+    assert _question_route(question) is None
+
+
+@pytest.mark.asyncio
+async def test_schema_answer_retries_if_source_is_reimported_between_schema_and_source_reads(tmp_path, monkeypatch):
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    sources = SourceService(tmp_path / "data", catalog)
+    source = sources.register_csv("before.csv", b"old_field\n1\n")
+    original_get_schema = sources.get_schema
+    changed = False
+
+    def get_schema_during_reimport(source_id):
+        nonlocal changed
+        schema = original_get_schema(source_id)
+        if not changed:
+            changed = True
+            sources.register_csv("after.csv", b"new_field\n2\n", source_id=source_id)
+        return schema
+
+    monkeypatch.setattr(sources, "get_schema", get_schema_during_reimport)
+    provider = ScriptedProvider()
+    agent = AgentRuntime(provider, build_tool_registry(catalog, sources), sources=sources)
+    try:
+        answer = await agent.ask("Какие есть столбцы?", [source.source_id])
+        latest = catalog.get_source(source.source_id)
+        assert answer.status == "answered"
+        assert "new_field" in answer.answer
+        assert "old_field" not in answer.answer
+        assert answer.tool_results[0].data["snapshot_id"] == latest.snapshot_id
+        assert answer.tool_results[0].data["schema_version"] == latest.schema_version
+        assert provider.messages == []
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
+async def test_overview_never_combines_old_schema_with_new_snapshot_query(tmp_path, monkeypatch):
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    sources = SourceService(tmp_path / "data", catalog)
+    source = sources.register_csv("before.csv", b"created_at,old_field\n2024-01-01,1\n")
+    original_query = sources.query
+    changed = False
+
+    def query_during_reimport(source_id, sql, **kwargs):
+        nonlocal changed
+        if not changed:
+            changed = True
+            sources.register_csv("after.csv", b"created_at,new_field\n2026-02-01,2\n", source_id=source_id)
+        return original_query(source_id, sql, **kwargs)
+
+    monkeypatch.setattr(sources, "query", query_during_reimport)
+    agent = AgentRuntime(ScriptedProvider(), build_tool_registry(catalog, sources), sources=sources)
+    try:
+        answer = await agent.ask("Что есть в этих данных?", [source.source_id])
+        latest = catalog.get_source(source.source_id)
+        assert answer.status == "answered"
+        assert "new_field" in answer.answer
+        assert "old_field" not in answer.answer
+        assert answer.results[0].provenance[0].snapshot_id == latest.snapshot_id
+        assert answer.tool_results[0].data["schema_version"] == latest.schema_version
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
+async def test_overview_retries_if_reimport_replaces_queried_date_column(tmp_path, monkeypatch):
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    sources = SourceService(tmp_path / "data", catalog)
+    source = sources.register_csv("before.csv", b"created_at,old_field\n2024-01-01,1\n")
+    original_query = sources.query
+    changed = False
+
+    def query_during_reimport(source_id, sql, **kwargs):
+        nonlocal changed
+        if not changed:
+            changed = True
+            sources.register_csv("after.csv", b"closed_at,new_field\n2026-02-01,2\n", source_id=source_id)
+        return original_query(source_id, sql, **kwargs)
+
+    monkeypatch.setattr(sources, "query", query_during_reimport)
+    agent = AgentRuntime(ScriptedProvider(), build_tool_registry(catalog, sources), sources=sources)
+    try:
+        answer = await agent.ask("Что есть в этих данных?", [source.source_id])
+        assert answer.status == "answered"
+        assert "closed_at" in answer.answer
+        assert "created_at" not in answer.answer
+        assert "01.02.2026" in answer.answer
+        assert answer.results[0].provenance[0].snapshot_id == catalog.get_source(source.source_id).snapshot_id
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
+async def test_overview_retries_if_schema_version_changes_for_same_snapshot(tmp_path, monkeypatch):
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    sources = SourceService(tmp_path / "data", catalog)
+    source = sources.register_csv("events.csv", b"created_at,value\n2024-01-01,1\n")
+    original_query = sources.query
+    changed = False
+
+    def query_during_schema_refresh(source_id, sql, **kwargs):
+        nonlocal changed
+        if not changed:
+            changed = True
+            refreshed_source = catalog.get_source(source_id)
+            refreshed_schema = catalog.get_schema(source_id)
+            refreshed_source.schema_version += 1
+            refreshed_schema.version += 1
+            catalog.save_schema(refreshed_schema)
+            catalog.upsert_source(refreshed_source)
+        return original_query(source_id, sql, **kwargs)
+
+    monkeypatch.setattr(sources, "query", query_during_schema_refresh)
+    agent = AgentRuntime(ScriptedProvider(), build_tool_registry(catalog, sources), sources=sources)
+    try:
+        answer = await agent.ask("Что есть в этих данных?", [source.source_id])
+        assert answer.status == "answered"
+        assert answer.tool_results[0].data["schema_version"] == 2
+        assert answer.results[0].provenance[0].schema_version == 2
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
+async def test_overview_counts_legacy_schema_without_saved_row_count(tmp_path):
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    sources = SourceService(tmp_path / "data", catalog)
+    source = sources.register_csv("legacy.csv", b"region,amount\nA,10\nB,20\n")
+    schema = sources.get_schema(source.source_id)
+    schema.objects[0].row_count = None
+    catalog.save_schema(schema)
+    provider = ScriptedProvider()
+    agent = AgentRuntime(provider, build_tool_registry(catalog, sources), sources=sources)
+    try:
+        answer = await agent.ask("Что есть в этих данных?", [source.source_id])
+        assert answer.status == "answered"
+        assert "2 строки" in answer.answer
+        assert answer.tool_results[-1].tool_name == "query_data"
+        assert provider.messages == []
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
+async def test_schema_followup_uses_new_selected_source_after_chat_history(tmp_path):
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    sources = SourceService(tmp_path / "data", catalog)
+    first = sources.register_csv("first.csv", b"old_name\n1\n")
+    second = sources.register_csv("second.csv", b"renamed_field\n2\n")
+    provider = ScriptedProvider()
+    agent = AgentRuntime(provider, build_tool_registry(catalog, sources), sources=sources)
+    try:
+        history = [ChatMessage(role="user", content="Какие поля у первого источника?"),
+                   ChatMessage(role="assistant", content="old_name")]
+        answer = await agent.ask("А какие поля здесь?", [second.source_id], history=history)
+        assert answer.status == "answered"
+        assert "renamed_field" in answer.answer
+        assert "old_name" not in answer.answer
+        assert provider.messages == []
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
+async def test_http_chat_answers_four_metadata_followups_without_model_and_persists_facts(tmp_path, monkeypatch):
+    from app import main as module
+
+    provider = ScriptedProvider()
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    sources = SourceService(tmp_path / "data", catalog)
+    agent = AgentRuntime(provider, build_tool_registry(catalog, sources), sources=sources)
+    monkeypatch.setattr(module, "catalog", catalog)
+    monkeypatch.setattr(module, "source_service", sources)
+    monkeypatch.setattr(module, "agent", agent)
+    monkeypatch.setattr(module.settings, "chat_db_path", tmp_path / "chat.db")
+    async with module.app.router.lifespan_context(module.app):
+        async with AsyncClient(transport=ASGITransport(app=module.app), base_url="http://test") as client:
+            upload = await client.post("/sources/csv", files={
+                "file": ("tickets.csv", b"created_at,ticket\n2024-10-01,A\n2024-10-03,B\n", "text/csv"),
+            })
+            source_id = upload.json()["source_id"]
+            chat_id = None
+            for question in (
+                "Какие есть столбцы?",
+                "Что ещё можешь скзаать про эти данные?",
+                "А за какой период они и сколько их?",
+                "А какие поля здесь?",
+            ):
+                path = "/agent/chat" + (f"?chat_id={chat_id}" if chat_id else "")
+                response = await client.post(path, json={"question": question, "source_ids": [source_id]})
+                assert response.status_code == 200
+                data = response.json()
+                assert data["status"] == "answered"
+                assert data["answer_kind"] == "computed"
+                assert data["timing"]["calls"] == []
+                chat_id = data["chat_id"]
+            assert provider.messages == []
+            history = (await client.get(f"/chats/{chat_id}")).json()
+            assert history["source_id"] == source_id
+            assert len(history["messages"]) == 8
+            assert all(message["analysis_payload"] for message in history["messages"] if message["role"] == "assistant")
 
 
 @pytest.mark.asyncio

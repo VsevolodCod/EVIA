@@ -1,6 +1,7 @@
 """A bounded text-to-SQL path for one selected CSV snapshot."""
 
 import json
+import re
 from datetime import datetime
 from time import perf_counter
 
@@ -116,12 +117,51 @@ def _normalize_numeric_casts(sql: str, field_types: dict[str, str]) -> str:
         raise SafeQueryError("QUERY_REJECTED") from None
 
 
-def _is_general_overview(question: str) -> bool:
-    words = question.casefold()
-    return (
-        any(phrase in words for phrase in ("что есть", "какие данные", "обзор данных", "о чём данные", "о чем данные"))
-        and any(phrase in words for phrase in ("данн", "источник"))
+def _question_route(question: str) -> str | None:
+    """Route explicit metadata questions without asking a SQL model to invent a plan."""
+    words = re.findall(r"[^\W_]+", question.casefold().replace("ё", "е"))
+    while words and words[0] in {"а", "ну"}:
+        words.pop(0)
+    phrase = " ".join(words)
+    names_field = any(
+        word.startswith(("столбц", "колонк", "структур", "схем"))
+        or re.fullmatch(r"пол(?:е|я|ей|ях|ем|ями)", word)
+        for word in words
     )
+    schema_words = {
+        "а", "какие", "какова", "каковы", "есть", "перечисли", "назови", "покажи",
+        "список", "в", "у", "из", "этой", "этого", "этом", "здесь",
+        "csv", "таблицы", "таблице", "источника", "источнике", "данных", "файла",
+        "поля", "поле", "полей", "столбцы", "столбцов", "колонки", "колонок",
+        "структура", "структуру", "схема", "схему",
+    }
+    asks_listing = any(word in words[:3] for word in ("какие", "какова", "каковы", "перечисли", "назови", "покажи", "список"))
+    if names_field and all(word in schema_words or word.startswith(("содерж", "име", "доступ")) for word in words) and (
+        asks_listing or words[:1] in (["структура"], ["схема"])
+    ):
+        return "schema"
+
+    names_dataset = any(word.startswith(("данн", "источник", "файл", "датасет", "таблиц")) for word in words)
+    overview_words = {
+        "что", "есть", "в", "этих", "эти", "это", "за", "какой", "период",
+        "они", "и", "сколько", "их", "еще", "можешь", "сказать", "скзаать",
+        "про", "передо", "мной", "здесь", "данные", "данных", "данными",
+        "источник", "источнике", "источника", "файл", "файле", "файла",
+        "датасет", "датасете", "таблица", "таблице", "таблицы", "обзор",
+        "о", "чем", "расскажи", "опиши", "содержится", "содержат", "какие",
+    }
+    if not all(word in overview_words for word in words):
+        return None
+    if phrase.startswith(("что передо мной", "что это за", "что здесь")):
+        return "overview"
+    if phrase.startswith("за какой период") and ("сколько" in words or names_dataset or "они" in words):
+        return "overview"
+    if names_dataset and (
+        phrase.startswith(("что есть", "что содерж", "какие данные", "обзор", "о чем данные", "расскажи", "опиши"))
+        or (words[:3] == ["что", "еще", "можешь"])
+    ):
+        return "overview"
+    return None
 
 
 def _russian_count(noun_forms: tuple[str, str, str], count: int) -> str:
@@ -138,8 +178,22 @@ class CSVQueryAgent:
 
     async def ask(self, question: str, source_id: str, timing: AgentTiming, request_id: str,
                   history: list[ChatMessage] | None = None) -> AgentResponse:
-        schema = self.sources.get_schema(source_id)
-        fields = schema.objects[0].fields if schema.objects else []
+        route = _question_route(question)
+        for _ in range(3):
+            schema_started = perf_counter()
+            schema = self.sources.get_schema(source_id)
+            source = self.sources.catalog.get_source(source_id) if route is not None else None
+            timing.tools_ms += (perf_counter() - schema_started) * 1000
+            if route is not None and (source is None or source.schema_version != schema.version):
+                continue
+            fields = schema.objects[0].fields if schema.objects else []
+            if route is None:
+                break
+            response = self._metadata_answer(route, source_id, source, schema, fields, timing, request_id)
+            if not (response.error and response.error.code == "INTERNAL_ERROR"):
+                return response
+        else:
+            return self._error(request_id, timing, 0, [], "INTERNAL_ERROR", None)
         field_types = {field.name: field.inferred_type for field in fields}
         columns = ", ".join(f'"{field.name}" ({field.inferred_type})' for field in fields)
         system = (
@@ -200,38 +254,6 @@ class CSVQueryAgent:
                 return self._error(request_id, timing, attempt + 1, trace, "VALIDATION_ERROR", last_plan)
             last_plan = plan
             if plan.intent == "clarification":
-                if _is_general_overview(question):
-                    date_field = next((field.name for field in fields if field.inferred_type in {"date", "datetime"}), None)
-                    sql = "SELECT COUNT(*) AS row_count"
-                    if date_field:
-                        quoted = '"' + date_field.replace('"', '""') + '"'
-                        sql += (f", MIN(TRY_CAST({quoted} AS TIMESTAMP)) AS period_start, "
-                                f"MAX(TRY_CAST({quoted} AS TIMESTAMP)) AS period_end")
-                    sql += " FROM source"
-                    query_started = perf_counter()
-                    try:
-                        result = self.sources.query(source_id, sql, row_limit=1)
-                    except SafeQueryError as exc:
-                        timing.tools_ms += (perf_counter() - query_started) * 1000
-                        trace.append(ToolResult(tool_name="query_data", ok=False, error=exc.code))
-                        return self._error(request_id, timing, attempt + 1, trace, exc.code, plan)
-                    timing.tools_ms += (perf_counter() - query_started) * 1000
-                    trace.append(ToolResult(tool_name="query_data", ok=True, data=result))
-                    row = result.rows[0]
-                    answer = (
-                        f"В источнике {_russian_count(('строка', 'строки', 'строк'), int(row[0]))} "
-                        f"и {_russian_count(('столбец', 'столбца', 'столбцов'), len(fields))}."
-                    )
-                    if date_field and row[1] and row[2]:
-                        start = datetime.fromisoformat(str(row[1]))
-                        end = datetime.fromisoformat(str(row[2]))
-                        answer += f"\nПериод по полю «{date_field}»: {start:%d.%m.%Y} — {end:%d.%m.%Y}."
-                    return AgentResponse(
-                        request_id=request_id, status="answered", answer=answer,
-                        steps=attempt + 1,
-                        analysis=AnalysisPlan(intent="dataset_overview", sql=sql, explanation=answer),
-                        results=[result], tool_results=trace, timing=timing,
-                    )
                 return AgentResponse(
                     request_id=request_id, status="clarification",
                     answer="В выбранном источнике нет подходящих полей для этого вопроса. Уточните, какие данные нужно проанализировать.",
@@ -288,6 +310,77 @@ class CSVQueryAgent:
                 results=[result], tool_results=trace, timing=timing,
             )
         return self._error(request_id, timing, 2, trace, "VALIDATION_ERROR", last_plan)
+
+    def _metadata_answer(self, route, source_id, source, schema, fields, timing, request_id) -> AgentResponse:
+        row_count = schema.objects[0].row_count if schema.objects else None
+        field_names = ", ".join(f"«{field.name}» ({field.inferred_type})" for field in fields)
+        trace = [ToolResult(tool_name="get_schema", ok=True, data={
+            "source_id": source_id,
+            "snapshot_id": source.snapshot_id if source else None,
+            "schema_version": schema.version,
+            "row_count": row_count,
+            "fields": [field.model_dump(mode="json") for field in fields],
+        })]
+        if route == "schema":
+            answer = f"Поля источника: {field_names}." if fields else "В источнике нет столбцов."
+            if row_count == 0:
+                answer += " CSV содержит только заголовок: 0 строк данных."
+            return AgentResponse(
+                request_id=request_id, status="answered", answer=answer, steps=0,
+                analysis=AnalysisPlan(intent="source_schema", sql=None, explanation=answer),
+                tool_results=trace, timing=timing,
+            )
+
+        date_field = next((field.name for field in fields if field.inferred_type in {"date", "datetime"}), None)
+        results = []
+        sql = None
+        period = None
+        if row_count is None or (date_field and row_count):
+            sql = "SELECT COUNT(*) AS row_count"
+            if date_field:
+                quoted = '"' + date_field.replace('"', '""') + '"'
+                sql += (f", MIN(TRY_CAST({quoted} AS TIMESTAMP)) AS period_start, "
+                        f"MAX(TRY_CAST({quoted} AS TIMESTAMP)) AS period_end")
+            sql += " FROM source"
+            query_started = perf_counter()
+            try:
+                result = self.sources.query(source_id, sql, row_limit=1)
+            except SafeQueryError as exc:
+                timing.tools_ms += (perf_counter() - query_started) * 1000
+                current_source = self.sources.catalog.get_source(source_id)
+                if current_source and (
+                    current_source.snapshot_id != source.snapshot_id
+                    or current_source.schema_version != source.schema_version
+                ):
+                    trace.append(ToolResult(tool_name="query_data", ok=False, error="INTERNAL_ERROR"))
+                    return self._error(request_id, timing, 0, trace, "INTERNAL_ERROR", None)
+                trace.append(ToolResult(tool_name="query_data", ok=False, error=exc.code))
+                return self._error(request_id, timing, 0, trace, exc.code, None)
+            timing.tools_ms += (perf_counter() - query_started) * 1000
+            if not result.provenance or (
+                result.provenance[0].snapshot_id != (source.snapshot_id or "legacy")
+                or result.provenance[0].schema_version != source.schema_version
+            ):
+                trace.append(ToolResult(tool_name="query_data", ok=False, error="INTERNAL_ERROR"))
+                return self._error(request_id, timing, 0, trace, "INTERNAL_ERROR", None)
+            trace.append(ToolResult(tool_name="query_data", ok=True, data=result))
+            results.append(result)
+            row = result.rows[0]
+            row_count = int(row[0])
+            if date_field and row[1] and row[2]:
+                start = datetime.fromisoformat(str(row[1]))
+                end = datetime.fromisoformat(str(row[2]))
+                period = f"\nПериод по распознанным датам поля «{date_field}»: {start:%d.%m.%Y} — {end:%d.%m.%Y}."
+        answer = f"В источнике {_russian_count(('строка', 'строки', 'строк'), row_count)} и {_russian_count(('столбец', 'столбца', 'столбцов'), len(fields))}."
+        if fields:
+            answer += f"\nПоля: {field_names}."
+        if period:
+            answer += period
+        return AgentResponse(
+            request_id=request_id, status="answered", answer=answer, steps=0,
+            analysis=AnalysisPlan(intent="dataset_overview", sql=sql, explanation=answer),
+            results=results, tool_results=trace, timing=timing,
+        )
 
     @staticmethod
     def _error(request_id, timing, steps, trace, code, plan):
