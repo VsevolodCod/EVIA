@@ -155,7 +155,7 @@ const answerSchema = z.object({
   answer: z.string(),
   request_id: z.string().optional(),
   status: z.enum(["answered", "clarification", "error"]).optional(),
-  outcome: z.enum(["answer", "clarification", "unsupported", "error"]).optional(),
+  outcome: z.enum(["answer", "clarification", "unsupported", "error"]).nullable().optional(),
   clarification: z.object({
     original_question: z.string(),
     reason: z.string(),
