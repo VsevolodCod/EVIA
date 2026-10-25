@@ -116,7 +116,7 @@ def _cell_matches(actual: Any, expected: Any, tolerance: Decimal) -> bool:
     return actual == expected
 
 
-def _rows_match(actual: list[list[Any]], expected: list[list[Any]], tolerance: Decimal) -> bool:
+def rows_match(actual: list[list[Any]], expected: list[list[Any]], tolerance: Decimal) -> bool:
     if len(actual) != len(expected):
         return False
     return all(
@@ -148,7 +148,7 @@ def verify_corpus(root: Path, *, data_dir: Path) -> EvaluationReport:
                 actual_columns = [column.name for column in result.columns]
                 if actual_columns != case.expected_columns:
                     raise ValueError(f"columns differ: {actual_columns!r}")
-                if not _rows_match(result.rows, case.expected_rows, tolerance):
+                if not rows_match(result.rows, case.expected_rows, tolerance):
                     raise ValueError(f"rows differ: {result.rows!r}")
             except Exception as exc:
                 report.failed.append(EvaluationFailure(case.case_id, str(exc)))
