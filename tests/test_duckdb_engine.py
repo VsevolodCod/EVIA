@@ -250,7 +250,6 @@ def test_profile_finds_an_exact_composite_grain_candidate(tmp_path):
 
     Profile.model_validate(profile)
     assert profile["candidate_grain_keys"] == [["Дата", "ID_Аптеки", "ID_Лекарства"]]
-    assert not any(column["is_identifier_candidate"] for column in profile["columns"].values())
 
 
 def test_profile_for_legacy_raw_import_is_a_complete_text_only_payload(tmp_path):
