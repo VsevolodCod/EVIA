@@ -133,7 +133,7 @@ def _question_route(question: str) -> str | None:
         "список", "в", "у", "из", "этой", "этого", "этом", "здесь",
         "csv", "таблицы", "таблице", "источника", "источнике", "данных", "файла",
         "поля", "поле", "полей", "столбцы", "столбцов", "колонки", "колонок",
-        "структура", "структуру", "схема", "схему", "данные",
+        "структура", "структуру", "схема", "схему",
     }
     asks_listing = any(word in words[:3] for word in ("какие", "какова", "каковы", "перечисли", "назови", "покажи", "список"))
     if names_field and all(word in schema_words for word in words) and (asks_listing or words[:1] in (["структура"], ["схема"])):
@@ -345,10 +345,20 @@ class CSVQueryAgent:
                 result = self.sources.query(source_id, sql, row_limit=1)
             except SafeQueryError as exc:
                 timing.tools_ms += (perf_counter() - query_started) * 1000
+                current_source = self.sources.catalog.get_source(source_id)
+                if current_source and (
+                    current_source.snapshot_id != source.snapshot_id
+                    or current_source.schema_version != source.schema_version
+                ):
+                    trace.append(ToolResult(tool_name="query_data", ok=False, error="INTERNAL_ERROR"))
+                    return self._error(request_id, timing, 0, trace, "INTERNAL_ERROR", None)
                 trace.append(ToolResult(tool_name="query_data", ok=False, error=exc.code))
                 return self._error(request_id, timing, 0, trace, exc.code, None)
             timing.tools_ms += (perf_counter() - query_started) * 1000
-            if not result.provenance or result.provenance[0].snapshot_id != (source.snapshot_id or "legacy"):
+            if not result.provenance or (
+                result.provenance[0].snapshot_id != (source.snapshot_id or "legacy")
+                or result.provenance[0].schema_version != source.schema_version
+            ):
                 trace.append(ToolResult(tool_name="query_data", ok=False, error="INTERNAL_ERROR"))
                 return self._error(request_id, timing, 0, trace, "INTERNAL_ERROR", None)
             trace.append(ToolResult(tool_name="query_data", ok=True, data=result))

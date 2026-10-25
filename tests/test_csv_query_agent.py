@@ -390,6 +390,7 @@ async def test_schema_route_does_not_steal_a_calculation_about_one_column(tmp_pa
     "Покажи колонки с пустыми строками",
     "А за какой период заявки со статусом закрыто и сколько их?",
     "А за какой период данные по closed_at и сколько их?",
+    "Покажи данные из столбцов",
 ])
 def test_schema_route_keeps_analysis_questions_for_the_sql_path(question):
     assert _question_route(question) is None
@@ -452,6 +453,65 @@ async def test_overview_never_combines_old_schema_with_new_snapshot_query(tmp_pa
         assert "old_field" not in answer.answer
         assert answer.results[0].provenance[0].snapshot_id == latest.snapshot_id
         assert answer.tool_results[0].data["schema_version"] == latest.schema_version
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
+async def test_overview_retries_if_reimport_replaces_queried_date_column(tmp_path, monkeypatch):
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    sources = SourceService(tmp_path / "data", catalog)
+    source = sources.register_csv("before.csv", b"created_at,old_field\n2024-01-01,1\n")
+    original_query = sources.query
+    changed = False
+
+    def query_during_reimport(source_id, sql, **kwargs):
+        nonlocal changed
+        if not changed:
+            changed = True
+            sources.register_csv("after.csv", b"closed_at,new_field\n2026-02-01,2\n", source_id=source_id)
+        return original_query(source_id, sql, **kwargs)
+
+    monkeypatch.setattr(sources, "query", query_during_reimport)
+    agent = AgentRuntime(ScriptedProvider(), build_tool_registry(catalog, sources), sources=sources)
+    try:
+        answer = await agent.ask("Что есть в этих данных?", [source.source_id])
+        assert answer.status == "answered"
+        assert "closed_at" in answer.answer
+        assert "created_at" not in answer.answer
+        assert "01.02.2026" in answer.answer
+        assert answer.results[0].provenance[0].snapshot_id == catalog.get_source(source.source_id).snapshot_id
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
+async def test_overview_retries_if_schema_version_changes_for_same_snapshot(tmp_path, monkeypatch):
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    sources = SourceService(tmp_path / "data", catalog)
+    source = sources.register_csv("events.csv", b"created_at,value\n2024-01-01,1\n")
+    original_query = sources.query
+    changed = False
+
+    def query_during_schema_refresh(source_id, sql, **kwargs):
+        nonlocal changed
+        if not changed:
+            changed = True
+            refreshed_source = catalog.get_source(source_id)
+            refreshed_schema = catalog.get_schema(source_id)
+            refreshed_source.schema_version += 1
+            refreshed_schema.version += 1
+            catalog.save_schema(refreshed_schema)
+            catalog.upsert_source(refreshed_source)
+        return original_query(source_id, sql, **kwargs)
+
+    monkeypatch.setattr(sources, "query", query_during_schema_refresh)
+    agent = AgentRuntime(ScriptedProvider(), build_tool_registry(catalog, sources), sources=sources)
+    try:
+        answer = await agent.ask("Что есть в этих данных?", [source.source_id])
+        assert answer.status == "answered"
+        assert answer.tool_results[0].data["schema_version"] == 2
+        assert answer.results[0].provenance[0].schema_version == 2
     finally:
         catalog.close()
 
