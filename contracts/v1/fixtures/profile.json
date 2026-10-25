@@ -1,6 +1,7 @@
 {
   "contract": "Profile",
   "data": {
+    "candidate_grain_keys": [],
     "columns": {
       "id": {
         "distinct_count": 2,

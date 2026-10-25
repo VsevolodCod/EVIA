@@ -88,6 +88,7 @@ const fullProfileSchema = z.object({
   snapshot_id: z.string().min(1),
   note: z.string(),
   snapshot: datasetSnapshotSchema.nullable().optional(),
+  candidate_grain_keys: z.array(z.array(z.string().min(1)).min(1).max(3)).optional(),
   columns: z.record(
     z.string(),
     sampleColumnProfileSchema.extend({
@@ -121,6 +122,17 @@ const fullProfileSchema = z.object({
   }
   if (profile.snapshot && profile.snapshot.snapshot_id !== profile.snapshot_id) {
     context.addIssue({ code: "custom", path: ["snapshot_id"], message: "profile snapshot does not match attached snapshot" });
+  }
+  for (const [index, candidate] of (profile.candidate_grain_keys ?? []).entries()) {
+    if (new Set(candidate).size !== candidate.length) {
+      context.addIssue({ code: "custom", path: ["candidate_grain_keys", index], message: "candidate grain fields must be distinct" });
+    }
+    for (const field of candidate) {
+      const column = profile.columns[field];
+      if (!column || column.non_null_count !== profile.processed_rows || column.empty_count !== 0) {
+        context.addIssue({ code: "custom", path: ["candidate_grain_keys", index], message: "candidate grain fields must be complete profiled fields" });
+      }
+    }
   }
   for (const [name, column] of Object.entries(profile.columns)) {
     if (column.sample_non_null_count + column.sample_null_count !== profile.sample_size || column.distinct_sample_values > column.sample_non_null_count || column.top_values.reduce((total, value) => total + value.count, 0) > column.sample_non_null_count) {

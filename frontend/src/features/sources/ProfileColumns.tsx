@@ -12,10 +12,12 @@ import {
 export function ProfileColumns({
   fields,
   sampleSize,
+  candidateGrainKeys = [],
   initialSearch = "",
 }: {
   fields: ProfileField[];
   sampleSize: number;
+  candidateGrainKeys?: string[][];
   initialSearch?: string;
 }) {
   const [search, setSearch] = useState(initialSearch);
@@ -63,6 +65,15 @@ export function ProfileColumns({
         Точные показатели доступны для полных профилей; частые значения всегда
         строятся по выборке. Нажмите на столбец, чтобы раскрыть детали.
       </p>
+      {candidateGrainKeys.length > 0 && (
+        <aside className="profile-grain-candidates" aria-label="Гипотезы о ключе строк">
+          <h3>Гипотезы о ключе строк</h3>
+          <ul>
+            {candidateGrainKeys.map((fields) => <li key={fields.join("\u0000")}>{fields.join(" + ")}</li>)}
+          </ul>
+          <p>Комбинация уникальна в текущем снимке и требует проверки бизнес-смысла.</p>
+        </aside>
+      )}
       {!filtered.length && (
         <div className="analytics-empty">
           <h3>Столбцы не найдены</h3>

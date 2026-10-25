@@ -167,6 +167,20 @@
       "additionalProperties": false,
       "description": "Profile with exact statistics for an immutable CSV snapshot.",
       "properties": {
+        "candidate_grain_keys": {
+          "items": {
+            "items": {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 3,
+            "minItems": 1,
+            "type": "array"
+          },
+          "title": "Candidate Grain Keys",
+          "type": "array"
+        },
         "columns": {
           "additionalProperties": {
             "$ref": "#/$defs/ColumnProfile"

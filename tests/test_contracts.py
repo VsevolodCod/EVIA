@@ -87,6 +87,31 @@ def test_profile_distinguishes_exact_snapshot_statistics_from_sample_top_values(
     assert profile.columns['created_at'].temporal.maximum == '2026-01-12T00:00:00Z'
 
 
+def test_full_profile_accepts_candidate_grain_keys_but_not_confirmed_keys():
+    data = full_profile_data()
+    data['candidate_grain_keys'] = [['created_at']]
+
+    profile = Profile.model_validate(data).root
+
+    assert profile.candidate_grain_keys == [['created_at']]
+
+
+def test_full_profile_rejects_invalid_candidate_grain_key():
+    data = full_profile_data()
+    data['candidate_grain_keys'] = [['created_at', 'created_at']]
+
+    with pytest.raises(ValidationError):
+        Profile.model_validate(data)
+
+
+def test_full_profile_rejects_non_unique_single_field_grain_candidate():
+    data = full_profile_data()
+    data['candidate_grain_keys'] = [['amount']]
+
+    with pytest.raises(ValidationError):
+        Profile.model_validate(data)
+
+
 @pytest.mark.parametrize('path', [
     ('processed_rows',),
     ('snapshot_id',),

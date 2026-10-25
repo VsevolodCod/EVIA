@@ -10,6 +10,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from decimal import Decimal, localcontext
 from hashlib import sha256
+from itertools import combinations
 from pathlib import Path
 import re
 from typing import Any
@@ -20,6 +21,10 @@ import duckdb
 from app.csv_import import null_marker
 from app.duckdb_access import DUCKDB_ACCESS_LOCK
 from app.models import DataSource
+
+
+_GRAIN_NAME = re.compile(r"(^|[_\s-])(id|code|identifier|date|time|дата|время|код|идентификатор)([_\s-]|$)", re.IGNORECASE)
+_MAX_GRAIN_COLUMNS = 3
 
 
 class DuckDBDataEngine:
@@ -203,6 +208,55 @@ class DuckDBDataEngine:
                     total += Decimal(str(value))
             return +total
 
+    def _candidate_grain_keys(
+        self,
+        connection,
+        raw_table: str,
+        raw_columns: list[str],
+        columns: dict[str, dict[str, Any]],
+        processed_rows: int,
+    ) -> list[list[str]]:
+        """Return bounded, exact key hypotheses for one immutable snapshot.
+
+        A returned key is unique across every row in the snapshot.  It remains
+        an implementation-level hypothesis: only a data owner can confirm its
+        business meaning.  Composite search is deliberately bounded so profile
+        generation cannot turn a wide source into an unbounded query fan-out.
+        """
+        if not processed_rows:
+            return []
+        complete_fields = [
+            name for name in raw_columns
+            if columns[name]["non_null_count"] == processed_rows
+            and columns[name]["empty_count"] == 0
+        ]
+        single_keys = [
+            [name] for name in complete_fields
+            if _GRAIN_NAME.search(name)
+            and columns[name]["distinct_count"] == processed_rows
+        ]
+        if single_keys:
+            return single_keys
+
+        # Composite grain hypotheses only use fields with an ID/code/date-like
+        # name.  This keeps a unique measurement from masquerading as part of
+        # a key and bounds the full-snapshot query cost to four scans.
+        eligible = [
+            name for name in complete_fields
+            if _GRAIN_NAME.search(name) and columns[name]["distinct_count"] > 1
+        ]
+        eligible = eligible[:_MAX_GRAIN_COLUMNS]
+        for width in (3, 2):
+            for fields in combinations(eligible, width):
+                quoted = [self._quote_identifier(field) for field in fields]
+                projection = ", ".join(quoted)
+                distinct_rows = int(connection.execute(
+                    f"SELECT COUNT(*) FROM (SELECT {projection} FROM {raw_table} GROUP BY {projection}) AS grain_values"
+                ).fetchone()[0])
+                if distinct_rows == processed_rows:
+                    return [list(fields)]
+        return []
+
     def profile(self, source: DataSource, sample_size: int = 500) -> dict[str, Any]:
         if sample_size < 1:
             raise ValueError("sample_size must be positive")
@@ -316,6 +370,9 @@ class DuckDBDataEngine:
                         "maximum": maximum.isoformat() if count else "",
                     }
                 columns[name] = column
+            candidate_grain_keys = self._candidate_grain_keys(
+                connection, raw_table, raw_columns, columns, processed_rows,
+            )
         return {
             "sample_size": len(sample_rows),
             "sample_limit": sample_size,
@@ -323,7 +380,8 @@ class DuckDBDataEngine:
             "coverage": "full",
             "snapshot_id": source.snapshot_id or "legacy",
             "columns": columns,
-            "note": "Full snapshot statistics; top values use a bounded sample.",
+            "candidate_grain_keys": candidate_grain_keys,
+            "note": "Full snapshot statistics; top values use a bounded sample. Candidate grain keys are hypotheses, not confirmed business keys.",
         }
 
     def columns(self, source: DataSource) -> list[str]:
