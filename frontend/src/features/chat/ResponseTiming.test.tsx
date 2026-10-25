@@ -28,9 +28,10 @@ it("separates browser duration from server metrics and hides unavailable metrics
   expect(screen.queryByText("Подробности времени")).not.toBeInTheDocument();
   rerender(<ResponseTiming entry={{ ...entry, answer: { answer: "ok", steps: 1, tool_results: [], timing: {
     elapsed_ms: 12000, llm_ms: 11000, tools_ms: 500,
-    calls: [{ elapsed_ms: 11000, load_ms: null, generation_ms: 1000, generated_tokens: 20 }],
+    calls: [{ elapsed_ms: 11000, provider_total_ms: 9500, load_ms: null, generation_ms: 1000, generated_tokens: 20 }],
   } } }} />);
   expect(screen.getByText(/На сервере: 12,0 с/)).toBeInTheDocument();
   expect(screen.getByText(/20 токенов\/с/)).toBeInTheDocument();
+  expect(screen.getByText(/По таймеру провайдера: 9,5 с/)).toBeInTheDocument();
   expect(screen.queryByText(/Загрузка модели/)).not.toBeInTheDocument();
 });

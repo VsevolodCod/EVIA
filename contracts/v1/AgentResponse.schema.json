@@ -186,6 +186,19 @@
           ],
           "default": null,
           "title": "Prompt Tokens"
+        },
+        "provider_total_ms": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Provider Total Ms"
         }
       },
       "title": "ModelTiming",

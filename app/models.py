@@ -103,6 +103,7 @@ class LLMMessage(BaseModel):
 
 class ModelTiming(BaseModel):
     elapsed_ms: float = Field(default=0, ge=0)
+    provider_total_ms: float | None = Field(default=None, ge=0)
     model: str | None = None
     load_ms: float | None = Field(default=None, ge=0)
     prompt_ms: float | None = Field(default=None, ge=0)

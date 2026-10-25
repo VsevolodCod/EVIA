@@ -206,6 +206,10 @@ class SafeQueryExecutor:
         if any(type(node).__name__.upper() in _BLOCKED_NODE_NAMES for node in statement.walk()):
             raise SafeQueryError("QUERY_REJECTED")
         for function in statement.find_all(exp.Func):
+            # sqlglot models boolean operators as Func subclasses; they are not
+            # extension functions. Their children still undergo all checks.
+            if isinstance(function, (exp.And, exp.Or)):
+                continue
             if function.sql_name().upper() not in _SAFE_FUNCTIONS:
                 raise SafeQueryError("QUERY_REJECTED")
 
