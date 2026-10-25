@@ -170,6 +170,11 @@ const answerSchema = z.object({
     }),
   ),
 });
+const analysisPayloadSchema = z.object({
+  version: z.number().int().positive(),
+  // Keep a future payload opaque. It must not make the complete chat unreadable.
+  response: z.unknown(),
+});
 const healthSchema = z.object({ status: z.string(), llm_provider: z.string() });
 const postgresStatusSchema = z.object({
   configured: z.boolean(),
@@ -179,6 +184,7 @@ const rowsSchema = z.array(z.record(z.string(), z.unknown()));
 const chatSummarySchema = z.object({
   chat_id: z.string().min(1),
   title: z.string(),
+  source_id: z.string().min(1).nullable().optional(),
   created_at: z.string(),
   updated_at: z.string(),
 });
@@ -186,12 +192,14 @@ const chatMessageSchema = z.object({
   message_id: z.string().min(1),
   role: z.enum(["user", "assistant", "system", "tool"]),
   content: z.string(),
+  analysis_payload: analysisPayloadSchema.nullable().optional(),
   created_at: z.string(),
   response: answerSchema.nullable().optional(),
 });
 const chatHistorySchema = z.object({
   chat_id: z.string().min(1),
   title: z.string(),
+  source_id: z.string().min(1).nullable().optional(),
   messages: z.array(chatMessageSchema),
   total_messages: z.number().int().nonnegative(),
   next_offset: z.number().int().nonnegative().nullable(),
@@ -208,8 +216,25 @@ export type PostgresStatus = z.infer<typeof postgresStatusSchema>;
 export type ChatSummary = z.infer<typeof chatSummarySchema>;
 export type ChatHistory = z.infer<typeof chatHistorySchema>;
 export type ChatMessage = z.infer<typeof chatMessageSchema>;
+export type StoredAnalysis =
+  | { kind: "restored"; answer: Answer }
+  | { kind: "legacy" | "unsupported" | "invalid" };
 export type ToolResult = Answer["tool_results"][number];
 export type Row = Record<string, unknown>;
+
+export function storedAnalysis(message: ChatMessage): StoredAnalysis {
+  const payload = message.analysis_payload;
+  if (!payload) {
+    if (!message.response) return { kind: "legacy" };
+    const legacy = answerSchema.safeParse(message.response);
+    return legacy.success ? { kind: "restored", answer: legacy.data } : { kind: "invalid" };
+  }
+  if (payload.version !== 1) return { kind: "unsupported" };
+  const response = answerSchema.safeParse(payload.response);
+  return response.success
+    ? { kind: "restored", answer: response.data }
+    : { kind: "invalid" };
+}
 
 // Keep chat creation alive to retain its ID, but stop the user's wait promptly.
 export function waitForChat(chat: Promise<string>, signal: AbortSignal): Promise<string> {

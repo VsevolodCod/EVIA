@@ -15,7 +15,9 @@ async def test_workspace_csv_to_agent_contract(tmp_path, monkeypatch):
     monkeypatch.setenv('BI_DATA_DIR', str(tmp_path / 'data'))
     monkeypatch.setenv('CATALOG_DB_PATH', str(tmp_path / 'catalog.sqlite3'))
     monkeypatch.setenv('CHAT_DB_PATH', str(tmp_path / 'chats.sqlite3'))
-    module = importlib.import_module('app.main')
+    # app.main owns configuration at import time; reload so this test never sees
+    # a catalog left by an earlier HTTP test in the same pytest process.
+    module = importlib.reload(importlib.import_module('app.main'))
     route = next(route for route in module.app.routes if route.path == '/sources/{source_id}/profile')
     assert route.response_model is Profile
     async with module.app.router.lifespan_context(module.app), AsyncClient(
@@ -62,7 +64,7 @@ async def test_profile_api_validates_sampled_postgresql_profiles_and_maps_source
     monkeypatch.setenv('BI_DATA_DIR', str(tmp_path / 'data'))
     monkeypatch.setenv('CATALOG_DB_PATH', str(tmp_path / 'catalog.sqlite3'))
     monkeypatch.setenv('CHAT_DB_PATH', str(tmp_path / 'chats.sqlite3'))
-    module = importlib.import_module('app.main')
+    module = importlib.reload(importlib.import_module('app.main'))
     sampled_profile = {
         'sample_size': 2,
         'sample_limit': 100,

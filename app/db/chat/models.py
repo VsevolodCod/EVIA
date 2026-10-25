@@ -23,6 +23,8 @@ class ChatORM(ChatBase):
     __tablename__ = "chats"
 
     chat_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    # No foreign key: archived analyses remain readable after source removal.
+    source_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
     title: Mapped[str] = mapped_column(
         String(200),
         nullable=False,
@@ -82,6 +84,7 @@ class ChatMessageORM(ChatBase):
         nullable=True,
     )
     response: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    analysis_payload: Mapped[dict | None] = mapped_column(JSON(none_as_null=True), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

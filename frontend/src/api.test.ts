@@ -1,4 +1,4 @@
-import { api, waitForChat } from "./api";
+import { api, storedAnalysis, waitForChat, type ChatMessage } from "./api";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 const source = {
@@ -19,6 +19,14 @@ it("continues the requested chat and rejects a response from another chat", asyn
     body: JSON.stringify({ question: "next", source_ids: ["source-A"] }),
   }));
   await expect(api.chat("next", "source-A", "chat-A")).rejects.toThrow("другого диалога");
+});
+
+it("keeps a future stored-analysis envelope readable without inventing results", () => {
+  const message: ChatMessage = {
+    message_id: "old-answer", role: "assistant", content: "Старый ответ", created_at: "2026-10-25T10:00:00Z",
+    analysis_payload: { version: 2, response: { unexpected: true } },
+  };
+  expect(storedAnalysis(message)).toEqual({ kind: "unsupported" });
 });
 
 it("cancels waiting for creation without losing the reusable chat ID", async () => {

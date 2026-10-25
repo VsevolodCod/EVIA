@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from typing import Any, Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, JsonValue
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
@@ -146,16 +146,26 @@ class AskResponse(BaseModel):
     timing: AgentTiming | None = None
 
 
+class AnalysisPayload(BaseModel):
+    """Versioned JSON snapshot; AgentResponse is validated at the route boundary."""
+
+    # Readers keep future envelopes opaque so archived text stays accessible.
+    version: int = Field(default=1, ge=1)
+    response: dict[str, JsonValue]
+
+
 class ChatMessage(LLMMessage):
     message_id: str = Field(default_factory=lambda: str(uuid4()))
     created_at: datetime = Field(default_factory=utc_now)
-    response: dict[str, Any] | None = None
+    analysis_payload: AnalysisPayload | None = None
+    response: dict[str, Any] | None = None  # Legacy dashboard snapshots.
 
 
 class Chat(BaseModel):
     chat_id: str = Field(default_factory=lambda: str(uuid4()))
     title: str = "Новый чат"
     temporary: bool = True
+    source_id: str | None = None
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
     messages: list[ChatMessage] = Field(default_factory=list)
@@ -172,6 +182,7 @@ class ChatCreateRequest(BaseModel):
 class ChatSummary(BaseModel):
     chat_id: str
     title: str
+    source_id: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -179,6 +190,7 @@ class ChatSummary(BaseModel):
 class ChatHistoryResponse(BaseModel):
     chat_id: str
     title: str
+    source_id: str | None = None
     messages: list[ChatMessage]
     total_messages: int
     next_offset: int | None

@@ -13,16 +13,35 @@ class ChatNotFoundError(Exception):
     pass
 
 
+class ChatSourceConflictError(ValueError):
+    pass
+
+
+def bound_source(current: str | None, selected: str | None) -> str:
+    if current is not None:
+        if selected is not None and selected != current:
+            raise ChatSourceConflictError('Chat is bound to a different source; create a new chat')
+        return current
+    if not selected:
+        raise ValueError('Select exactly one source before asking in this chat')
+    return selected
+
+
 def message_from_record(record: ChatMessageORM) -> ChatMessage:
     return ChatMessage(
         message_id=record.message_id, role=record.role, content=record.content,
         name=record.name, tool_call_id=record.tool_call_id, tool_calls=record.tool_calls,
         response=record.response,
+        analysis_payload=record.analysis_payload,
         created_at=record.created_at.replace(tzinfo=timezone.utc) if record.created_at.tzinfo is None else record.created_at)
 
 
 def message_payload(message):
-    return (message.role, message.content, message.name, message.tool_call_id, message.tool_calls, message.response)
+    analysis = message.analysis_payload
+    if analysis is not None and hasattr(analysis, 'model_dump'):
+        analysis = analysis.model_dump(mode='json')
+    return (message.role, message.content, message.name, message.tool_call_id,
+            message.tool_calls, analysis, message.response)
 
 
 class ChatManager:
@@ -51,6 +70,7 @@ class ChatManager:
             messages = (await session.scalars(select(ChatMessageORM).where(
                 ChatMessageORM.chat_id == chat_id).order_by(ChatMessageORM.position))).all()
             return Chat(chat_id=record.chat_id, title=record.title, temporary=False,
+                        source_id=record.source_id,
                         created_at=record.created_at, updated_at=record.updated_at,
                         messages=[message_from_record(message) for message in messages])
 
@@ -73,9 +93,28 @@ class ChatManager:
                 ChatMessageORM.chat_id == chat_id, ChatMessageORM.position >= start,
                 ChatMessageORM.position < end).order_by(ChatMessageORM.position))).all()
             return ChatHistoryResponse(chat_id=record.chat_id, title=record.title,
+                source_id=record.source_id,
                 messages=[message_from_record(message) for message in messages], total_messages=total,
                 next_offset=total - start if start else None, next_before=start if start else None,
                 has_more=start > 0)
+
+    async def bind_source(self, chat_id: str, source_id: str | None, temporary: bool = False) -> str:
+        """Bind once before generation, using a short cross-process writer transaction."""
+        if temporary:
+            chat = self.temporary_chats.get(chat_id)
+            if chat is None:
+                raise ChatNotFoundError(f"Chat '{chat_id}' not found")
+            # No await between checking and assigning the in-memory binding.
+            chat.source_id = bound_source(chat.source_id, source_id)
+            return chat.source_id
+        async with self.session_factory() as session:
+            await session.execute(text('BEGIN IMMEDIATE'))
+            record = await session.get(ChatORM, chat_id, options=[lazyload(ChatORM.messages)])
+            if record is None:
+                raise ChatNotFoundError(f"Chat '{chat_id}' not found")
+            record.source_id = bound_source(record.source_id, source_id)
+            await session.commit()
+            return record.source_id
 
     async def create_persistent_chat(self, chat: Chat) -> None:
         if chat.temporary:
@@ -88,6 +127,10 @@ class ChatManager:
             return
         saved = self.temporary_chats.get(chat.chat_id)
         merged = saved.model_copy(deep=True) if saved else chat.model_copy(deep=True, update={'messages': []})
+        if saved and saved.source_id is not None:
+            bound_source(saved.source_id, chat.source_id)
+        elif chat.source_id is not None:
+            merged.source_id = chat.source_id
         known = {message.message_id: message for message in merged.messages}
         for message in chat.messages:
             previous = known.get(message.message_id)
@@ -114,10 +157,15 @@ class ChatManager:
                 raise ValueError(f"Chat '{chat.chat_id}' already exists")
             if record is None:
                 record = ChatORM(chat_id=chat.chat_id, title=chat.title,
+                                 source_id=chat.source_id,
                                  created_at=chat.created_at, updated_at=updated_at)
                 session.add(record)
                 await session.flush()
             else:
+                if record.source_id is not None:
+                    bound_source(record.source_id, chat.source_id)
+                elif chat.source_id is not None:
+                    record.source_id = chat.source_id
                 record.title = chat.title
                 record.updated_at = updated_at
             records = (await session.scalars(select(ChatMessageORM).where(
@@ -132,8 +180,9 @@ class ChatManager:
                     continue
                 new_record = ChatMessageORM(message_id=message.message_id, chat_id=chat.chat_id,
                     position=position, role=message.role, content=message.content, name=message.name,
-                    tool_call_id=message.tool_call_id, tool_calls=message.tool_calls,
-                    response=message.response, created_at=message.created_at)
+                    analysis_payload=message.analysis_payload.model_dump(mode='json') if message.analysis_payload else None,
+                    response=message.response, tool_call_id=message.tool_call_id,
+                    tool_calls=message.tool_calls, created_at=message.created_at)
                 session.add(new_record)
                 known[message.message_id] = new_record
                 position += 1
@@ -158,4 +207,5 @@ class ChatManager:
             records = (await session.scalars(select(ChatORM).options(lazyload(ChatORM.messages))
                 .order_by(ChatORM.updated_at.desc(), ChatORM.chat_id).limit(limit).offset(offset))).all()
             return [{'chat_id': record.chat_id, 'title': record.title,
+                     'source_id': record.source_id,
                      'created_at': record.created_at, 'updated_at': record.updated_at} for record in records]

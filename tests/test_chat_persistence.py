@@ -11,6 +11,19 @@ from app.db.chat.engine import create_chat_database, initialize_chat_database
 from app.models import Chat, ChatMessage
 
 
+@pytest.fixture
+def api_source(tmp_path, monkeypatch):
+    from app import main as module
+    from app.models import DataSource
+    from app.schema_catalog import SchemaCatalog
+
+    catalog = SchemaCatalog(tmp_path / 'selected-source.db')
+    catalog.upsert_source(DataSource(source_id='test-source', name='Test', source_type='csv'))
+    monkeypatch.setattr(module, 'catalog', catalog)
+    yield 'test-source'
+    catalog.close()
+
+
 @pytest_asyncio.fixture
 async def manager(tmp_path):
     engine, sessions = create_chat_database(tmp_path / 'chats.db')
@@ -134,7 +147,7 @@ async def test_temporary_chat_is_detached_and_not_persisted(manager):
 
 
 @pytest.mark.asyncio
-async def test_api_first_and_second_ask_and_failed_model_leave_valid_history(tmp_path, monkeypatch):
+async def test_api_first_and_second_ask_and_failed_model_leave_valid_history(tmp_path, monkeypatch, api_source):
     monkeypatch.setenv('BI_DATA_DIR', str(tmp_path / 'data'))
     monkeypatch.setenv('CATALOG_DB_PATH', str(tmp_path / 'catalog.db'))
     monkeypatch.setenv('CHAT_DB_PATH', str(tmp_path / 'api-chats.db'))
@@ -145,7 +158,7 @@ async def test_api_first_and_second_ask_and_failed_model_leave_valid_history(tmp
     from app.tools import ToolRegistry
     monkeypatch.setattr(module, 'agent', AgentRuntime(MockLLMProvider(), ToolRegistry()))
     async with module.app.router.lifespan_context(module.app), AsyncClient(transport=ASGITransport(app=module.app), base_url='http://test') as client:
-        first = await client.post('/agent/chat', json={'question': 'first'})
+        first = await client.post('/agent/chat', json={'question': 'first', 'source_ids': [api_source]})
         assert first.status_code == 200
         chat_id = first.json()['chat_id']
         second = await client.post('/agent/chat', params={'chat_id': chat_id}, json={'question': 'second'})
@@ -202,7 +215,7 @@ async def test_duplicate_create_is_rejected_without_changing_chat(manager):
 
 
 @pytest.mark.asyncio
-async def test_follow_up_receives_previous_turns_and_new_chat_starts_empty(tmp_path, monkeypatch):
+async def test_follow_up_receives_previous_turns_and_new_chat_starts_empty(tmp_path, monkeypatch, api_source):
     monkeypatch.setenv('BI_DATA_DIR', str(tmp_path / 'data'))
     monkeypatch.setenv('CATALOG_DB_PATH', str(tmp_path / 'catalog.db'))
     monkeypatch.setenv('CHAT_DB_PATH', str(tmp_path / 'api-chats.db'))
@@ -219,14 +232,14 @@ async def test_follow_up_receives_previous_turns_and_new_chat_starts_empty(tmp_p
         first_id = (await client.post('/chats', json={'title': 'First'})).json()['chat_id']
         second_id = (await client.post('/chats', json={'title': 'Second'})).json()['chat_id']
         for chat_id, question in [(first_id, 'remember 73'), (first_id, 'what number?'), (second_id, 'new context')]:
-            response = await client.post('/agent/chat', params={'chat_id': chat_id}, json={'question': question})
+            response = await client.post('/agent/chat', params={'chat_id': chat_id}, json={'question': question, 'source_ids': [api_source]})
             assert response.status_code == 200
             assert response.json()['chat_id'] == chat_id
         assert seen == [[], [('user', 'remember 73'), ('assistant', 'Answer: remember 73')], []]
 
 
 @pytest.mark.asyncio
-async def test_failed_agent_answer_is_not_saved_as_successful_assistant_message(tmp_path, monkeypatch):
+async def test_failed_agent_answer_is_not_saved_as_successful_assistant_message(tmp_path, monkeypatch, api_source):
     monkeypatch.setenv('BI_DATA_DIR', str(tmp_path / 'data'))
     monkeypatch.setenv('CATALOG_DB_PATH', str(tmp_path / 'catalog.db'))
     monkeypatch.setenv('CHAT_DB_PATH', str(tmp_path / 'api-chats.db'))
@@ -245,7 +258,7 @@ async def test_failed_agent_answer_is_not_saved_as_successful_assistant_message(
     monkeypatch.setattr(module, 'agent', FailingAgent())
     async with module.app.router.lifespan_context(module.app), AsyncClient(transport=ASGITransport(app=module.app), base_url='http://test') as client:
         chat_id = (await client.post('/chats', json={'title': 'Test'})).json()['chat_id']
-        answer = await client.post('/agent/chat', params={'chat_id': chat_id}, json={'question': 'Сколько строк?'})
+        answer = await client.post('/agent/chat', params={'chat_id': chat_id}, json={'question': 'Сколько строк?', 'source_ids': [api_source]})
         assert answer.status_code == 200
         assert answer.json()['status'] == 'error'
         history = (await client.get(f'/chats/{chat_id}')).json()
