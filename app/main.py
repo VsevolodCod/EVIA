@@ -13,15 +13,18 @@ from fastapi import (
 )
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
+from sqlalchemy import URL, create_engine
+from sqlalchemy.orm import sessionmaker
 
 from app.agent import AgentRuntime
 from app.contracts.v1 import AgentResponse
 from app.config import PROJECT_ROOT, get_settings
 from app.csv_import import CSVImportError
 from app.data_sources.postgresql_adapter import PostgresSourceError, PostgreSQLAdapter
-from app.db import create_chat_database, initialize_chat_database
+from app.db import create_chat_database, initialize_chat_database, CatalogBase
 from app.llm.factory import create_llm_provider
-from app.models import AnalysisPayload, LLMMessage, AskRequest, AskResponse, ChatMessage, DataSource, CSVVersion, Chat, ChatCreateRequest, ChatSummary, \
+from app.models import AnalysisPayload, LLMMessage, AskRequest, AskResponse, ChatMessage, DataSource, CSVVersion, Chat, \
+    ChatCreateRequest, ChatSummary, \
     ChatHistoryResponse
 from app.schema_catalog import SchemaCatalog
 from app.source_service import SourceService
@@ -31,17 +34,25 @@ from app.chat_manager import ChatManager, ChatNotFoundError, ChatSourceConflictE
 from app.contracts.v1 import Profile
 from app.web import mount_frontend
 
-
 # Логирование и настройки
 setup_logging()
 logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
-
 # Каталог источников и схем.
-# SchemaCatalog самостоятельно создаёт синхронный SQLAlchemy engine.
-catalog = SchemaCatalog(settings.catalog_db_path)
+url = URL.create(
+    "sqlite+pysqlite",
+    database=str(settings.catalog_db_path),
+)
+engine = create_engine(url)
+CatalogBase.metadata.create_all(engine)
+session_factory = sessionmaker(
+    bind=engine,
+    expire_on_commit=False,
+)
+
+catalog = SchemaCatalog(settings.catalog_db_path, session_factory)
 
 postgres_adapter = PostgreSQLAdapter(settings.postgres) if settings.postgres.enabled else None
 
@@ -54,8 +65,8 @@ source_service = SourceService(
 tool_registry = build_tool_registry(
     catalog,
     source_service,
+    session_factory
 )
-
 
 # LLM и агент
 llm_provider = create_llm_provider(settings)
@@ -115,9 +126,9 @@ def health():
 
 @app.post("/sources/csv", response_model=DataSource)
 async def upload_csv(
-    file: UploadFile = File(...),
-    name: str | None = Form(default=None),
-    source_id: str | None = Form(default=None),
+        file: UploadFile = File(...),
+        name: str | None = Form(default=None),
+        source_id: str | None = Form(default=None),
 ):
     try:
         return await run_in_threadpool(
@@ -259,10 +270,10 @@ async def ask_agent(body: AskRequest):
 
 @app.post("/agent/chat", response_model=AgentResponse)
 async def chat_agent(
-    body: AskRequest,
-    http_request: Request,
-    chat_id: str | None = Query(default=None),
-    temporary_chat: bool = Query(default=False),
+        body: AskRequest,
+        http_request: Request,
+        chat_id: str | None = Query(default=None),
+        temporary_chat: bool = Query(default=False),
 ):
     chat_manager: ChatManager = http_request.app.state.chat_manager
 
@@ -295,13 +306,14 @@ async def chat_agent(
         # Если агент завершится ошибкой, вопрос не потеряется.
         await chat_manager.save(chat)
 
+        # logger.info("Go into agent.ask")
         # Передаём агенту предыдущую историю без текущего вопроса:
         # текущий вопрос отдельно передаётся через question.
         answer = await agent.ask(
             question=body.question,
             source_ids=[chat.source_id],
             # Only provider message fields enter the prompt, never saved artifacts.
-            history=[LLMMessage.model_validate(message.model_dump()) for message in chat.messages[:-1]],
+            # history=[LLMMessage.model_validate(message.model_dump()) for message in chat.messages[:-1]],
         )
 
         response_data = answer.model_dump()
@@ -353,9 +365,9 @@ async def chat_agent(
 
 @app.get("/chats", response_model=list[ChatSummary])
 async def list_chats(
-    request: Request,
-    limit: int = Query(default=50, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
+        request: Request,
+        limit: int = Query(default=50, ge=1, le=100),
+        offset: int = Query(default=0, ge=0),
 ):
     chat_manager: ChatManager = request.app.state.chat_manager
 
@@ -367,11 +379,11 @@ async def list_chats(
 
 @app.get("/chats/{chat_id}", response_model=ChatHistoryResponse)
 async def get_chat(
-    chat_id: str,
-    request: Request,
-    limit: int = Query(default=50, ge=1, le=500),
-    offset: int = Query(default=0, ge=0),
-    before: int | None = Query(default=None, ge=0),
+        chat_id: str,
+        request: Request,
+        limit: int = Query(default=50, ge=1, le=500),
+        offset: int = Query(default=0, ge=0),
+        before: int | None = Query(default=None, ge=0),
 ):
     """
     Загружает последние ``limit`` сообщений, заканчивая сообщением номер ``offset`` по айди чата
@@ -404,8 +416,8 @@ async def get_chat(
 
 @app.post("/chats", response_model=ChatSummary, status_code=201)
 async def create_chat(
-    body: ChatCreateRequest,
-    request: Request,
+        body: ChatCreateRequest,
+        request: Request,
 ):
     chat_manager: ChatManager = request.app.state.chat_manager
 
@@ -426,8 +438,8 @@ async def create_chat(
 
 @app.delete("/chats/{chat_id}", status_code=204)
 async def delete_chat(
-    chat_id: str,
-    request: Request,
+        chat_id: str,
+        request: Request,
 ):
     chat_manager: ChatManager = request.app.state.chat_manager
 

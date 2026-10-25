@@ -6,6 +6,10 @@ import httpx
 from app.config import Settings
 from app.llm.base import AsyncModel, LLMProvider
 from app.models import LLMMessage, LLMResponse, ToolCall
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 
 class OpenAIModel(AsyncModel):
@@ -57,6 +61,19 @@ class OpenAIModel(AsyncModel):
                 },
                 json=payload,
             )
+            if response.status_code >= 400:
+                logger.error(
+                    "LLM HTTP error: status=%s, body=%s",
+                    response.status_code,
+                    response.text[:10000],
+                )
+                logger.error(
+                    "LLM request: model=%s, messages=%d, tools=%d, payload_bytes=%d",
+                    payload.get("model"),
+                    len(payload.get("messages", [])),
+                    len(payload.get("tools", [])),
+                    len(response.request.content or b""),
+                )
             response.raise_for_status()
             return response.json()
 

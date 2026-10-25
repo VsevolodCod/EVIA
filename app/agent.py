@@ -2,6 +2,8 @@ import json
 from time import perf_counter
 from uuid import uuid4
 
+import httpx
+
 from app.contracts.v1 import AgentResponse, Error
 from app.csv_query_agent import CSVQueryAgent
 from app.dashboard_query_agent import DashboardQueryAgent, is_dashboard_question
@@ -65,47 +67,151 @@ class AgentRuntime:
             source_ids: list[str] | None = None,
             history: list[ChatMessage] | None = None,
     ) -> AgentResponse:
+        # Запоминаем время начала запроса и создаём объект для сбора метрик.
         started = perf_counter()
         timing = AgentTiming()
+
+        # Если выполнение завершится необработанной ошибкой, в логах останется
+        # outcome='error'. При успешном выполнении значение изменится на статус ответа.
         outcome = 'error'
+
+        # Уникальный идентификатор запроса. Используется для связывания ответа,
+        # ошибок и записи о производительности.
         request_id = uuid4().hex
+
         try:
-            selected = self.sources.catalog.get_source(source_ids[0]) if self.sources and source_ids and len(source_ids) == 1 else None
+            # Получаем источник, только если выбран ровно один.
+            # При отсутствии источников, списка ID или при выборе нескольких
+            # источников selected будет равен None.
+            selected = (
+                self.sources.catalog.get_source(source_ids[0])
+                if self.sources and source_ids and len(source_ids) == 1
+                else None
+            )
+
+            # Если пользователь указал ровно один источник, но такого источника
+            # нет в каталоге, возвращаем ошибку, не запуская обработку вопроса.
             if self.sources and source_ids and selected is None and len(source_ids) == 1:
                 result = AgentResponse(
-                    request_id=request_id, status="error", answer="Выбранный источник не найден.", steps=0,
-                    timing=timing, error=Error(code="SOURCE_NOT_FOUND", message="Источник не найден.", request_id=request_id),
+                    request_id=request_id,
+                    status="error",
+                    answer="Выбранный источник не найден.",
+                    steps=0,
+                    timing=timing,
+                    error=Error(
+                        code="SOURCE_NOT_FOUND",
+                        message="Источник не найден.",
+                        request_id=request_id,
+                    ),
                 )
-            elif selected and not isinstance(self.llm, MockLLMProvider) and is_dashboard_question(question):
-                result = await self.dashboard_query.ask(question, selected.source_id, timing, request_id, history)
-            elif selected and selected.source_type == "csv" and not isinstance(self.llm, MockLLMProvider):
-                result = await self.csv_query.ask(question, selected.source_id, timing, request_id, history)
-                result.answer_kind = "computed" if result.status == "answered" else "model"
+
+            # Если выбран источник и вопрос относится к дашбордам,
+            # передаём управление специализированному обработчику дашбордов.
+            # MockLLMProvider исключён: в тестовом режиме используется другой путь.
+            elif (
+                    selected
+                    and not isinstance(self.llm, MockLLMProvider)
+                    and is_dashboard_question(question) and False
+            ):
+                result = await self.dashboard_query.ask(
+                    question, selected.source_id, timing, request_id, history
+                )
+
+            # Если выбран CSV-источник, а запрос не был направлен обработчику
+            # дашбордов, используем специализированный обработчик CSV.
+            elif (
+                    selected
+                    and selected.source_type == "csv"
+                    and not isinstance(self.llm, MockLLMProvider) and False
+            ):
+                result = await self.csv_query.ask(
+                    question, selected.source_id, timing, request_id, history
+                )
+
+                # Помечаем успешный ответ как вычисленный, а неуспешный —
+                # как ответ модельного типа. Конкретная семантика статусов
+                # определяется контрактом AgentResponse.
+                result.answer_kind = (
+                    "computed" if result.status == "answered" else "model"
+                )
+
+            # Все остальные запросы обрабатываются обычным агентом.
+            # Например, сюда попадут запросы без единственного выбранного
+            # источника, запросы к другим типам источников и тестовый режим.
             else:
                 try:
-                    legacy = await self._ask(question, source_ids, history, timing)
-                except IncompleteModelOutput as exc:
-                    message = "Ответ модели прервался из-за лимита генерации. Попробуйте уточнить вопрос или увеличить MAX_TOKENS_G."
-                    result = AgentResponse(
-                        request_id=request_id, status="error", answer=message,
-                        steps=exc.steps, tool_results=exc.tool_results, timing=timing,
-                        error=Error(code="MODEL_OUTPUT_INCOMPLETE", message=message,
-                                    request_id=request_id, retryable=True),
+                    legacy = await self._ask(
+                        question, source_ids, history, timing
                     )
+
+                # Отдельно обрабатываем ситуацию, когда модель не успела
+                # завершить генерацию ответа из-за ограничения длины вывода.
+                except IncompleteModelOutput as exc:
+                    message = (
+                        "Ответ модели прервался из-за лимита генерации. "
+                        "Попробуйте уточнить вопрос или увеличить MAX_TOKENS_G."
+                    )
+
+                    result = AgentResponse(
+                        request_id=request_id,
+                        status="error",
+                        answer=message,
+                        steps=exc.steps,
+                        tool_results=exc.tool_results,
+                        timing=timing,
+                        error=Error(
+                            code="MODEL_OUTPUT_INCOMPLETE",
+                            message=message,
+                            request_id=request_id,
+                            retryable=True,
+                        ),
+                    )
+
                 else:
+                    # Преобразуем результат обычного агента в общий контракт ответа.
+                    # Старое поле timing исключаем, поскольку ниже передаём
+                    # актуальный объект timing, собранный в рамках текущего запроса.
                     result = AgentResponse(
                         **legacy.model_dump(exclude={"timing"}),
-                        request_id=request_id, status="answered", timing=timing,
-                        answer_kind="demo" if isinstance(self.llm, MockLLMProvider) else "model",
+                        request_id=request_id,
+                        status="answered",
+                        timing=timing,
+                        answer_kind=(
+                            "demo"
+                            if isinstance(self.llm, MockLLMProvider)
+                            else "model"
+                        ),
                     )
+
+            # Запоминаем фактический статус результата для записи в лог.
             outcome = result.status
+
+            # Перед возвратом назначаем ответу общий объект метрик.
+            # Специализированные обработчики могли вернуть собственный timing.
             result.timing = timing
+
             return result
+
         finally:
+            # Этот блок выполняется в любом случае:
+            # при успешном возврате, при возврате ошибки и при исключении.
+            # Поэтому метрики и запись о завершении запроса не зависят от результата.
             timing.elapsed_ms = (perf_counter() - started) * 1000
-            # No question, source contents or answer text in performance logs.
-            logger.info('agent_timing request_id=%s outcome=%s elapsed_ms=%.1f llm_ms=%.1f tools_ms=%.1f calls=%d',
-                        request_id, outcome, timing.elapsed_ms, timing.llm_ms, timing.tools_ms, len(timing.calls))
+
+            # Записываем только технические метрики:
+            # ID запроса, статус, общую длительность, время LLM,
+            # время инструментов и количество зарегистрированных вызовов.
+            # Текст вопроса, содержимое источников и ответ пользователя в лог не попадают.
+            logger.info(
+                'agent_timing request_id=%s outcome=%s elapsed_ms=%.1f '
+                'llm_ms=%.1f tools_ms=%.1f calls=%d',
+                request_id,
+                outcome,
+                timing.elapsed_ms,
+                timing.llm_ms,
+                timing.tools_ms,
+                len(timing.calls),
+            )
 
     async def _ask(
             self,
@@ -147,6 +253,8 @@ class AgentRuntime:
             call_started = perf_counter()
             try:
                 response = await self.llm.chat(messages, self.tools.descriptions())
+            except httpx.HTTPStatusError:
+                continue  # ретрай для 502 с cloud.ru
             finally:
                 elapsed = (perf_counter() - call_started) * 1000
                 timing.llm_ms += elapsed
