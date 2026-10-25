@@ -155,6 +155,7 @@ const answerSchema = z.object({
       elapsed_ms: z.number().nonnegative(),
       model: z.string().nullable().optional(),
       load_ms: z.number().nonnegative().nullable().optional(),
+      provider_total_ms: z.number().nonnegative().nullable().optional(),
       prompt_ms: z.number().nonnegative().nullable().optional(),
       generation_ms: z.number().nonnegative().nullable().optional(),
       prompt_tokens: z.number().int().nonnegative().nullable().optional(),

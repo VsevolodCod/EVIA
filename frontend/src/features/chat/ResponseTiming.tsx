@@ -22,6 +22,7 @@ export function ResponseTiming({ entry }: { entry: Entry }) {
       <p>На сервере: {seconds(timing.elapsed_ms)}. Вызовы модели: {seconds(timing.llm_ms)}. Инструменты: {seconds(timing.tools_ms)}.</p>
       <ol>{timing.calls.map((call, index) => <li key={index}>
         Вызов {index + 1}{call.model ? ` (${call.model})` : ""}: {seconds(call.elapsed_ms)}.
+        {call.provider_total_ms != null && <> По таймеру провайдера: {seconds(call.provider_total_ms)}.</>}
         {call.load_ms != null && <> Загрузка модели: {seconds(call.load_ms)}.</>}
         {call.prompt_ms != null && <> Обработка входа: {seconds(call.prompt_ms)}.</>}
         {call.generation_ms != null && <> Генерация: {seconds(call.generation_ms)}.</>}

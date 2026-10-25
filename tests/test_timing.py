@@ -13,9 +13,12 @@ from app.models import LLMResponse, ToolCall, ToolResult
 def test_ollama_nanoseconds_missing_metrics_and_zero_tokens():
     parsed = OllamaProvider._parse_response({'model': 'test', 'message': {'content': 'ok'},
         'done': True, 'done_reason': 'length',
+        'total_duration': 50_000_000,
         'load_duration': 2_500_000, 'prompt_eval_duration': 7_000_000,
         'eval_duration': 20_000_000, 'prompt_eval_count': 5, 'eval_count': 0})
     assert parsed.timing.load_ms == 2.5
+    assert parsed.timing.provider_total_ms == 50
+    assert OllamaProvider._parse_response({'message': {}}).timing.provider_total_ms is None
     assert parsed.timing.prompt_ms == 7
     assert parsed.timing.generation_ms == 20
     assert parsed.timing.generated_tokens == 0
