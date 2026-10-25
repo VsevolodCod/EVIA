@@ -246,6 +246,9 @@ export function SourceInspector({
                 key={`${source.source_id}-${columnSelection.revision}`}
                 fields={model.fields}
                 sampleSize={current.profile?.sample_size ?? 0}
+                candidateGrainKeys={current.profile?.coverage === "full"
+                  ? current.profile.candidate_grain_keys ?? []
+                  : []}
                 initialSearch={
                   columnSelection.sourceId === source.source_id
                     ? columnSelection.name

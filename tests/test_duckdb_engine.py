@@ -220,6 +220,39 @@ def test_profile_calculates_full_snapshot_statistics_and_typed_blocks(tmp_path):
     }
 
 
+def test_profile_finds_an_exact_composite_grain_candidate(tmp_path):
+    from app.contracts.v1 import Profile
+    from app.data_engine import DuckDBDataEngine
+
+    source = DataSource(
+        source_id="composite-grain-source",
+        snapshot_id="composite-grain-snapshot",
+        name="Composite grain source",
+        source_type="csv",
+    )
+    csv_path = tmp_path / "composite-grain.csv"
+    csv_path.write_text(
+        "Дата;ID_Аптеки;ID_Лекарства;Количество\n"
+        "2026-10-01;1;10;3\n"
+        "2026-10-01;1;11;2\n"
+        "2026-10-01;2;10;4\n"
+        "2026-10-01;2;11;5\n"
+        "2026-10-02;1;10;6\n"
+        "2026-10-02;1;11;7\n"
+        "2026-10-02;2;10;8\n"
+        "2026-10-02;2;11;9\n",
+        encoding="utf-8",
+    )
+    engine = DuckDBDataEngine(tmp_path / "analytics.duckdb")
+    engine.import_csv(source, csv_path, delimiter=";")
+
+    profile = engine.profile(source)
+
+    Profile.model_validate(profile)
+    assert profile["candidate_grain_keys"] == [["Дата", "ID_Аптеки", "ID_Лекарства"]]
+    assert not any(column["is_identifier_candidate"] for column in profile["columns"].values())
+
+
 def test_profile_for_legacy_raw_import_is_a_complete_text_only_payload(tmp_path):
     from app.contracts.v1 import Profile
     from app.data_engine import DuckDBDataEngine

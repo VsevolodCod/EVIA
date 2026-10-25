@@ -72,6 +72,7 @@ class FullProfile(BaseModel):
     coverage: Literal['full']
     snapshot_id: Identifier
     columns: dict[str, ColumnProfile]
+    candidate_grain_keys: list[list[Identifier]] = Field(default_factory=list)
     note: str
     snapshot: DatasetSnapshot | None = None
 
@@ -102,6 +103,17 @@ class FullProfile(BaseModel):
                 raise ValueError('numeric count must equal non-empty values')
             if column.temporal and column.temporal.count != typed_count:
                 raise ValueError('temporal count must equal non-empty values')
+        for candidate in self.candidate_grain_keys:
+            if not 1 <= len(candidate) <= 3:
+                raise ValueError('candidate grain key must contain one to three fields')
+            if len(set(candidate)) != len(candidate):
+                raise ValueError('candidate grain key fields must be distinct')
+            for field in candidate:
+                column = self.columns.get(field)
+                if column is None:
+                    raise ValueError('candidate grain key must reference a profiled field')
+                if column.non_null_count != self.processed_rows or column.empty_count:
+                    raise ValueError('candidate grain key fields must be complete')
         return self
 
 

@@ -270,6 +270,18 @@ it("labels full CSV statistics as exact while keeping top values scoped to the s
   expect(within(createdAt).getByText("2024-01-01T00:00:00.000001Z — 2026-10-22T23:59:59.999999Z")).toBeInTheDocument();
 });
 
+it("labels profile grain candidates as hypotheses rather than confirmed keys", async () => {
+  setup({
+    ...profile,
+    candidate_grain_keys: [["region", "created_at"]],
+  });
+  render(<Workspace initial="profile" />);
+
+  expect(await screen.findByText("Гипотезы о ключе строк")).toBeInTheDocument();
+  expect(screen.getByText("region + created_at")).toBeInTheDocument();
+  expect(screen.getByText(/требует проверки/)).toBeInTheDocument();
+});
+
 it("keeps PostgreSQL sample profiles visibly limited to sampled statistics", async () => {
   setup(sampledProfile);
   render(<Workspace initial="profile" />);
