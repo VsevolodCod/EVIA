@@ -366,6 +366,30 @@ async def test_overview_questions_use_verified_count_period_and_fields_without_m
 
 
 @pytest.mark.asyncio
+async def test_overview_uses_profile_facts_without_inventing_business_meaning(tmp_path):
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    sources = SourceService(tmp_path / "data", catalog)
+    source = sources.register_csv(
+        "anonymous.csv",
+        b"event_date,mystery_value,segment\n2024-10-01,10,A\n2024-10-03,,B\n",
+    )
+    agent = AgentRuntime(ScriptedProvider(), build_tool_registry(catalog, sources), sources=sources)
+    try:
+        answer = await agent.ask("Что есть в этих данных?", [source.source_id])
+        assert answer.status == "answered"
+        assert "2 строки" in answer.answer
+        assert "event_date: 01.10.2024 — 03.10.2024" in answer.answer
+        assert "mystery_value: 1 пустая строка" in answer.answer
+        assert "mystery_value" in answer.answer
+        assert "выруч" not in answer.answer.casefold()
+        assert "Можно спросить" in answer.answer
+        profile_trace = next(tool for tool in answer.tool_results if tool.tool_name == "get_profile")
+        assert profile_trace.data["snapshot_id"] == source.snapshot_id
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
 async def test_schema_route_does_not_steal_a_calculation_about_one_column(tmp_path):
     provider = ScriptedProvider({
         "intent": "average_revenue",
@@ -459,6 +483,36 @@ async def test_overview_never_combines_old_schema_with_new_snapshot_query(tmp_pa
 
 
 @pytest.mark.asyncio
+async def test_overview_retries_if_reimport_happens_after_profile_read(tmp_path, monkeypatch):
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    sources = SourceService(tmp_path / "data", catalog)
+    source = sources.register_csv("before.csv", b"old_field,amount\nA,1\n")
+    original_profile = sources.profile
+    changed = False
+
+    def profile_during_reimport(source_id):
+        nonlocal changed
+        profile = original_profile(source_id)
+        if not changed:
+            changed = True
+            sources.register_csv("after.csv", b"new_field,amount\nB,2\n", source_id=source.source_id)
+        return profile
+
+    monkeypatch.setattr(sources, "profile", profile_during_reimport)
+    agent = AgentRuntime(ScriptedProvider(), build_tool_registry(catalog, sources), sources=sources)
+    try:
+        answer = await agent.ask("Что есть в этих данных?", [source.source_id])
+        latest = catalog.get_source(source.source_id)
+        assert answer.status == "answered"
+        assert "new_field" in answer.answer
+        assert "old_field" not in answer.answer
+        profile_trace = next(tool for tool in answer.tool_results if tool.tool_name == "get_profile")
+        assert profile_trace.data["snapshot_id"] == latest.snapshot_id
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
 async def test_overview_retries_if_reimport_replaces_queried_date_column(tmp_path, monkeypatch):
     catalog = SchemaCatalog(tmp_path / "catalog.db")
     sources = SourceService(tmp_path / "data", catalog)
@@ -531,7 +585,7 @@ async def test_overview_counts_legacy_schema_without_saved_row_count(tmp_path):
         answer = await agent.ask("Что есть в этих данных?", [source.source_id])
         assert answer.status == "answered"
         assert "2 строки" in answer.answer
-        assert answer.tool_results[-1].tool_name == "query_data"
+        assert answer.tool_results[-1].tool_name == "get_profile"
         assert provider.messages == []
     finally:
         catalog.close()
