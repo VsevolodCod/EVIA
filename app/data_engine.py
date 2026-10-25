@@ -233,7 +233,8 @@ class DuckDBDataEngine:
         ]
         single_keys = [
             [name] for name in complete_fields
-            if columns[name]["distinct_count"] == processed_rows
+            if _GRAIN_NAME.search(name)
+            and columns[name]["distinct_count"] == processed_rows
         ]
         if single_keys:
             return single_keys

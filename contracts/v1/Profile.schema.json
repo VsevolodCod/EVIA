@@ -168,7 +168,6 @@
       "description": "Profile with exact statistics for an immutable CSV snapshot.",
       "properties": {
         "candidate_grain_keys": {
-          "default": [],
           "items": {
             "items": {
               "maxLength": 200,
