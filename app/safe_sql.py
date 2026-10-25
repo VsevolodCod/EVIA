@@ -18,6 +18,11 @@ from sqlglot import exp
 from app.contracts.v1 import Provenance, QueryResult, ResultColumn
 from app.duckdb_access import DUCKDB_ACCESS_LOCK
 
+import logging
+
+
+logger = logging.getLogger(__name__)
+
 
 class SafeQueryError(Exception):
     """A stable public failure that never contains SQL or engine details."""
@@ -161,6 +166,11 @@ class SafeQueryExecutor:
                     duckdb.ParserException,
                 ),
             ):
+                # logger.exception(
+                #     "DuckDB rejected analytical query: %s: %s",
+                #     type(exc).__name__,
+                #     exc,
+                # )
                 raise SafeQueryError("QUERY_REJECTED") from None
             raise SafeQueryError("INTERNAL_ERROR") from None
         finally:

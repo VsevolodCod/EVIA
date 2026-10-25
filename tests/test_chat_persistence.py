@@ -43,6 +43,34 @@ async def test_repeat_chat_and_long_history_survive_restart(manager, tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_dashboard_result_survives_restart_and_old_chat_database_migrates(tmp_path):
+    from sqlalchemy import text
+
+    db_path = tmp_path / 'legacy-chats.db'
+    engine, sessions = create_chat_database(db_path)
+    async with engine.begin() as connection:
+        await connection.execute(text('CREATE TABLE chats (chat_id VARCHAR(36) PRIMARY KEY, title VARCHAR(200) NOT NULL, created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL)'))
+        await connection.execute(text('CREATE TABLE chat_messages (message_id VARCHAR(36) PRIMARY KEY, chat_id VARCHAR(36) NOT NULL, position INTEGER NOT NULL, role VARCHAR(20) NOT NULL, content TEXT NOT NULL, name VARCHAR(200), tool_call_id VARCHAR(200), tool_calls JSON, created_at DATETIME NOT NULL)'))
+    await initialize_chat_database(engine)
+    manager = ChatManager(sessions)
+    chat = await manager.get_or_create(temporary=False)
+    response = {'answer': 'Построено карточек: 1.', 'steps': 1, 'status': 'answered', 'answer_kind': 'computed',
+                'tool_results': [{'tool_name': 'create_dashboard', 'ok': True,
+                                  'data': {'version': 1, 'title': 'Выручка', 'cards': []}, 'error': None}]}
+    chat.messages.append(ChatMessage(role='assistant', content=response['answer'], response=response))
+    await manager.save(chat)
+    await engine.dispose()
+
+    reopened_engine, reopened_sessions = create_chat_database(db_path)
+    await initialize_chat_database(reopened_engine)
+    try:
+        restored = await ChatManager(reopened_sessions).get_or_create(chat.chat_id, temporary=False)
+        assert restored.messages[0].response == response
+    finally:
+        await reopened_engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_concurrent_writers_from_separate_connections_preserve_messages(manager, tmp_path):
     chat = await manager.get_or_create(temporary=False)
     engine, sessions = create_chat_database(tmp_path / 'chats.db')

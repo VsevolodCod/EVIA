@@ -149,6 +149,7 @@ class AskResponse(BaseModel):
 class ChatMessage(LLMMessage):
     message_id: str = Field(default_factory=lambda: str(uuid4()))
     created_at: datetime = Field(default_factory=utc_now)
+    response: dict[str, Any] | None = None
 
 
 class Chat(BaseModel):

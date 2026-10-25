@@ -58,7 +58,7 @@ function entriesFromMessages(chatId: string, messages: ChatMessage[]): Entry[] {
         conversationId: chatId,
         question: user.content,
         state: "success",
-        answer: { answer: message.content, steps: 0, tool_results: [] },
+        answer: message.response ?? { answer: message.content, steps: 0, tool_results: [] },
       });
       user = undefined;
     }

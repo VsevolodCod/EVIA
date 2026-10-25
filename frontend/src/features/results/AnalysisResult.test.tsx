@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { AnalysisResult } from "./AnalysisResult";
 
 it("builds a dashboard from one successful tabular tool result", () => {
@@ -63,7 +63,7 @@ it("distinguishes computed SQL from a demo answer", () => {
     },
   };
   const { rerender } = render(<AnalysisResult entry={entry} />);
-  expect(screen.getByText("Рассчитано по CSV")).toBeInTheDocument();
+  expect(screen.getByText("Рассчитано по источнику")).toBeInTheDocument();
   expect(screen.getByText("SELECT COUNT(*) AS orders FROM source")).toBeInTheDocument();
   rerender(<AnalysisResult entry={{ ...entry, answer: { answer: "Тестовый ответ", steps: 1, answer_kind: "demo", tool_results: [] } }} />);
   expect(screen.getByText("Демо-ответ")).toBeInTheDocument();
@@ -113,4 +113,58 @@ it("keeps the regular tool result for failed or non-tabular outputs", () => {
   expect(screen.getByRole("heading", { name: "Результат анализа" })).toBeInTheDocument();
   expect(screen.queryByText("Строк в выборке")).not.toBeInTheDocument();
   expect(screen.getByText("Нет доступа")).toBeInTheDocument();
+});
+
+it("renders a computed dashboard with KPI, line, colors and PDF export", () => {
+  const originalPrint = window.print;
+  const print = vi.fn();
+  window.print = print;
+  try {
+    render(<AnalysisResult entry={{
+      id: "generated-1", question: "Создай дашборд выручки", state: "success",
+      answer: {
+        answer: "Построено карточек: 2.", steps: 1, status: "answered", answer_kind: "computed",
+        tool_results: [{ tool_name: "create_dashboard", ok: true, data: {
+          version: 1, title: "Продажи", palette: ["#518ed5", "#ddaa65"], cards: [
+            { id: "total", type: "kpi", title: "Выручка", status: "success", data: { value: "301.0", aggregate: "sum", format: { type: "number", decimals: 1 } } },
+            { id: "monthly", type: "line", title: "По месяцам", status: "success", data: {
+              x: { field: "month", label: "Месяц", type: "category" },
+              y: { field: "revenue", label: "Выручка", aggregate: "sum", format: { type: "number", decimals: 1 } },
+              points: [{ x: "2026-01", y: "120.5" }, { x: "2026-02", y: "180.5" }],
+            } },
+          ],
+        } }],
+      },
+    }} />);
+
+    expect(screen.getByRole("heading", { name: "Продажи" })).toBeInTheDocument();
+    expect(screen.getByText("301,0")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: /По месяцам/ })).toBeInTheDocument();
+    expect(screen.getByText("2026-01")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Цвета" }));
+    expect(screen.getByText("Цвета графиков")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Экспорт PDF" }));
+    expect(print).toHaveBeenCalledOnce();
+    expect(screen.queryByText(/\"version\"/)).not.toBeInTheDocument();
+  } finally {
+    window.print = originalPrint;
+  }
+});
+
+it("shows the successful dashboard after a failed first attempt", () => {
+  render(<AnalysisResult entry={{
+    id: "generated-retry", question: "Построй дашборд", state: "success",
+    answer: { answer: "Построено карточек: 1.", steps: 2, status: "answered", answer_kind: "computed",
+      tool_results: [
+        { tool_name: "create_dashboard", ok: true, data: { version: 1, title: "Неудачный вариант", cards: [
+          { id: "failed", type: "kpi", title: "Ошибка", status: "error", error: { code: "unsupported_type" } },
+        ] } },
+        { tool_name: "create_dashboard", ok: true, data: { version: 1, title: "Готовый дашборд", cards: [
+          { id: "success", type: "kpi", title: "Выручка", status: "success", data: { value: "301.0" } },
+        ] } },
+      ] },
+  }} />);
+  expect(screen.getByRole("heading", { name: "Готовый дашборд" })).toBeInTheDocument();
+  expect(screen.getByText("301,0")).toBeInTheDocument();
+  expect(screen.queryByText("Неудачный вариант")).not.toBeInTheDocument();
 });

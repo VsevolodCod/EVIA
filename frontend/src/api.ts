@@ -187,6 +187,7 @@ const chatMessageSchema = z.object({
   role: z.enum(["user", "assistant", "system", "tool"]),
   content: z.string(),
   created_at: z.string(),
+  response: answerSchema.nullable().optional(),
 });
 const chatHistorySchema = z.object({
   chat_id: z.string().min(1),

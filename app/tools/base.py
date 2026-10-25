@@ -4,8 +4,6 @@ from typing import Any
 from app.models import ToolResult
 from app.postgresql_sql import PostgresQueryError
 from app.safe_sql import SafeQueryError
-from app.schema_catalog import SchemaCatalog
-from app.source_service import SourceService
 
 
 class ToolDefinition:
@@ -15,14 +13,13 @@ class ToolDefinition:
     """
 
     def __init__(
-        self,
-        name: str,
-        description: str,
-        parameters: dict[str, Any],  # Описание параметров для использования инструмента
-        handler: Callable[..., Any],  # Какие из них обязательны для вызова
-        required: list[str] | None = None,
+            self,
+            name: str,
+            description: str,
+            parameters: dict[str, Any],  # Описание параметров для использования инструмента
+            handler: Callable[..., Any],  # Какие из них обязательны для вызова
+            required: list[str] | None = None,
     ) -> None:
-
         self.name = name
         self.description = description
         self.parameters = parameters
@@ -66,9 +63,9 @@ class ToolRegistry:
         ]
 
     def execute(
-        self,
-        name: str,
-        arguments: dict[str, Any],
+            self,
+            name: str,
+            arguments: dict[str, Any],
     ) -> ToolResult:
 
         """
@@ -130,99 +127,3 @@ class ToolRegistry:
                 ok=False,
                 error=f"{type(exc).__name__}: {exc}",
             )
-
-
-def build_tool_registry(
-    catalog: SchemaCatalog,
-    sources: SourceService,
-) -> ToolRegistry:
-
-    """
-    Создает объект ``ToolRegistry`` и подключает к нему все инструменты
-
-    Принимает различные подключения для использования
-
-    :param catalog: Каталог схем
-    :param sources: Источники
-    :return:
-    """
-
-    registry = ToolRegistry()
-
-    registry.register(
-        ToolDefinition(
-            name="query_data",
-            description=(
-                "Run one read-only analytical SELECT against a selected source. "
-                "Refer to the selected source as the table source."
-            ),
-            parameters={
-                "source_id": {"type": "string"},
-                "sql": {"type": "string", "minLength": 1},
-                "row_limit": {"type": "integer", "minimum": 1, "maximum": 10000},
-            },
-            required=["source_id", "sql"],
-            handler=lambda source_id, sql, row_limit=None: sources.query(
-                source_id,
-                sql,
-                row_limit=row_limit,
-            ),
-        )
-    )
-
-    registry.register(
-        ToolDefinition(
-            name="list_sources",
-            description="List all registered data sources.",
-            parameters={},
-            handler=lambda: [
-                source.model_dump(mode="json")
-                for source in catalog.list_sources()
-            ],
-        )
-    )
-
-    registry.register(
-        ToolDefinition(
-            name="get_source_schema",
-            description="Get the schema of a registered source.",
-            parameters={
-                "source_id": {"type": "string"},
-            },
-            required=["source_id"],
-            handler=lambda source_id: sources.get_schema(source_id),
-        )
-    )
-
-    registry.register(
-        ToolDefinition(
-            name="preview_data",
-            description="Preview a small number of rows from a source.",
-            parameters={
-                "source_id": {"type": "string"},
-                "limit": {
-                    "type": "integer",
-                    "minimum": 1,
-                    "maximum": 100,
-                },
-            },
-            required=["source_id"],
-            handler=lambda source_id, limit=10: sources.preview(
-                source_id, limit
-            ),
-        )
-    )
-
-    registry.register(
-        ToolDefinition(
-            name="profile_data",
-            description="Get basic sample-based statistics for a source.",
-            parameters={
-                "source_id": {"type": "string"},
-            },
-            required=["source_id"],
-            handler=lambda source_id: sources.profile(source_id),
-        )
-    )
-
-    return registry

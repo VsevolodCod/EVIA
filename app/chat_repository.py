@@ -17,11 +17,12 @@ def message_from_record(record: ChatMessageORM) -> ChatMessage:
     return ChatMessage(
         message_id=record.message_id, role=record.role, content=record.content,
         name=record.name, tool_call_id=record.tool_call_id, tool_calls=record.tool_calls,
+        response=record.response,
         created_at=record.created_at.replace(tzinfo=timezone.utc) if record.created_at.tzinfo is None else record.created_at)
 
 
 def message_payload(message):
-    return (message.role, message.content, message.name, message.tool_call_id, message.tool_calls)
+    return (message.role, message.content, message.name, message.tool_call_id, message.tool_calls, message.response)
 
 
 class ChatManager:
@@ -131,7 +132,8 @@ class ChatManager:
                     continue
                 new_record = ChatMessageORM(message_id=message.message_id, chat_id=chat.chat_id,
                     position=position, role=message.role, content=message.content, name=message.name,
-                    tool_call_id=message.tool_call_id, tool_calls=message.tool_calls, created_at=message.created_at)
+                    tool_call_id=message.tool_call_id, tool_calls=message.tool_calls,
+                    response=message.response, created_at=message.created_at)
                 session.add(new_record)
                 known[message.message_id] = new_record
                 position += 1

@@ -145,3 +145,98 @@ async def test_agent_rejects_empty_continuation_after_truncated_answer():
     assert result.status == "error"
     assert result.error and result.error.code == "MODEL_OUTPUT_INCOMPLETE"
     assert "Период начинается с" not in result.answer
+
+
+@pytest.mark.asyncio
+async def test_selected_csv_dashboard_uses_bounded_spec_and_computed_tool(tmp_path):
+    import json
+
+    class LLM:
+        def __init__(self):
+            self.schemas = []
+
+        async def chat_structured(self, messages, schema):
+            self.schemas.append(schema)
+            return LLMResponse(content=json.dumps({
+                "title": "Выручка",
+                "cards": [{"type": "kpi", "title": "Сумма выручки", "field": "revenue", "aggregate": "sum"}],
+            }), finish_reason="stop")
+
+        async def chat(self, messages, tools=None):
+            raise AssertionError("Dashboard should use structured specification")
+
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    sources = SourceService(tmp_path / "data", catalog)
+    source = sources.register_csv("sales.csv", b"id;revenue\n1;120,5\n2;180.5\n")
+    llm = LLM()
+    try:
+        result = await AgentRuntime(llm, build_tool_registry(catalog, sources), sources=sources).ask(
+            "Создай дашборд с KPI по сумме revenue", [source.source_id]
+        )
+        assert result.status == "answered"
+        assert result.answer_kind == "computed"
+        assert result.tool_results[0].tool_name == "create_dashboard"
+        assert result.tool_results[0].data["cards"][0]["data"]["value"] == "301.0"
+        assert llm.schemas[0]["properties"]["cards"]["maxItems"] == 2
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
+async def test_failed_dashboard_does_not_claim_success(tmp_path):
+    import json
+
+    class LLM:
+        async def chat_structured(self, messages, schema):
+            return LLMResponse(content=json.dumps({
+                "title": "Ошибка", "cards": [{"type": "kpi", "title": "Неверный агрегат",
+                "field": "category", "aggregate": "sum"}],
+            }), finish_reason="stop")
+
+        async def chat(self, messages, tools=None):
+            raise AssertionError("Dashboard should use structured specification")
+
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    sources = SourceService(tmp_path / "data", catalog)
+    source = sources.register_csv("sales.csv", b"category\nA\n")
+    try:
+        result = await AgentRuntime(LLM(), build_tool_registry(catalog, sources), sources=sources).ask(
+            "Создай дашборд", [source.source_id]
+        )
+        assert result.status == "error"
+        assert result.answer_kind != "computed"
+        assert result.tool_results[0].tool_name == "create_dashboard"
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
+async def test_dashboard_retries_undrawable_card_and_keeps_final_result(tmp_path):
+    import json
+
+    class LLM:
+        def __init__(self):
+            self.calls = 0
+
+        async def chat_structured(self, messages, schema):
+            self.calls += 1
+            card = ({"type": "line", "title": "Статус", "x": "month", "y": "status", "aggregate": "max"}
+                    if self.calls == 1 else
+                    {"type": "kpi", "title": "Выручка", "field": "revenue", "aggregate": "sum"})
+            return LLMResponse(content=json.dumps({"title": "Продажи", "cards": [card]}), finish_reason="stop")
+
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    sources = SourceService(tmp_path / "data", catalog)
+    source = sources.register_csv("sales.csv", b"month;status;revenue\nJan;Alpha;120,5\nFeb;Beta;180.5\n")
+    llm = LLM()
+    try:
+        result = await AgentRuntime(llm, build_tool_registry(catalog, sources), sources=sources).ask(
+            "Создай дашборд", [source.source_id]
+        )
+        assert result.status == "answered"
+        assert result.answer_kind == "computed"
+        assert llm.calls == 2
+        assert [item.data["cards"][0]["status"] for item in result.tool_results] == ["error", "success"]
+        assert result.tool_results[-1].data["cards"][0]["data"]["value"] == "301.0"
+    finally:
+        catalog.close()
