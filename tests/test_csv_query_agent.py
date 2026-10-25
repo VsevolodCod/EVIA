@@ -483,6 +483,36 @@ async def test_overview_never_combines_old_schema_with_new_snapshot_query(tmp_pa
 
 
 @pytest.mark.asyncio
+async def test_overview_retries_if_reimport_happens_after_profile_read(tmp_path, monkeypatch):
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    sources = SourceService(tmp_path / "data", catalog)
+    source = sources.register_csv("before.csv", b"old_field,amount\nA,1\n")
+    original_profile = sources.profile
+    changed = False
+
+    def profile_during_reimport(source_id):
+        nonlocal changed
+        profile = original_profile(source_id)
+        if not changed:
+            changed = True
+            sources.register_csv("after.csv", b"new_field,amount\nB,2\n", source_id=source.source_id)
+        return profile
+
+    monkeypatch.setattr(sources, "profile", profile_during_reimport)
+    agent = AgentRuntime(ScriptedProvider(), build_tool_registry(catalog, sources), sources=sources)
+    try:
+        answer = await agent.ask("Что есть в этих данных?", [source.source_id])
+        latest = catalog.get_source(source.source_id)
+        assert answer.status == "answered"
+        assert "new_field" in answer.answer
+        assert "old_field" not in answer.answer
+        profile_trace = next(tool for tool in answer.tool_results if tool.tool_name == "get_profile")
+        assert profile_trace.data["snapshot_id"] == latest.snapshot_id
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
 async def test_overview_retries_if_reimport_replaces_queried_date_column(tmp_path, monkeypatch):
     catalog = SchemaCatalog(tmp_path / "catalog.db")
     sources = SourceService(tmp_path / "data", catalog)

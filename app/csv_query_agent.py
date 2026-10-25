@@ -372,6 +372,13 @@ class CSVQueryAgent:
         if profile_is_full and profile.get("snapshot_id") != (source.snapshot_id if source else None):
             trace.append(ToolResult(tool_name="get_profile", ok=False, error="INTERNAL_ERROR"))
             return self._error(request_id, timing, 0, trace, "INTERNAL_ERROR", None)
+        current_source = self.sources.catalog.get_source(source_id)
+        if current_source is None or (
+            current_source.snapshot_id != (source.snapshot_id if source else None)
+            or current_source.schema_version != (source.schema_version if source else None)
+        ):
+            trace.append(ToolResult(tool_name="get_profile", ok=False, error="INTERNAL_ERROR"))
+            return self._error(request_id, timing, 0, trace, "INTERNAL_ERROR", None)
         trace.append(ToolResult(tool_name="get_profile", ok=True, data=profile))
         profile_columns = profile.get("columns", {}) if isinstance(profile.get("columns"), dict) else {}
         if profile_is_full:
