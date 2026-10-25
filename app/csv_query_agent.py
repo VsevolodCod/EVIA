@@ -361,10 +361,42 @@ class CSVQueryAgent:
                 tool_results=trace, timing=timing,
             )
 
+        profile_started = perf_counter()
+        try:
+            profile = self.sources.profile(source_id)
+        except (KeyError, SafeQueryError, ValueError):
+            timing.tools_ms += (perf_counter() - profile_started) * 1000
+            return self._error(request_id, timing, 0, trace, "INTERNAL_ERROR", None)
+        timing.tools_ms += (perf_counter() - profile_started) * 1000
+        profile_is_full = profile.get("coverage") == "full"
+        if profile_is_full and profile.get("snapshot_id") != (source.snapshot_id if source else None):
+            trace.append(ToolResult(tool_name="get_profile", ok=False, error="INTERNAL_ERROR"))
+            return self._error(request_id, timing, 0, trace, "INTERNAL_ERROR", None)
+        trace.append(ToolResult(tool_name="get_profile", ok=True, data=profile))
+        profile_columns = profile.get("columns", {}) if isinstance(profile.get("columns"), dict) else {}
+        if profile_is_full:
+            row_count = profile.get("processed_rows")
+
         date_field = next((field.name for field in fields if field.inferred_type in {"date", "datetime"}), None)
         results = []
         sql = None
-        period = None
+        periods = []
+        missing = []
+        if profile_is_full:
+            for field in fields:
+                stats = profile_columns.get(field.name, {})
+                temporal = stats.get("temporal") if isinstance(stats, dict) else None
+                if isinstance(temporal, dict) and temporal.get("count"):
+                    try:
+                        start = datetime.fromisoformat(str(temporal["minimum"]))
+                        end = datetime.fromisoformat(str(temporal["maximum"]))
+                        periods.append(f"{field.name}: {start:%d.%m.%Y} — {end:%d.%m.%Y}")
+                    except (KeyError, TypeError, ValueError):
+                        pass
+                if isinstance(stats, dict) and stats.get("null_count", 0):
+                    missing.append(f"{field.name}: {stats['null_count']} пропуск")
+                if isinstance(stats, dict) and stats.get("empty_count", 0):
+                    missing.append(f"{field.name}: {stats['empty_count']} пустая строка")
         if row_count is None or (date_field and row_count):
             sql = "SELECT COUNT(*) AS row_count"
             if date_field:
@@ -396,16 +428,31 @@ class CSVQueryAgent:
             trace.append(ToolResult(tool_name="query_data", ok=True, data=result))
             results.append(result)
             row = result.rows[0]
-            row_count = int(row[0])
-            if date_field and row[1] and row[2]:
+            if row_count is None:
+                row_count = int(row[0])
+            if not profile_is_full and date_field and row[1] and row[2]:
                 start = datetime.fromisoformat(str(row[1]))
                 end = datetime.fromisoformat(str(row[2]))
-                period = f"\nПериод по распознанным датам поля «{date_field}»: {start:%d.%m.%Y} — {end:%d.%m.%Y}."
+                periods.append(f"{date_field}: {start:%d.%m.%Y} — {end:%d.%m.%Y}")
         answer = f"В источнике {_russian_count(('строка', 'строки', 'строк'), row_count)} и {_russian_count(('столбец', 'столбца', 'столбцов'), len(fields))}."
         if fields:
             answer += f"\nПоля: {field_names}."
-        if period:
-            answer += period
+        if periods:
+            answer += "\nВременные поля (каждое отдельно): " + "; ".join(periods) + "."
+        if missing:
+            answer += "\nПропуски по полному профилю: " + "; ".join(missing) + "."
+        elif not profile_is_full:
+            answer += "\nПрофиль построен по выборке; точность пропусков и диапазонов ограничена её размером."
+        suggestions = ["показать первые 10 строк", "проверить полные дубликаты"]
+        categorical = next((field.name for field in fields if field.inferred_type in {"string", "boolean"}
+                            and not field.is_identifier_candidate), None)
+        numeric = next((field.name for field in fields if field.inferred_type in {"integer", "number"}
+                        and not field.is_identifier_candidate), None)
+        if categorical:
+            suggestions.append(f"показать частые значения «{categorical}»")
+        if numeric:
+            suggestions.append(f"посчитать сумму «{numeric}»")
+        answer += "\nМожно спросить: " + "; ".join(suggestions) + "."
         return AgentResponse(
             request_id=request_id, status="answered", answer=answer, steps=0,
             analysis=AnalysisPlan(intent="dataset_overview", sql=sql, explanation=answer),

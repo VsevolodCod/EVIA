@@ -366,6 +366,30 @@ async def test_overview_questions_use_verified_count_period_and_fields_without_m
 
 
 @pytest.mark.asyncio
+async def test_overview_uses_profile_facts_without_inventing_business_meaning(tmp_path):
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    sources = SourceService(tmp_path / "data", catalog)
+    source = sources.register_csv(
+        "anonymous.csv",
+        b"event_date,mystery_value,segment\n2024-10-01,10,A\n2024-10-03,,B\n",
+    )
+    agent = AgentRuntime(ScriptedProvider(), build_tool_registry(catalog, sources), sources=sources)
+    try:
+        answer = await agent.ask("Что есть в этих данных?", [source.source_id])
+        assert answer.status == "answered"
+        assert "2 строки" in answer.answer
+        assert "event_date: 01.10.2024 — 03.10.2024" in answer.answer
+        assert "mystery_value: 1 пустая строка" in answer.answer
+        assert "mystery_value" in answer.answer
+        assert "выруч" not in answer.answer.casefold()
+        assert "Можно спросить" in answer.answer
+        profile_trace = next(tool for tool in answer.tool_results if tool.tool_name == "get_profile")
+        assert profile_trace.data["snapshot_id"] == source.snapshot_id
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
 async def test_schema_route_does_not_steal_a_calculation_about_one_column(tmp_path):
     provider = ScriptedProvider({
         "intent": "average_revenue",
