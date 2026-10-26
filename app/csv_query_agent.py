@@ -386,6 +386,7 @@ class CSVQueryAgent:
         injection attempts from becoming a speculative SQL request.
         """
         normalized = _normal_question(question)
+        pending_choice = "выбранный вариант:" in normalized
         names = [field.name for field in fields]
         numeric = [field.name for field in fields if field.inferred_type in {"integer", "number"}]
         temporal = [field.name for field in fields if field.inferred_type in {"date", "datetime"}]
@@ -397,7 +398,7 @@ class CSVQueryAgent:
                 ["Показать структуру источника", "Показать обзор данных", "Найти частые значения"],
             )
 
-        if _matches_any(normalized, _PROFIT_WORDS) and not _matches_any(" ".join(name.casefold() for name in names), _EXPENSE_WORDS):
+        if not pending_choice and _matches_any(normalized, _PROFIT_WORDS) and not _matches_any(" ".join(name.casefold() for name in names), _EXPENSE_WORDS):
             choices = [f"Среднее значение «{name}»" for name in numeric[:3]]
             if not choices:
                 choices = ["Показать структуру источника", "Показать обзор данных"]
@@ -408,13 +409,13 @@ class CSVQueryAgent:
 
         asks_average = any(word in normalized for word in ("средн", "average", "avg"))
         asks_period = any(word in normalized for word in ("период", "динамик", "по месяц", "по год", "дата"))
-        if asks_average and len(numeric) > 1 and not any(name.casefold() in normalized for name in numeric):
+        if not pending_choice and asks_average and len(numeric) > 1 and not any(name.casefold() in normalized for name in numeric):
             return self._clarification(
                 question, request_id, timing, "clarification",
                 "Неясно, по какому числовому полю считать среднее.",
                 [f"Среднее значение «{name}»" for name in numeric[:3]],
             )
-        if asks_period and len(temporal) > 1 and not any(name.casefold() in normalized for name in temporal):
+        if not pending_choice and asks_period and len(temporal) > 1 and not any(name.casefold() in normalized for name in temporal):
             return self._clarification(
                 question, request_id, timing, "clarification",
                 "Неясно, какое поле даты использовать для периода.",
