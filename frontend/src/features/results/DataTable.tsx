@@ -9,14 +9,48 @@ export function valueText(value: unknown): string {
 
 const PAGE_SIZE = 25;
 
+function compactIdentifier(value: string): string {
+  return value.length <= 16 ? value : `${value.slice(0, 8)}…${value.slice(-6)}`;
+}
+
+function IdentifierCell({ field, value }: { field: string; value: unknown }) {
+  const [copied, setCopied] = useState(false);
+  const fullValue = valueText(value);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(fullValue);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  };
+
+  return (
+    <span className="identifier-cell">
+      <code className="identifier-value" title={fullValue}>{compactIdentifier(fullValue)}</code>
+      <button
+        className="identifier-copy"
+        type="button"
+        aria-label={`Скопировать полный ${field}`}
+        onClick={() => void copy()}
+      >
+        {copied ? "Готово" : "Копировать"}
+      </button>
+    </span>
+  );
+}
+
 export function DataTable({
   rows,
   columns,
   label = "Таблица данных",
+  copyableIdentifierColumns = [],
 }: {
   rows: Row[];
   columns?: string[];
   label?: string;
+  copyableIdentifierColumns?: readonly string[];
 }) {
   const [position, setPosition] = useState({ rows, page: 0 });
   const fields = useMemo(
@@ -67,7 +101,11 @@ export function DataTable({
               <tr key={start + index}>
                 <td className="row-number">{start + index + 1}</td>
                 {fields.map((field) => (
-                  <td key={field}>{valueText(row[field])}</td>
+                  <td key={field}>
+                    {copyableIdentifierColumns.includes(field) && row[field] !== null && row[field] !== undefined
+                      ? <IdentifierCell field={field} value={row[field]} />
+                      : valueText(row[field])}
+                  </td>
                 ))}
               </tr>
             ))}
