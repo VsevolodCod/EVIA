@@ -254,7 +254,7 @@ def register_chart_tools(
 
         try:
             result = executor.execute(
-                chart_id=chart.id,
+                chart_id=chart.chart_id,
                 filters=filters,
             )
         except Exception as exc:
@@ -262,14 +262,14 @@ def register_chart_tools(
             # мог сообщить об ошибке выполнения и повторить попытку.
             return {
                 "success": False,
-                "chart_id": chart.id,
+                "chart_id": chart.chart_id,
                 "chart_type": parsed_definition.type,
                 "error": str(exc),
             }
 
         return {
             "success": True,
-            "chart_id": chart.id,
+            "chart_id": chart.chart_id,
             "chart_type": parsed_definition.type,
             "definition": parsed_definition.model_dump(mode="json"),
             "result": result,
@@ -279,7 +279,7 @@ def register_chart_tools(
         ToolDefinition(
             name="build_chart",
             description=(
-                "Build and save a chart from a generic chart definition, "
+                "Build and automatically save a chart from a generic chart definition, "
                 "then execute it and return its data. The definition must "
                 "match one of the chart models supported by ChartDefinition. "
                 "Use list_chart_models to discover supported types and "

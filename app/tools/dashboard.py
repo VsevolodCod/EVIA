@@ -9,6 +9,11 @@ from app.charts.models import (
 )
 from app.tools.base import ToolDefinition, ToolRegistry
 
+import logging
+
+
+logger = logging.getLogger(__name__)
+
 
 def _resolve_refs(value: Any, definitions: dict[str, Any]) -> Any:
     """Раскрывает локальные Pydantic $ref для схемы ToolRegistry."""
@@ -52,10 +57,7 @@ def _build_parameters(model: type) -> tuple[dict[str, Any], list[str]]:
     """Строит JSON Schema параметров инструмента из Pydantic-модели."""
 
     schema = model.model_json_schema()
-    definitions = schema.pop("$defs", {})
-
-    parameters = _resolve_refs(schema, definitions)
-    return parameters, schema.get("required", [])
+    return schema.get("properties", {}), schema.get("required", [])
 
 
 def register_dashboard_tools(

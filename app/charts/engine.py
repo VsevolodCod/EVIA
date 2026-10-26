@@ -121,7 +121,7 @@ class DashboardEngine:
                 title=args.title,
                 summary=args.summary,
                 charts=[
-                    ChartReference(chart_id=chart.id, position=position)
+                    ChartReference(chart_id=chart.chart_id, position=position)
                     for position, chart in enumerate(chart_models)
                 ],
                 version=1,
@@ -174,7 +174,7 @@ class DashboardEngine:
                     error=self._error("chart_not_found", "Chart not found")
                 )
 
-            if any(ref.chart_id == chart.id for ref in dashboard.charts):
+            if any(ref.chart_id == chart.chart_id for ref in dashboard.charts):
                 return self._dashboard_result(
                     error=self._error(
                         "chart_already_added",
@@ -195,7 +195,7 @@ class DashboardEngine:
 
             refs.insert(
                 position,
-                ChartReference(chart_id=chart.id, position=position),
+                ChartReference(chart_id=chart.chart_id, position=position),
             )
             normalized_refs = [
                 ChartReference(chart_id=ref.chart_id, position=index)
@@ -332,7 +332,7 @@ class DashboardEngine:
                     continue
 
                 chart_items.append({
-                    "chart_id": chart.id,
+                    "chart_id": chart.chart_id,
                     "position": ref.position,
                     "status": "success",
                     "chart": chart.model_dump(mode="json"),

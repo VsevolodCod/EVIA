@@ -139,7 +139,7 @@ ChartDefinition = Annotated[
 class ChartModel(StrictModel):
     """Чарт, сохранённый в БД. Его ID независим от ID внутри definition."""
 
-    id: Identifier
+    chart_id: Identifier
     definition: ChartDefinition
     version: int = Field(default=1, ge=1)
 

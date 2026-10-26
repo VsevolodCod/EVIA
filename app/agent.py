@@ -1,3 +1,4 @@
+import asyncio
 import json
 from time import perf_counter
 from uuid import uuid4
@@ -250,31 +251,99 @@ class AgentRuntime:
         # Основный цикл агента
         for step in range(1, self.max_steps + 1):
             logger.info(f"Агент начал выполнение шага {step}")
-            call_started = perf_counter()
-            try:
-                response = await self.llm.chat(messages, self.tools.descriptions())
-            except httpx.HTTPStatusError:
-                continue  # ретрай для 502 с cloud.ru
-            finally:
-                elapsed = (perf_counter() - call_started) * 1000
-                timing.llm_ms += elapsed
-            call_timing = response.timing.model_copy() if response.timing else ModelTiming()
-            call_timing.elapsed_ms = elapsed
-            timing.calls.append(call_timing)
 
-            if response.finish_reason == "length":
-                if response.tool_calls or step == self.max_steps:
-                    raise IncompleteModelOutput(step, results)
-                answer_parts.append(response.content)
-                messages.append(LLMMessage(role="assistant", content=response.content))
-                messages.append(LLMMessage(role="user", content="Продолжи ответ точно с места обрыва, без повторения уже написанного."))
-                continue
-            if response.finish_reason not in (None, "stop", "tool_calls"):
+            response = None
+            MAX_LLM_RETRIES = 5
+            BASE_TIME_RETRY = 0.5
+
+            # Повторяем запрос, не расходуя шаг агента.
+            for attempt in range(1, MAX_LLM_RETRIES + 1):
+                call_started = perf_counter()
+
+                try:
+                    candidate = await self.llm.chat(
+                        messages,
+                        self.tools.descriptions(),
+                    )
+
+                except httpx.HTTPStatusError as exc:
+                    elapsed = (perf_counter() - call_started) * 1000
+                    timing.llm_ms += elapsed
+
+                    status_code = exc.response.status_code
+
+                    # Повторяем только временную ошибку Cloud.ru.
+                    if status_code != 502:
+                        raise
+
+                    if attempt == MAX_LLM_RETRIES:
+                        logger.error(
+                            "LLM вернул HTTP 502 после %s попыток",
+                            attempt,
+                        )
+                        raise
+
+                    delay = BASE_TIME_RETRY * (2 ** (attempt - 1))
+                    logger.warning(
+                        "LLM HTTP 502: попытка %s/%s. "
+                        "Повтор через %.1f сек.",
+                        attempt,
+                        MAX_LLM_RETRIES,
+                        delay,
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+
+                else:
+                    elapsed = (perf_counter() - call_started) * 1000
+                    timing.llm_ms += elapsed
+
+                # HTTP 200 ещё не означает, что модель выдала результат.
+                empty_output = (
+                        not candidate.tool_calls
+                        and not (candidate.content or "").strip()
+                        and candidate.finish_reason in (None, "stop")
+                )
+
+                if empty_output:
+                    if attempt == MAX_LLM_RETRIES:
+                        logger.error(
+                            "LLM вернул пустой ответ после %s попыток",
+                            attempt,
+                        )
+                        raise IncompleteModelOutput(step, results)
+
+                    delay = BASE_TIME_RETRY * (2 ** (attempt - 1))
+                    logger.warning(
+                        "LLM вернул пустой ответ: попытка %s/%s. "
+                        "Повтор через %.1f сек.",
+                        attempt,
+                        MAX_LLM_RETRIES,
+                        delay,
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+
+                # Получили пригодный ответ — выходим из внутреннего цикла.
+                response = candidate
+
+                call_timing = (
+                    response.timing.model_copy()
+                    if response.timing
+                    else ModelTiming()
+                )
+                call_timing.elapsed_ms = elapsed
+                timing.calls.append(call_timing)
+
+                break
+
+            if response is None:
+                # Защита от неожиданного выхода без результата.
                 raise IncompleteModelOutput(step, results)
 
-            if not response.tool_calls:  # Если модель готова ответить пользователю
-                if not response.content.strip():
-                    raise IncompleteModelOutput(step, results)
+            answer_parts.clear()
+
+            if response.finish_reason == "stop":
                 answer = ("".join(answer_parts) + response.content).strip()
 
                 logger.info("Агент вернул итоговый ответ")
@@ -285,8 +354,6 @@ class AgentRuntime:
                     steps=step,
                     tool_results=results,
                 )
-
-            answer_parts.clear()
 
             raw_calls = response.raw_tool_calls
 
