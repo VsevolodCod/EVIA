@@ -198,11 +198,12 @@ async def test_fenced_filtered_preview_plan_returns_a_genuine_empty_result(tmp_p
 
 @pytest.mark.asyncio
 async def test_numeric_csv_filter_compares_values_not_raw_text(tmp_path):
-    provider = ScriptedProvider({
+    plan = {
         "intent": "filter",
         "sql": "SELECT * FROM source WHERE revenue > 1000 LIMIT 10",
         "explanation": "Filtered rows",
-    })
+    }
+    provider = ScriptedProvider(plan, plan)
     agent, source, catalog = agent_with_csv(tmp_path, provider)
     try:
         answer = await agent.ask("Покажи строки, где revenue больше 1000", [source.source_id])
