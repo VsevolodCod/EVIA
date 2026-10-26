@@ -133,6 +133,20 @@ async def test_outliers_explain_zero_iqr_for_a_constant_series(setup):
     assert len(response.results) == 1
 
 
+@pytest.mark.asyncio
+async def test_zero_iqr_with_rare_different_value_does_not_claim_all_values_are_equal(setup):
+    sources, _, catalog = setup
+    source = sources.register_csv("rare-value.csv", b"revenue\n5\n5\n5\n5\n100\n")
+
+    response = await runtime(sources, catalog).ask("Есть ли здесь аномалии?", [source.source_id])
+
+    assert response.status == "answered"
+    assert "IQR равен нулю" in response.answer
+    assert "есть отличающиеся значения" in response.answer
+    assert "все корректные значения находятся на одном уровне" not in response.answer
+    assert len(response.results) == 1
+
+
 @pytest.mark.parametrize('question', ['Какие значения встречаются чаще всего за июль?', 'Найди дубликаты только за 2024 год',
                                     'Покажи первые 20 строк', 'Какие значения чаще встречаются? Посчитай сумму amount',
                                     'А какие значения встречаются чаще всего за июль?',
