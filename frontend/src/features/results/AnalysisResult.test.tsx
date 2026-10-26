@@ -126,7 +126,9 @@ it("renders a computed dashboard with KPI, line, colors and PDF export", () => {
         answer: "Построено карточек: 2.", steps: 1, status: "answered", answer_kind: "computed",
         tool_results: [{ tool_name: "create_dashboard", ok: true, data: {
           version: 1, title: "Продажи", palette: ["#518ed5", "#ddaa65"], cards: [
-            { id: "total", type: "kpi", title: "Выручка", status: "success", data: { value: "301.0", aggregate: "sum", format: { type: "number", decimals: 1 } } },
+            { id: "total", type: "kpi", title: "Выручка", status: "success",
+              definition: { type: "kpi", field: { source_id: "sales-1", field: "revenue" }, aggregate: "sum", filters: [] },
+              data: { value: "301.0", aggregate: "sum", format: { type: "number", decimals: 1 } } },
             { id: "monthly", type: "line", title: "По месяцам", status: "success", data: {
               x: { field: "month", label: "Месяц", type: "category" },
               y: { field: "revenue", label: "Выручка", aggregate: "sum", format: { type: "number", decimals: 1 } },
@@ -139,6 +141,10 @@ it("renders a computed dashboard with KPI, line, colors and PDF export", () => {
 
     expect(screen.getByRole("heading", { name: "Продажи" })).toBeInTheDocument();
     expect(screen.getByText("301,0")).toBeInTheDocument();
+    expect(screen.getByText("Паспорт расчёта")).toBeInTheDocument();
+    expect(screen.getByText("SUM(revenue)")).toBeInTheDocument();
+    expect(screen.getByText("sales-1")).toBeInTheDocument();
+    expect(screen.getByText("Весь источник без фильтров")).toBeInTheDocument();
     expect(screen.getByRole("img", { name: /По месяцам/ })).toBeInTheDocument();
     expect(screen.getByText("2026-01")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Цвета" }));
