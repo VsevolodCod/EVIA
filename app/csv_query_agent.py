@@ -504,7 +504,9 @@ class CSVQueryAgent:
                     missing.append(f"{field.name}: {stats['null_count']} пропуск")
                 if isinstance(stats, dict) and stats.get("empty_count", 0):
                     missing.append(f"{field.name}: {stats['empty_count']} пустая строка")
-        if row_count is None or (date_field and row_count):
+        # Exact CSV profiles already contain count and temporal ranges. A second
+        # scan adds latency and can fail an otherwise complete metadata answer.
+        if not profile_is_full and (row_count is None or (date_field and row_count)):
             sql = "SELECT COUNT(*) AS row_count"
             if date_field:
                 quoted = '"' + date_field.replace('"', '""') + '"'

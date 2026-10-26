@@ -350,7 +350,8 @@ async def test_general_dataset_question_gets_count_and_period_even_if_model_asks
         assert "2 строки" in answer.answer
         assert "01.10.2024" in answer.answer
         assert "03.10.2024" in answer.answer
-        assert answer.results[0].rows[0][0] == 2
+        assert answer.tool_results[-1].tool_name == "get_profile"
+        assert answer.tool_results[-1].data["processed_rows"] == 2
         assert answer.tool_results[0].ok
     finally:
         catalog.close()
@@ -442,6 +443,31 @@ async def test_overview_uses_profile_facts_without_inventing_business_meaning(tm
 
 
 @pytest.mark.asyncio
+async def test_full_profile_overview_never_requeries_even_when_sql_is_unavailable(tmp_path, monkeypatch):
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    sources = SourceService(tmp_path / "data", catalog)
+    source = sources.register_csv("dates.csv", b"opened,closed,id\n2024-01-01,2024-02-02,001\n")
+
+    def forbidden_query(*args, **kwargs):
+        raise AssertionError("A validated full profile already has counts and date ranges")
+
+    monkeypatch.setattr(sources, "query", forbidden_query)
+    agent = AgentRuntime(ScriptedProvider(), build_tool_registry(catalog, sources), sources=sources)
+    try:
+        for question in ("Что передо мной?", "Что есть в этих данных?"):
+            response = await agent.ask(question, [source.source_id])
+            assert response.status == "answered"
+            assert "1 строка" in response.answer
+            assert "opened: 01.01.2024" in response.answer
+            assert "closed: 02.02.2024" in response.answer
+            assert response.analysis.sql is None
+            assert response.results == []  # No invented SQL result to keep old UI expectations.
+            assert [t.tool_name for t in response.tool_results] == ["get_schema", "get_profile"]
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
 async def test_schema_route_does_not_steal_a_calculation_about_one_column(tmp_path):
     provider = ScriptedProvider({
         "intent": "average_revenue",
@@ -506,21 +532,21 @@ async def test_schema_answer_retries_if_source_is_reimported_between_schema_and_
 
 
 @pytest.mark.asyncio
-async def test_overview_never_combines_old_schema_with_new_snapshot_query(tmp_path, monkeypatch):
+async def test_overview_never_combines_old_schema_with_new_snapshot_profile(tmp_path, monkeypatch):
     catalog = SchemaCatalog(tmp_path / "catalog.db")
     sources = SourceService(tmp_path / "data", catalog)
     source = sources.register_csv("before.csv", b"created_at,old_field\n2024-01-01,1\n")
-    original_query = sources.query
+    original_profile = sources.profile
     changed = False
 
-    def query_during_reimport(source_id, sql, **kwargs):
+    def profile_during_reimport(source_id):
         nonlocal changed
         if not changed:
             changed = True
             sources.register_csv("after.csv", b"created_at,new_field\n2026-02-01,2\n", source_id=source_id)
-        return original_query(source_id, sql, **kwargs)
+        return original_profile(source_id)
 
-    monkeypatch.setattr(sources, "query", query_during_reimport)
+    monkeypatch.setattr(sources, "profile", profile_during_reimport)
     agent = AgentRuntime(ScriptedProvider(), build_tool_registry(catalog, sources), sources=sources)
     try:
         answer = await agent.ask("Что есть в этих данных?", [source.source_id])
@@ -528,7 +554,7 @@ async def test_overview_never_combines_old_schema_with_new_snapshot_query(tmp_pa
         assert answer.status == "answered"
         assert "new_field" in answer.answer
         assert "old_field" not in answer.answer
-        assert answer.results[0].provenance[0].snapshot_id == latest.snapshot_id
+        assert answer.tool_results[-1].data["snapshot_id"] == latest.snapshot_id
         assert answer.tool_results[0].data["schema_version"] == latest.schema_version
     finally:
         catalog.close()
@@ -565,21 +591,21 @@ async def test_overview_retries_if_reimport_happens_after_profile_read(tmp_path,
 
 
 @pytest.mark.asyncio
-async def test_overview_retries_if_reimport_replaces_queried_date_column(tmp_path, monkeypatch):
+async def test_overview_retries_if_reimport_replaces_profiled_date_column(tmp_path, monkeypatch):
     catalog = SchemaCatalog(tmp_path / "catalog.db")
     sources = SourceService(tmp_path / "data", catalog)
     source = sources.register_csv("before.csv", b"created_at,old_field\n2024-01-01,1\n")
-    original_query = sources.query
+    original_profile = sources.profile
     changed = False
 
-    def query_during_reimport(source_id, sql, **kwargs):
+    def profile_during_reimport(source_id):
         nonlocal changed
         if not changed:
             changed = True
             sources.register_csv("after.csv", b"closed_at,new_field\n2026-02-01,2\n", source_id=source_id)
-        return original_query(source_id, sql, **kwargs)
+        return original_profile(source_id)
 
-    monkeypatch.setattr(sources, "query", query_during_reimport)
+    monkeypatch.setattr(sources, "profile", profile_during_reimport)
     agent = AgentRuntime(ScriptedProvider(), build_tool_registry(catalog, sources), sources=sources)
     try:
         answer = await agent.ask("Что есть в этих данных?", [source.source_id])
@@ -587,7 +613,7 @@ async def test_overview_retries_if_reimport_replaces_queried_date_column(tmp_pat
         assert "closed_at" in answer.answer
         assert "created_at" not in answer.answer
         assert "01.02.2026" in answer.answer
-        assert answer.results[0].provenance[0].snapshot_id == catalog.get_source(source.source_id).snapshot_id
+        assert answer.tool_results[-1].data["snapshot_id"] == catalog.get_source(source.source_id).snapshot_id
     finally:
         catalog.close()
 
@@ -597,10 +623,10 @@ async def test_overview_retries_if_schema_version_changes_for_same_snapshot(tmp_
     catalog = SchemaCatalog(tmp_path / "catalog.db")
     sources = SourceService(tmp_path / "data", catalog)
     source = sources.register_csv("events.csv", b"created_at,value\n2024-01-01,1\n")
-    original_query = sources.query
+    original_profile = sources.profile
     changed = False
 
-    def query_during_schema_refresh(source_id, sql, **kwargs):
+    def profile_during_schema_refresh(source_id):
         nonlocal changed
         if not changed:
             changed = True
@@ -610,15 +636,15 @@ async def test_overview_retries_if_schema_version_changes_for_same_snapshot(tmp_
             refreshed_schema.version += 1
             catalog.save_schema(refreshed_schema)
             catalog.upsert_source(refreshed_source)
-        return original_query(source_id, sql, **kwargs)
+        return original_profile(source_id)
 
-    monkeypatch.setattr(sources, "query", query_during_schema_refresh)
+    monkeypatch.setattr(sources, "profile", profile_during_schema_refresh)
     agent = AgentRuntime(ScriptedProvider(), build_tool_registry(catalog, sources), sources=sources)
     try:
         answer = await agent.ask("Что есть в этих данных?", [source.source_id])
         assert answer.status == "answered"
         assert answer.tool_results[0].data["schema_version"] == 2
-        assert answer.results[0].provenance[0].schema_version == 2
+        assert answer.analysis.sql is None
     finally:
         catalog.close()
 
