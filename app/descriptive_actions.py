@@ -124,7 +124,8 @@ def descriptive_answer(sources, intent, columns, source_id, schema, timing, requ
                 'WITH numeric_values AS ('
                 f'SELECT {value} AS value FROM source'
                 ') SELECT COUNT(*) AS observed_rows, '
-                'quantile_cont(value, 0.25) AS q1, quantile_cont(value, 0.75) AS q3 '
+                'quantile_cont(value, 0.25) AS q1, quantile_cont(value, 0.75) AS q3, '
+                'MIN(value) AS observed_min, MAX(value) AS observed_max '
                 'FROM numeric_values WHERE value IS NOT NULL',
                 1,
             )
@@ -141,10 +142,18 @@ def descriptive_answer(sources, intent, columns, source_id, schema, timing, requ
                     f'найдено {stats.rows[0][0]}. Кандидаты не определялись.'
                 )
             elif stats.rows[0][2] <= stats.rows[0][1]:
-                parts.append(
-                    'IQR равен нулю: все корректные значения находятся на одном уровне. '
-                    'Порог для поиска кандидатов не определяется.'
-                )
+                if stats.rows[0][3] == stats.rows[0][4]:
+                    parts.append(
+                        'IQR равен нулю: все корректные значения находятся на одном уровне. '
+                        'Порог для поиска кандидатов не определяется.'
+                    )
+                else:
+                    parts.append(
+                        'IQR равен нулю, хотя есть отличающиеся значения. '
+                        f'Наблюдаемый диапазон: {stats.rows[0][3]} — {stats.rows[0][4]}. '
+                        'По этому методу кандидаты не определялись; это не означает, '
+                        'что редкие значения отсутствуют.'
+                    )
             else:
                 candidates = execute(
                     'WITH numeric_values AS ('
