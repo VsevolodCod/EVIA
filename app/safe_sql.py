@@ -43,7 +43,7 @@ _SAFE_FUNCTIONS = {
     "COUNT", "DATE", "DATE_TRUNC", "EXTRACT", "FLOOR", "GREATEST",
     "LEAST", "LENGTH", "LOWER", "LPAD", "LTRIM", "MAX", "MIN",
     "NULLIF", "REPLACE", "ROUND", "RPAD", "RTRIM", "STRFTIME", "SUBSTRING", "SUM",
-    "TRIM", "TRY_CAST", "UPPER",
+    "QUANTILE_CONT", "TRIM", "TRY_CAST", "UPPER",
 }
 _SELECT_ROOTS = (exp.Select, exp.Union, exp.Intersect, exp.Except)
 _BLOCKED_NODE_NAMES = {
