@@ -7,7 +7,7 @@ from app.models import ToolResult
 from app.safe_sql import SafeQueryError
 
 
-ACTION_NAMES = frozenset({'frequencies', 'duplicates', 'preview'})
+ACTION_NAMES = frozenset({'frequencies', 'duplicates', 'outliers', 'preview'})
 
 
 def descriptive_route(question: str) -> str | None:
@@ -19,6 +19,7 @@ def descriptive_route(question: str) -> str | None:
     patterns = {
         'frequencies': r'(?:какие значения (?:встречаются|попадаются) чаще всего|(?:покажи |выведи )?(?:самые частые|наиболее частые) значения|какие значения чаще встречаются|покажи частоты значений)',
         'duplicates': r'(?:есть ли (?:тут |здесь )?(?:повторяющиеся данные|дубликаты|повторяющиеся строки)|найди (?:полные )?дубликаты(?: строк)?)',
+        'outliers': r'(?:есть ли (?:тут |здесь )?(?:аномалии|выбросы)|(?:найди|покажи) (?:аномалии|выбросы))',
         'preview': r'покажи первые (?:10 |десять )?строк(?:и)?',
     }
     return next((action for action, pattern in patterns.items() if re.fullmatch(pattern, phrase)), None)
@@ -103,6 +104,61 @@ def descriptive_answer(sources, intent, columns, source_id, schema, timing, requ
                           'Повторение одного ID — другой анализ, для него укажите поле.') +
                          '\n\nЧисло групп повторов и число лишних строк сверх первой в каждой группе:')
             parts.append(render_table(result))
+        elif intent == 'outliers':
+            numeric = [
+                field.name for field in fields
+                if field.inferred_type in {'integer', 'number'}
+                and not field.is_identifier_candidate
+            ]
+            numeric = numeric or [
+                field.name for field in fields
+                if field.inferred_type in {'integer', 'number'}
+            ]
+            chosen = columns or numeric[:1]
+            if len(chosen) != 1 or by_name[chosen[0]].inferred_type not in {'integer', 'number'}:
+                raise SafeQueryError('QUERY_REJECTED')
+            name = chosen[0]
+            col = quote(name)
+            value = f"TRY_CAST(NULLIF(REPLACE(TRIM(CAST({col} AS VARCHAR)), ',', '.'), '') AS DOUBLE)"
+            stats = execute(
+                'WITH numeric_values AS ('
+                f'SELECT {value} AS value FROM source'
+                ') SELECT COUNT(*) AS observed_rows, '
+                'quantile_cont(value, 0.25) AS q1, quantile_cont(value, 0.75) AS q3 '
+                'FROM numeric_values WHERE value IS NOT NULL',
+                1,
+            )
+            parts.append(
+                'Метод: межквартильный размах (IQR). Кандидатами считаются значения ниже '
+                'Q1 − 1,5×IQR или выше Q3 + 1,5×IQR. Группа сравнения — все корректные '
+                f'числовые значения поля «{markdown_cell(name)}»; пропуски и нечисловые значения исключены.'
+            )
+            if not stats.rows or stats.rows[0][0] == 0 or stats.rows[0][1] is None or stats.rows[0][2] is None:
+                parts.append('Для расчёта нет корректных числовых значений.')
+            else:
+                candidates = execute(
+                    'WITH numeric_values AS ('
+                    f'SELECT {value} AS value FROM source'
+                    '), bounds AS ('
+                    'SELECT quantile_cont(value, 0.25) AS q1, quantile_cont(value, 0.75) AS q3 '
+                    'FROM numeric_values WHERE value IS NOT NULL'
+                    ') SELECT value AS candidate_value, q1, q3, '
+                    '(q1 - 1.5 * (q3 - q1)) AS lower_threshold, '
+                    '(q3 + 1.5 * (q3 - q1)) AS upper_threshold '
+                    'FROM numeric_values CROSS JOIN bounds '
+                    'WHERE value IS NOT NULL AND q3 > q1 AND '
+                    '(value < q1 - 1.5 * (q3 - q1) OR value > q3 + 1.5 * (q3 - q1)) '
+                    'ORDER BY value ASC LIMIT 20',
+                    20,
+                )
+                parts.extend([
+                    'Параметры сравнения:',
+                    render_table(stats),
+                    'Найденные кандидаты:' if candidates.rows else 'Кандидатов по этому порогу не найдено.',
+                ])
+                if candidates.rows:
+                    parts.append(render_table(candidates))
+            parts.append('Это статистическое отклонение, а не установленная причина. Строки не удалены и не изменены.')
         elif intent == 'preview':
             projection = ', '.join(quote(c) for c in columns) if columns else '*'
             result = execute(f'SELECT {projection} FROM source LIMIT 10', 10)
