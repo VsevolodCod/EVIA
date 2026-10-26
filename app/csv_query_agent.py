@@ -129,6 +129,21 @@ def _normalize_numeric_casts(sql: str, field_types: dict[str, str]) -> str:
                 read="duckdb",
             )
             cast.replace(normalized)
+        for comparison in list(statement.find_all(exp.GT, exp.GTE, exp.LT, exp.LTE)):
+            for column, other in ((comparison.this, comparison.expression),
+                                  (comparison.expression, comparison.this)):
+                if (not isinstance(column, exp.Column)
+                        or not isinstance(other, exp.Literal) or not other.is_number
+                        or field_types.get(column.name) not in {"integer", "number"}):
+                    continue
+                # CSV cells are stored as text even when the inferred type is
+                # numeric. A strict cast rejects bad values rather than silently
+                # dropping them from the filtered result.
+                normalized = parse_one(
+                    f"CAST(NULLIF(REPLACE(TRIM({column.sql(dialect='duckdb')}), ',', '.'), '') AS DOUBLE)",
+                    read="duckdb",
+                )
+                column.replace(normalized)
         return statement.sql(dialect="duckdb")
     except SafeQueryError:
         raise
