@@ -85,6 +85,15 @@ class DashboardQueryAgent:
                 ),
                 None,
             )
+            if dimension is None:
+                dimension = next(
+                    (
+                        field for field in fields
+                        if field.name != measure.name
+                        and field.inferred_type not in {"integer", "number"}
+                    ),
+                    None,
+                )
             if dimension is not None:
                 cards.append(DraftCard(
                     type="line",
