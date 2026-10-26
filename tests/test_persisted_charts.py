@@ -37,5 +37,13 @@ def test_chart_and_dashboard_are_persisted_from_tool_results(tmp_path):
         assert dashboard.data["dashboard"]["charts"] == [
             {"chart_id": chart.data["chart_id"], "position": 0},
         ]
+
+        reopened = registry.execute("get_dashboard", {
+            "dashboard_id": dashboard.data["dashboard"]["id"],
+        })
+
+        assert reopened.ok, reopened.error
+        assert reopened.data["success"] is True
+        assert reopened.data["charts"][0]["chart"]["definition"] == chart.data["definition"]
     finally:
         catalog.close()
