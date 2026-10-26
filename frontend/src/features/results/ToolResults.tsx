@@ -1,6 +1,7 @@
 import type { Row, ToolResult } from "../../api";
 import { Icon } from "../../components/Icon";
 import { ResultVisualization } from "./ResultVisualization";
+import { csvTableFrom, downloadCsv } from "./csvExport";
 
 const titles: Record<string, string> = {
   list_sources: "Источники данных",
@@ -10,6 +11,7 @@ const titles: Record<string, string> = {
   execute_sql: "Результат расчёта",
   run_sql: "Результат расчёта",
 };
+const exportableTools = new Set(["query_data", "run_sql", "execute_sql"]);
 
 function tabularRows(data: unknown): Row[] | null {
   if (Array.isArray(data) && data.every((row) => row !== null && typeof row === "object" && !Array.isArray(row))) return data as Row[];
@@ -34,6 +36,7 @@ export function ToolResults({ results }: { results: ToolResult[] }) {
     <div className="tool-results">
       {results.map((result, i) => {
         const rows = tabularRows(result.data);
+        const csvTable = result.ok && exportableTools.has(result.tool_name) ? csvTableFrom(result.data) : null;
         return <section className="tool-result" key={i}>
           <div className="section-heading">
             <h3>{titles[result.tool_name] ?? "Результат инструмента"}</h3>
@@ -46,6 +49,14 @@ export function ToolResults({ results }: { results: ToolResult[] }) {
               {result.error || "Инструмент не смог выполнить запрос."}
             </p>
           )}
+          {csvTable && <div className="tool-export">
+            <button type="button" onClick={() => downloadCsv(csvTable)}>Скачать CSV</button>
+            {csvTable.truncated && <p>
+              {csvTable.rows.length === 1
+                ? "В CSV попадёт только 1 строка, возвращённая сервером. Результат усечён."
+                : `В CSV попадут только ${csvTable.rows.length} строк, возвращённых сервером. Результат усечён.`}
+            </p>}
+          </div>}
           {rows ? (
             <ResultVisualization
               rows={rows}

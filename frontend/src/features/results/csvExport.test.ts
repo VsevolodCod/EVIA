@@ -9,8 +9,11 @@ it("exports only returned cells, including Unicode and empty results", () => {
   });
 
   expect(table).toEqual({ columns: ["город", "значение"], rows: [["Томск", null], ["Омск", "a,\"b\nв"]], truncated: true });
-  expect(serializeCsv(table!)).toBe('\uFEFF"город","значение"\r\n"Томск",""\r\n"Омск","a,""b\nв"""\r\n');
+  expect(serializeCsv(table!)).toBe('\uFEFF"город","значение"\r\n"Томск",""\r\n"Омск","a,""b\nв"\r\n');
   expect(serializeCsv({ columns: ["город"], rows: [], truncated: false })).toBe('\uFEFF"город"\r\n');
+  expect(csvTableFrom([{ city: "Томск" }, { city: "Омск", value: 0 }])).toEqual({
+    columns: ["city", "value"], rows: [["Томск", null], ["Омск", 0]], truncated: false,
+  });
 });
 
 it("neutralizes spreadsheet formulas even after leading whitespace and control characters", () => {
@@ -26,4 +29,6 @@ it("neutralizes spreadsheet formulas even after leading whitespace and control c
   expect(csv).toContain('"\'-2"');
   expect(csv).toContain('"обычный текст"');
   expect(csv).toContain('"-2"');
+  expect(serializeCsv({ columns: ["=HYPERLINK(\"x\")"], rows: [], truncated: false }))
+    .toContain('"\'=HYPERLINK(""x"")"');
 });
