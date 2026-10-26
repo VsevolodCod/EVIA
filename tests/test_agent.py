@@ -173,7 +173,7 @@ async def test_selected_csv_dashboard_uses_bounded_spec_and_computed_tool(tmp_pa
         result = await AgentRuntime(llm, build_tool_registry(catalog, sources), sources=sources).ask(
             "Создай дашборд с KPI по сумме revenue", [source.source_id]
         )
-        assert result.status == "answered"
+        assert result.status == "answered", result.model_dump()
         assert result.answer_kind == "computed"
         assert result.tool_results[0].tool_name == "create_dashboard"
         assert result.tool_results[0].data["cards"][0]["data"]["value"] == "301.0"
@@ -233,7 +233,7 @@ async def test_dashboard_retries_undrawable_card_and_keeps_final_result(tmp_path
         result = await AgentRuntime(llm, build_tool_registry(catalog, sources), sources=sources).ask(
             "Создай дашборд", [source.source_id]
         )
-        assert result.status == "answered"
+        assert result.status == "answered", result.model_dump()
         assert result.answer_kind == "computed"
         assert llm.calls == 2
         assert [item.data["cards"][0]["status"] for item in result.tool_results] == ["error", "success"]
