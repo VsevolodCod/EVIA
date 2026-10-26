@@ -47,7 +47,11 @@ export function ToolResults({ results }: { results: ToolResult[] }) {
             </p>
           )}
           {rows ? (
-            <ResultVisualization rows={rows} label={`Результат ${result.tool_name}`} />
+            <ResultVisualization
+              rows={rows}
+              label={`Результат ${result.tool_name}`}
+              copyableIdentifierColumns={result.tool_name === "list_sources" ? ["source_id", "snapshot_id"] : undefined}
+            />
           ) : result.data !== null && result.data !== undefined ? (
             <details>
               <summary>Технические данные · {result.tool_name}</summary>
