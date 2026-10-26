@@ -237,7 +237,7 @@ class QueryPlanner:
             return [definition.field], definition.aggregate, None
 
         if isinstance(definition, LineCard):
-            refs = [definition.x.field, definition.y.field]
+            refs = [definition.x, definition.y]
 
             if definition.series is not None:
                 refs.append(definition.series)
@@ -262,7 +262,7 @@ class QueryPlanner:
             aggregate = definition.aggregate
 
         elif isinstance(definition, LineCard):
-            refs = [definition.x.field, definition.y.field]
+            refs = [definition.x, definition.y]
 
             if definition.series is not None:
                 refs.append(definition.series)

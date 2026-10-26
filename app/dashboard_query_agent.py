@@ -135,11 +135,11 @@ class DashboardQueryAgent:
                     x_field = next(field for field in fields if field.name == card.x)
                     definition.update({
                         "x": {
-                            "field": {"source_id": source_id, "field": card.x},
+                            "source_id": source_id, "field": card.x,
                             "type": "temporal" if x_field.inferred_type in {"date", "datetime"} else "category",
                         },
                         "y": {
-                            "field": {"source_id": source_id, "field": card.y},
+                            "source_id": source_id, "field": card.y,
                             "aggregate": card.aggregate,
                         },
                     })

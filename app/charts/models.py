@@ -95,7 +95,9 @@ class DashboardFilter(StrictModel):
 # ---------------------------------------------------------------------------
 
 class ChartBase(StrictModel):
-    # id: Identifier
+    # Legacy dashboard cards had stable IDs. Persisted charts receive a second,
+    # independent ID in ChartModel, so this remains optional for new requests.
+    id: Identifier | None = None
     title: str = Field(min_length=1, max_length=200)
     description: str | None = Field(default=None, max_length=1000)
     filters: list[DashboardFilter] = Field(default_factory=list)
@@ -108,15 +110,13 @@ class KPICard(ChartBase):
     format: ValueFormat = Field(default_factory=ValueFormat)
 
 
-class LineXAxis(StrictModel):
-    field: FieldRef
+class LineXAxis(FieldRef):
     type: Literal["temporal", "category", "number"] = "category"
     label: str | None = Field(default=None, max_length=200)
     sort: SortDirection = "asc"
 
 
-class LineYAxis(StrictModel):
-    field: FieldRef
+class LineYAxis(FieldRef):
     aggregate: Aggregate
     label: str | None = Field(default=None, max_length=200)
     format: ValueFormat = Field(default_factory=ValueFormat)
@@ -134,6 +134,30 @@ ChartDefinition = Annotated[
     KPICard | LineCard,
     Field(discriminator="type"),
 ]
+
+# A dashboard request is retained as a compatibility envelope for the current
+# UI and API. New persistence stores each ChartDefinition separately.
+DashboardCard = ChartDefinition
+
+
+class DashboardSpec(StrictModel):
+    version: Literal[1] = 1
+    title: str = Field(min_length=1, max_length=200)
+    summary: str | None = Field(default=None, max_length=2000)
+    palette: list[str] | None = Field(default=None, min_length=2, max_length=12)
+    filters: list[DashboardFilter] = Field(default_factory=list)
+    cards: list[DashboardCard] = Field(min_length=1, max_length=50)
+
+    @model_validator(mode="after")
+    def validate_dashboard(self):
+        ids = [card.id for card in self.cards]
+        if any(identifier is None for identifier in ids) or len(ids) != len(set(ids)):
+            raise ValueError("Card IDs must be present and unique")
+        if self.palette:
+            for color in self.palette:
+                if len(color) != 7 or not color.startswith("#") or any(c not in "0123456789abcdefABCDEF" for c in color[1:]):
+                    raise ValueError(f"Invalid palette color: {color}")
+        return self
 
 
 class ChartModel(StrictModel):
@@ -257,4 +281,5 @@ class DashboardResult(StrictModel):
     id: Identifier | None = None
     title: str
     summary: str | None = None
+    palette: list[str] | None = None
     cards: list[CardResult] = Field(default_factory=list)
