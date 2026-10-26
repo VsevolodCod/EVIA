@@ -177,6 +177,10 @@ async def test_selected_csv_dashboard_uses_bounded_spec_and_computed_tool(tmp_pa
         assert result.answer_kind == "computed"
         assert result.tool_results[0].tool_name == "create_dashboard"
         assert result.tool_results[0].data["cards"][0]["data"]["value"] == "301.0"
+        card = result.tool_results[0].data["cards"][0]
+        assert card["definition"]["field"] == {"source_id": source.source_id, "field": "revenue"}
+        assert card["definition"]["aggregate"] == "sum"
+        assert card["data"]["provenance"][0]["source_id"] == source.source_id
         assert llm.schemas[0]["properties"]["cards"]["maxItems"] == 2
     finally:
         catalog.close()

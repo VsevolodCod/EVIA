@@ -6,6 +6,7 @@ from app.charts.engine import DashboardEngine
 from app.charts.models import (
     AddChartToDashboardArgs,
     ComposeDashboardArgs,
+    GetDashboardArgs,
 )
 from app.tools.base import ToolDefinition, ToolRegistry
 
@@ -80,6 +81,21 @@ def register_dashboard_tools(
             parameters=compose_parameters,
             required=compose_required,
             handler=lambda **payload: engine.compose_dashboard(payload),
+        )
+    )
+
+    get_parameters, get_required = _build_parameters(GetDashboardArgs)
+
+    registry.register(
+        ToolDefinition(
+            name="get_dashboard",
+            description=(
+                "Load a saved dashboard by ID with its ordered chart "
+                "definitions. It does not recalculate chart data."
+            ),
+            parameters=get_parameters,
+            required=get_required,
+            handler=lambda **payload: engine.get_dashboard(payload),
         )
     )
 

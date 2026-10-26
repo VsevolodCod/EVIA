@@ -217,6 +217,7 @@ class DashboardQueryAgent:
                             "type": card.type,
                             "title": card.title,
                             "status": "success",
+                            "definition": built.data.get("definition"),
                             "data": built.data.get("result"),
                         })
                     continue
