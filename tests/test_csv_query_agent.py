@@ -197,6 +197,29 @@ async def test_fenced_filtered_preview_plan_returns_a_genuine_empty_result(tmp_p
 
 
 @pytest.mark.asyncio
+async def test_fenced_preview_plan_cannot_execute_a_write(tmp_path):
+    class UnsafeProvider:
+        async def chat(self, messages, tools=None):
+            return LLMResponse(content=(
+                '```json\n{"intent":"preview","sql":"DELETE FROM source",'
+                '"explanation":"","columns":[]}\n```'
+            ))
+
+    agent, source, catalog = agent_with_csv(tmp_path, UnsafeProvider())
+    try:
+        answer = await agent.ask("Покажи строки", [source.source_id])
+        assert answer.status == "error"
+        assert answer.results == []
+        assert all(not tool.ok for tool in answer.tool_results)
+        assert agent.sources.preview(source.source_id, limit=10) == [
+            {"month": "2026-01", "revenue": "120"},
+            {"month": "2026-02", "revenue": "180"},
+        ]
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
 async def test_invalid_model_plan_never_runs_sql(tmp_path):
     provider = ScriptedProvider(
         {"intent": "count", "sql": "SELECT 1"},
