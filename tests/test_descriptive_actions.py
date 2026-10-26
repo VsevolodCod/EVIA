@@ -171,6 +171,21 @@ async def test_outliers_compare_heterogeneous_segments_separately(setup):
     assert all(row[0] == "A" for row in response.results[-1].rows)
 
 
+@pytest.mark.asyncio
+async def test_grouped_outliers_do_not_silently_analyze_only_first_twenty_groups(setup):
+    sources, _, catalog = setup
+    rows = ["segment;revenue"] + [f"G{index:02d};{value}" for index in range(21) for value in (1, 2, 3, 4)]
+    source = sources.register_csv("many-groups.csv", ("\n".join(rows) + "\n").encode())
+    provider = Provider({"intent": "outliers", "columns": ["revenue", "segment"], "sql": None, "explanation": ""})
+
+    response = await runtime(sources, catalog, provider).ask("Найди аномалии revenue по segment", [source.source_id])
+
+    assert response.status == "answered"
+    assert "больше 20 групп" in response.answer
+    assert "Анализ кандидатов не выполнялся" in response.answer
+    assert len(response.results) == 1
+
+
 @pytest.mark.parametrize('question', ['Какие значения встречаются чаще всего за июль?', 'Найди дубликаты только за 2024 год',
                                     'Покажи первые 20 строк', 'Какие значения чаще встречаются? Посчитай сумму amount',
                                     'А какие значения встречаются чаще всего за июль?',
