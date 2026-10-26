@@ -89,6 +89,25 @@ async def test_empty_dataset_and_all_empty_field_are_not_model_errors(setup):
     assert duplicates.results[0].rows == [[0, 0]]
 
 
+@pytest.mark.asyncio
+async def test_outliers_use_iqr_thresholds_and_never_claim_a_cause(setup):
+    sources, _, catalog = setup
+    source = sources.register_csv(
+        "outliers.csv",
+        b"month;revenue\nJan;1\nFeb;2\nMar;2\nApr;3\nMay;100\n",
+    )
+
+    assert descriptive_route("Есть ли здесь аномалии?") == "outliers"
+    response = await runtime(sources, catalog).ask("Есть ли здесь аномалии?", [source.source_id])
+
+    assert response.status == "answered"
+    assert response.analysis.intent == "outliers"
+    assert response.timing.calls == []
+    assert "IQR" in response.answer
+    assert "не удалены" in response.answer
+    assert any(float(row[0]) == 100 for result in response.results for row in result.rows)
+
+
 @pytest.mark.parametrize('question', ['Какие значения встречаются чаще всего за июль?', 'Найди дубликаты только за 2024 год',
                                     'Покажи первые 20 строк', 'Какие значения чаще встречаются? Посчитай сумму amount',
                                     'А какие значения встречаются чаще всего за июль?',
