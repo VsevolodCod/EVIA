@@ -211,6 +211,34 @@ async def test_failed_dashboard_does_not_claim_success(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_dashboard_uses_schema_fallback_after_invalid_model_draft(tmp_path):
+    class LLM:
+        async def chat(self, messages, tools=None):
+            return LLMResponse(content="Построю график по данным.", finish_reason="stop")
+
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    sources = SourceService(tmp_path / "data", catalog)
+    source = sources.register_csv(
+        "sales.csv",
+        b"month;revenue\nJan;120,5\nFeb;180,5\n",
+    )
+    try:
+        result = await AgentRuntime(LLM(), build_tool_registry(catalog, sources), sources=sources).ask(
+            "Построй дашборд", [source.source_id]
+        )
+
+        assert result.status == "answered"
+        assert result.answer_kind == "computed"
+        dashboard = result.tool_results[-1]
+        assert dashboard.tool_name == "create_dashboard"
+        assert dashboard.data["id"]
+        assert [card["type"] for card in dashboard.data["cards"]] == ["kpi", "line"]
+        assert all(card["status"] == "success" for card in dashboard.data["cards"])
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
 async def test_dashboard_retries_undrawable_card_and_keeps_final_result(tmp_path):
     import json
 
