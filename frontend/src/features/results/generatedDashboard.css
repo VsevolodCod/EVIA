@@ -20,6 +20,13 @@
 .generated-legend i { width: 9px; height: 9px; border-radius: 50%; }
 .generated-axis-label { margin-top: 8px; color: #89919d; font-size: 11px; }
 .generated-empty { margin: 16px 0; color: #727985; font-size: 13px; }
+.generated-passport { margin-top: 14px; color: #606975; font-size: 12px; }
+.generated-passport summary { cursor: pointer; font-weight: 650; }
+.generated-passport dl { display: grid; gap: 6px; margin: 10px 0 0; }
+.generated-passport dl div { display: flex; gap: 6px; }
+.generated-passport dt { color: #89919d; }
+.generated-passport dt::after { content: ":"; }
+.generated-passport dd { margin: 0; overflow-wrap: anywhere; }
 .generated-line-chart:has(+ .generated-axis-label) { max-height: 290px; }
 @media (max-width: 900px) { .generated-grid, .generated-grid:has(.generated-kpi-card):has(.generated-line-card) { grid-template-columns: 1fr; } .generated-grid:has(.generated-kpi-card):has(.generated-line-card) .generated-card { grid-column: 1; grid-row: auto; } }
 @media (max-width: 640px) { .generated-dashboard .dashboard-top { display: flex; flex-direction: column; align-items: stretch; } .generated-dashboard .dashboard-top > div:first-child { display: block; } .generated-dashboard .dashboard-actions { justify-content: flex-start; } .generated-card { min-height: 160px; } .generated-line-chart { min-height: 180px; } }

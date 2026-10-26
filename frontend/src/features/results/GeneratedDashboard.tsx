@@ -6,7 +6,7 @@ import "../analytics/dashboard.css";
 import "../analytics/dashboardPrint.css";
 import "./generatedDashboard.css";
 
-type Card = { id: string; type: "kpi" | "line"; title: string; status: "success" | "error"; data?: unknown; error?: { code?: string; message?: string } };
+type Card = { id: string; type: "kpi" | "line"; title: string; status: "success" | "error"; definition?: unknown; data?: unknown; error?: { code?: string; message?: string } };
 type Dashboard = { version: 1; title: string; palette?: string[] | null; cards: Card[] };
 type Point = { x: string | number | null; y: string | number | null; series?: string | null };
 
@@ -50,6 +50,18 @@ function lineData(value: unknown): { points: Point[]; xLabel: string; yLabel: st
   const x = object(value.x) ? value.x : {};
   const y = object(value.y) ? value.y : {};
   return { points, xLabel: String(x.label ?? x.field ?? "Категория"), yLabel: String(y.label ?? y.field ?? "Значение") };
+}
+
+function calculationPassport(definition: unknown): { source: string; formula: string; period: string } | null {
+  if (!object(definition)) return null;
+  const measure = definition.type === "kpi" ? definition.field : definition.type === "line" ? definition.y : null;
+  if (!object(measure) || typeof measure.source_id !== "string" || typeof measure.field !== "string" || typeof measure.aggregate !== "string") return null;
+  const filters = definition.filters;
+  return {
+    source: measure.source_id,
+    formula: `${measure.aggregate.toUpperCase()}(${measure.field})`,
+    period: Array.isArray(filters) && filters.length ? "Применены фильтры" : "Весь источник без фильтров",
+  };
 }
 
 function ResultLine({ card, colors, gradient }: { card: Card; colors: string[]; gradient: boolean }) {
@@ -120,6 +132,13 @@ export function GeneratedDashboard({ dashboard, scope }: { dashboard: Dashboard;
         {card.status === "error" ? <p className="generated-empty">Не удалось рассчитать эту карточку.</p>
           : card.type === "kpi" && object(card.data) ? <strong className="generated-value">{displayValue(card.data.value)}</strong>
             : card.type === "line" ? <ResultLine card={card} colors={preference.colors} gradient={preference.gradient} /> : null}
+        {card.status === "success" && calculationPassport(card.definition) && (() => {
+          const passport = calculationPassport(card.definition)!;
+          return <details className="generated-passport">
+            <summary>Паспорт расчёта</summary>
+            <dl><div><dt>Формула</dt><dd>{passport.formula}</dd></div><div><dt>Источник</dt><dd>{passport.source}</dd></div><div><dt>Период</dt><dd>{passport.period}</dd></div></dl>
+          </details>;
+        })()}
       </section>)}
     </div>
   </div>;
