@@ -51,7 +51,7 @@ it("compacts long source identifiers and copies their full values", async () => 
   }]} />);
 
   expect(screen.getByText("74d10961…59340a")).toBeInTheDocument();
-  expect(screen.getByText("0aa1d461…6109c8a")).toBeInTheDocument();
+  expect(screen.getByText("0aa1d461…109c8a")).toBeInTheDocument();
   expect(screen.getByTitle(sourceId)).toBeInTheDocument();
   expect(screen.getByTitle(snapshotId)).toBeInTheDocument();
 
