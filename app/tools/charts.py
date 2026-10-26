@@ -8,9 +8,15 @@ from app.charts.executor import ChartExecutor
 from app.charts.models import (
     ChartDefinition,
     DashboardFilter,
+    GetChartArgs,
 )
 from app.charts.repositories import ChartRepository
 from app.tools.base import ToolDefinition, ToolRegistry
+
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 
 def _resolve_refs(value: Any, definitions: dict[str, Any]) -> Any:
@@ -290,5 +296,69 @@ def register_chart_tools(
             parameters=build_parameters,
             required=build_required,
             handler=build_chart,
+        )
+    )
+
+    get_chart_parameters, get_chart_required = _build_parameters(
+        GetChartArgs
+    )
+
+    def get_chart_definition(**payload: Any) -> dict[str, Any]:
+        """Возвращает сохранённое определение чарта по ID."""
+
+        try:
+            args = GetChartArgs.model_validate(payload)
+        except Exception:
+            return {
+                "success": False,
+                "error": {
+                    "code": "invalid_arguments",
+                    "message": "Invalid chart arguments",
+                },
+            }
+
+        try:
+            chart = charts.get_by_id(args.chart_id)
+
+            if chart is None:
+                return {
+                    "success": False,
+                    "error": {
+                        "code": "chart_not_found",
+                        "message": "Chart not found",
+                    },
+                }
+
+            return {
+                "success": True,
+                "chart_id": chart.chart_id,
+                "version": chart.version,
+                "definition": chart.definition.model_dump(mode="json"),
+            }
+
+        except Exception:
+            logger.exception("Failed to retrieve chart definition")
+            return {
+                "success": False,
+                "error": {
+                    "code": "chart_read_failed",
+                    "message": "Failed to retrieve chart definition",
+                },
+            }
+
+    registry.register(
+        ToolDefinition(
+            name="get_chart_definition",
+            description=(
+                "Retrieve the saved definition of a chart by chart_id. "
+                "Returns the chart configuration, including its type, "
+                "fields, aggregation, filters, and formatting. "
+                "Does not execute the chart or query source data. "
+                "Use this to inspect an existing chart before modifying "
+                "or reusing its definition."
+            ),
+            parameters=get_chart_parameters,
+            required=get_chart_required,
+            handler=get_chart_definition,
         )
     )

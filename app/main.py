@@ -312,8 +312,7 @@ async def chat_agent(
         answer = await agent.ask(
             question=body.question,
             source_ids=[chat.source_id],
-            # Only provider message fields enter the prompt, never saved artifacts.
-            # history=[LLMMessage.model_validate(message.model_dump()) for message in chat.messages[:-1]],
+            history=[ChatMessage.model_validate(message.model_dump()) for message in chat.messages[:-1]],
         )
 
         response_data = answer.model_dump()

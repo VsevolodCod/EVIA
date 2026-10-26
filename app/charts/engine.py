@@ -221,10 +221,10 @@ class DashboardEngine:
             )
 
     def remove_chart_from_dashboard(
-        self,
-        payload: dict[str, Any],
+            self,
+            payload: dict[str, Any],
     ) -> dict[str, Any]:
-        """Удаляет ссылку на чарт из дашборда и уплотняет позиции."""
+        """Удаляет чарт из дашборда по позиции и перенумеровывает остальные."""
 
         try:
             args = self._parse(
@@ -244,24 +244,35 @@ class DashboardEngine:
             dashboard = self.dashboards.get_by_id(args.dashboard_id)
             if dashboard is None:
                 return self._dashboard_result(
-                    error=self._error("dashboard_not_found", "Dashboard not found")
-                )
-
-            if not any(ref.chart_id == args.chart_id for ref in dashboard.charts):
-                return self._dashboard_result(
                     error=self._error(
-                        "chart_not_on_dashboard",
-                        "The chart is not on this dashboard",
+                        "dashboard_not_found",
+                        "Dashboard not found",
                     )
                 )
 
             refs = sorted(
-                (ref for ref in dashboard.charts if ref.chart_id != args.chart_id),
+                dashboard.charts,
                 key=lambda ref: ref.position,
             )
+
+            target = next(
+                (ref for ref in refs if ref.position == args.position),
+                None,
+            )
+
+            if target is None:
+                return self._dashboard_result(
+                    error=self._error(
+                        "chart_position_not_found",
+                        f"No chart at position {args.position}",
+                    )
+                )
+
             normalized_refs = [
                 ChartReference(chart_id=ref.chart_id, position=index)
-                for index, ref in enumerate(refs)
+                for index, ref in enumerate(
+                    ref for ref in refs if ref.position != args.position
+                )
             ]
 
             updated = dashboard.model_copy(
@@ -270,6 +281,7 @@ class DashboardEngine:
                     "version": dashboard.version + 1,
                 }
             )
+
             saved = self.dashboards.update(updated)
             return self._dashboard_result(dashboard=saved)
 

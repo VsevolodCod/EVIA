@@ -204,10 +204,10 @@ class AddChartToDashboardArgs(StrictModel):
 
 
 class RemoveChartFromDashboardArgs(StrictModel):
-    """Аргументы удаления чарта из дашборда."""
+    """Аргументы удаления чарта из дашборда по позиции."""
 
     dashboard_id: Identifier
-    chart_id: Identifier
+    position: int = Field(ge=0)
 
 
 class GetDashboardArgs(StrictModel):
