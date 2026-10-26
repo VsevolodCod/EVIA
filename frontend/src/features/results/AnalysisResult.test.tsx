@@ -157,6 +157,31 @@ it("renders a computed dashboard with KPI, line, colors and PDF export", () => {
   }
 });
 
+it("ties a dashboard calculation passport to the returned snapshot and filters", () => {
+  render(<AnalysisResult entry={{
+    id: "filtered-dashboard", question: "Выручка за январь", state: "success",
+    answer: {
+      answer: "Выручка: 100.", steps: 1, status: "answered", answer_kind: "computed",
+      tool_results: [{ tool_name: "create_dashboard", ok: true, data: {
+        version: 1, title: "Продажи", cards: [{
+          id: "january", type: "kpi", title: "Выручка", status: "success",
+          definition: {
+            type: "kpi", field: { source_id: "sales-1", field: "revenue" }, aggregate: "sum",
+            filters: [{ field: { source_id: "sales-1", field: "month" }, operator: "eq", value: "January" }],
+          },
+          data: { value: 100, provenance: [{ source_id: "sales-1", snapshot_id: "snapshot-jan", schema_version: 3 }] },
+        }],
+      } }],
+    },
+  }} />);
+
+  expect(screen.getByText("snapshot-jan")).toBeInTheDocument();
+  expect(screen.getByText("month = January")).toBeInTheDocument();
+  expect(screen.getByText("Версия схемы")).toBeInTheDocument();
+  expect(screen.getByText("3")).toBeInTheDocument();
+  expect(screen.queryByText("Весь источник без фильтров")).not.toBeInTheDocument();
+});
+
 it("shows the successful dashboard after a failed first attempt", () => {
   render(<AnalysisResult entry={{
     id: "generated-retry", question: "Построй дашборд", state: "success",
