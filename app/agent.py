@@ -6,8 +6,6 @@ from uuid import uuid4
 import httpx
 
 from app.contracts.v1 import AgentResponse, Error
-from app.csv_query_agent import CSVQueryAgent
-from app.dashboard_query_agent import DashboardQueryAgent, is_dashboard_question
 from app.llm.base import LLMProvider
 from app.llm.mock import MockLLMProvider
 from app.source_service import SourceService
@@ -59,8 +57,6 @@ class AgentRuntime:
         self.tools = tools
         self.max_steps = max(1, max_steps)
         self.sources = sources
-        self.csv_query = CSVQueryAgent(llm, sources) if sources is not None else None
-        self.dashboard_query = DashboardQueryAgent(llm, sources, tools) if sources is not None else None
 
     async def ask(
             self,
@@ -105,40 +101,6 @@ class AgentRuntime:
                         request_id=request_id,
                     ),
                 )
-
-            # Если выбран источник и вопрос относится к дашбордам,
-            # передаём управление специализированному обработчику дашбордов.
-            # MockLLMProvider исключён: в тестовом режиме используется другой путь.
-            elif (
-                    selected
-                    and not isinstance(self.llm, MockLLMProvider)
-                    and is_dashboard_question(question) and False
-            ):
-                result = await self.dashboard_query.ask(
-                    question, selected.source_id, timing, request_id, history
-                )
-
-            # Если выбран CSV-источник, а запрос не был направлен обработчику
-            # дашбордов, используем специализированный обработчик CSV.
-            elif (
-                    selected
-                    and selected.source_type == "csv"
-                    and not isinstance(self.llm, MockLLMProvider) and False
-            ):
-                result = await self.csv_query.ask(
-                    question, selected.source_id, timing, request_id, history
-                )
-
-                # Помечаем успешный ответ как вычисленный, а неуспешный —
-                # как ответ модельного типа. Конкретная семантика статусов
-                # определяется контрактом AgentResponse.
-                result.answer_kind = (
-                    "computed" if result.status == "answered" else "model"
-                )
-
-            # Все остальные запросы обрабатываются обычным агентом.
-            # Например, сюда попадут запросы без единственного выбранного
-            # источника, запросы к другим типам источников и тестовый режим.
             else:
                 try:
                     legacy = await self._ask(
@@ -342,6 +304,7 @@ class AgentRuntime:
                 raise IncompleteModelOutput(step, results)
 
             answer_parts.clear()
+            logger.info(response.finish_reason)
 
             if response.finish_reason == "stop":
                 answer = ("".join(answer_parts) + response.content).strip()
@@ -391,6 +354,7 @@ class AgentRuntime:
                 # Надо добавить проверку на корректность и обработку ошибок
                 tool_started = perf_counter()
                 try:
+                    logger.info(call.arguments)
                     result = self.tools.execute(call.name, call.arguments)
                 finally:
                     timing.tools_ms += (perf_counter() - tool_started) * 1000
