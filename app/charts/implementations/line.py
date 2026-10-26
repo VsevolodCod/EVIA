@@ -9,16 +9,16 @@ from app.charts.aggregation import (
     where_clause,
 )
 from app.charts.implementations.base import ChartImplementation
-from app.charts.models import DashboardCard, DashboardFilter, LineCard
+from app.charts.models import ChartDefinition, DashboardFilter, LineCard
 
 
 class LineImplementation(ChartImplementation):
-    def supports(self, card: DashboardCard) -> bool:
+    def supports(self, card: ChartDefinition) -> bool:
         return isinstance(card, LineCard)
 
     def execute(
         self,
-        card: DashboardCard,
+        card: ChartDefinition,
         filters: list[DashboardFilter],
     ) -> dict[str, Any]:
         if not isinstance(card, LineCard):

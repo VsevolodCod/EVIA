@@ -10,16 +10,16 @@ from app.charts.aggregation import (
 )
 from app.charts.errors import ChartExecutionError
 from app.charts.implementations.base import ChartImplementation
-from app.charts.models import DashboardCard, DashboardFilter, KPICard
+from app.charts.models import DashboardFilter, KPICard, ChartDefinition
 
 
 class KPIImplementation(ChartImplementation):
-    def supports(self, card: DashboardCard) -> bool:
+    def supports(self, card: ChartDefinition) -> bool:
         return isinstance(card, KPICard)
 
     def execute(
         self,
-        card: DashboardCard,
+        card: ChartDefinition,
         filters: list[DashboardFilter],
     ) -> dict[str, Any]:
         if not isinstance(card, KPICard):

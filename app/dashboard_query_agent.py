@@ -121,30 +121,83 @@ class DashboardQueryAgent:
                     continue
                 return self._error(request_id, timing, attempt + 1, trace, "VALIDATION_ERROR")
 
-            cards = []
-            for index, card in enumerate(draft.cards):
-                item = {"id": f"card-{index + 1}", "type": card.type, "title": card.title,
-                        "aggregate": card.aggregate}
+            chart_ids = []
+            rendered_cards = []
+            for card in draft.cards:
+                definition = {"type": card.type, "title": card.title}
                 if card.type == "kpi":
-                    item["field"] = {"source_id": source_id, "field": card.field}
+                    definition.update({
+                        "field": {"source_id": source_id, "field": card.field},
+                        "aggregate": card.aggregate,
+                    })
                 else:
-                    item["x"] = {"source_id": source_id, "field": card.x}
-                    item["y"] = {"source_id": source_id, "field": card.y,
-                                 "aggregate": card.aggregate}
-                    del item["aggregate"]
-                cards.append(item)
-            started = perf_counter()
-            result = self.tools.execute("create_dashboard", {
-                "version": 1, "title": draft.title, "cards": cards,
-            })
-            timing.tools_ms += (perf_counter() - started) * 1000
-            trace.append(result)
-            successful = result.ok and isinstance(result.data, dict) and any(
-                card.get("status") == "success" for card in result.data.get("cards", [])
+                    x_field = next(field for field in fields if field.name == card.x)
+                    definition.update({
+                        "x": {
+                            "source_id": source_id, "field": card.x,
+                            "type": "temporal" if x_field.inferred_type in {"date", "datetime"} else "category",
+                        },
+                        "y": {
+                            "source_id": source_id, "field": card.y,
+                            "aggregate": card.aggregate,
+                        },
+                    })
+                chart_started = perf_counter()
+                built = self.tools.execute("build_chart", {"definition": definition, "filters": []})
+                timing.tools_ms += (perf_counter() - chart_started) * 1000
+                if built.ok and isinstance(built.data, dict) and built.data.get("success"):
+                    chart_id = built.data.get("chart_id")
+                    if isinstance(chart_id, str):
+                        chart_ids.append(chart_id)
+                        rendered_cards.append({
+                            "id": chart_id,
+                            "type": card.type,
+                            "title": card.title,
+                            "status": "success",
+                            "data": built.data.get("result"),
+                        })
+                    continue
+                rendered_cards.append({
+                    "id": f"failed-{len(rendered_cards) + 1}",
+                    "type": card.type,
+                    "title": card.title,
+                    "status": "error",
+                    "error": {
+                        "code": "chart_execution_failed",
+                        "message": "Не удалось построить график по выбранным полям.",
+                    },
+                })
+
+            composed = False
+            dashboard_id = None
+            if chart_ids:
+                started = perf_counter()
+                result = self.tools.execute("compose_dashboard", {
+                    "title": draft.title, "summary": None, "chart_ids": chart_ids,
+                })
+                timing.tools_ms += (perf_counter() - started) * 1000
+                composed = (
+                    result.ok
+                    and isinstance(result.data, dict)
+                    and result.data.get("success") is True
+                )
+                if composed and isinstance(result.data.get("dashboard"), dict):
+                    dashboard_id = result.data["dashboard"].get("id")
+
+            # Keep the UI/API contract stable: callers receive one dashboard
+            # result per model attempt, not implementation-specific tool steps.
+            trace.append(ToolResult(tool_name="create_dashboard", ok=True, data={
+                "version": 1,
+                "id": dashboard_id,
+                "title": draft.title,
+                "cards": rendered_cards,
+            }))
+            successful = composed and any(
+                item["status"] == "success" for item in rendered_cards
             )
             if successful:
-                count = sum(card.get("status") == "success" for card in result.data["cards"])
-                failed = len(result.data["cards"]) - count
+                count = len(chart_ids)
+                failed = len(draft.cards) - count
                 answer = f"Построено карточек: {count}."
                 if failed:
                     answer += f" Не удалось рассчитать: {failed}."
