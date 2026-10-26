@@ -168,9 +168,15 @@ def _question_route(question: str) -> str | None:
 
 
 _OUT_OF_SCOPE_WORDS = {
-    "погода", "гороскоп", "рецепт", "стих", "перевод", "код", "программ",
-    "инструкц", "игнорир", "system prompt", "системн",
+    "погода", "гороскоп", "рецепт", "стих", "перевод",
+    "игнорир", "system prompt",
 }
+# "Код", "программа", "инструкция" and "системный" can describe CSV
+# fields. Reject explicit generation/override requests, not these substrings.
+_NON_ANALYTICAL_COMMAND = re.compile(
+    r"\b(?:напиши|сгенерируй|создай)\s+(?:мне\s+)?(?:код\b|программ\w*|инструкци\w*)"
+    r"|\b(?:покажи|раскрой|выведи)\s+(?:мне\s+)?системн\w*\s+(?:промпт\w*|инструкци\w*)"
+)
 _EXPENSE_WORDS = ("расход", "затрат", "себестоим", "cost", "expense")
 _PROFIT_WORDS = ("прибыл", "марж")
 
@@ -231,10 +237,13 @@ class CSVQueryAgent:
             if route is not None and (source is None or source.schema_version != schema.version):
                 continue
             fields = schema.objects[0].fields if schema.objects else []
-            clarification = self._preflight_clarification(question, fields, timing, request_id)
-            if clarification is not None:
-                return clarification
             if route is None:
+                # Complete metadata/descriptive requests already have a bounded
+                # action. In particular an overview reports every date field;
+                # it does not need one date chosen as an analytical dimension.
+                clarification = self._preflight_clarification(question, fields, timing, request_id)
+                if clarification is not None:
+                    return clarification
                 break
             if route in ACTION_NAMES:
                 return self._descriptive_answer(route, [], source_id, schema, timing, request_id, 0)
@@ -392,7 +401,7 @@ class CSVQueryAgent:
         numeric = [field.name for field in fields if field.inferred_type in {"integer", "number"}]
         temporal = [field.name for field in fields if field.inferred_type in {"date", "datetime"}]
 
-        if _matches_any(normalized, _OUT_OF_SCOPE_WORDS):
+        if _matches_any(normalized, _OUT_OF_SCOPE_WORDS) or _NON_ANALYTICAL_COMMAND.search(normalized):
             return self._clarification(
                 question, request_id, timing, "unsupported",
                 "Этот запрос не относится к анализу выбранного CSV. Я работаю только с его данными и не выполняю инструкции из файла или вопроса.",
