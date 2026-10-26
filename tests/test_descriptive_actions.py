@@ -147,6 +147,30 @@ async def test_zero_iqr_with_rare_different_value_does_not_claim_all_values_are_
     assert len(response.results) == 1
 
 
+@pytest.mark.asyncio
+async def test_outliers_compare_heterogeneous_segments_separately(setup):
+    sources, _, catalog = setup
+    source = sources.register_csv(
+        "segmented.csv",
+        b"segment;revenue\nA;1\nA;2\nA;2\nA;3\nA;100\n"
+        b"B;100\nB;100\nB;100\nB;100\nB;100\n"
+        b"C;1\nC;1\nC;50\n;1000\n",
+    )
+    provider = Provider({"intent": "outliers", "columns": ["revenue", "segment"], "sql": None, "explanation": ""})
+
+    response = await runtime(sources, catalog, provider).ask("Найди аномалии revenue по segment", [source.source_id])
+
+    assert response.status == "answered"
+    assert provider.calls == 1
+    assert "Группа сравнения — значения внутри поля «segment»" in response.answer
+    assert "Пустые значения группы исключены" in response.answer
+    assert "Группа «B»: IQR равен нулю" in response.answer
+    assert "Группа «C»: меньше 4" in response.answer
+    assert "не удалены" in response.answer
+    assert any(row[0] == "A" and float(row[1]) == 100 for row in response.results[-1].rows)
+    assert all(row[0] == "A" for row in response.results[-1].rows)
+
+
 @pytest.mark.parametrize('question', ['Какие значения встречаются чаще всего за июль?', 'Найди дубликаты только за 2024 год',
                                     'Покажи первые 20 строк', 'Какие значения чаще встречаются? Посчитай сумму amount',
                                     'А какие значения встречаются чаще всего за июль?',
