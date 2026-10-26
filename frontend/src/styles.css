@@ -1183,6 +1183,15 @@ summary {
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+.clarification-options {
+  display: grid;
+  gap: 4px;
+  margin-top: 9px;
+}
+.clarification-options .text-button {
+  width: fit-content;
+  text-align: left;
+}
 .error-notice {
   color: var(--error);
   background: #fcf1ed;

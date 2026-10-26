@@ -21,7 +21,7 @@ from app.csv_import import CSVImportError
 from app.data_sources.postgresql_adapter import PostgresSourceError, PostgreSQLAdapter
 from app.db import create_chat_database, initialize_chat_database
 from app.llm.factory import create_llm_provider
-from app.models import AnalysisPayload, LLMMessage, AskRequest, AskResponse, ChatMessage, DataSource, CSVVersion, Chat, ChatCreateRequest, ChatSummary, \
+from app.models import AnalysisPayload, AskRequest, AskResponse, ChatMessage, DataSource, CSVVersion, Chat, ChatCreateRequest, ChatSummary, \
     ChatHistoryResponse
 from app.schema_catalog import SchemaCatalog
 from app.source_service import SourceService
@@ -300,8 +300,10 @@ async def chat_agent(
         answer = await agent.ask(
             question=body.question,
             source_ids=[chat.source_id],
-            # Only provider message fields enter the prompt, never saved artifacts.
-            history=[LLMMessage.model_validate(message.model_dump()) for message in chat.messages[:-1]],
+            # CSV clarification choices need their persisted structured payload
+            # to resume the original request. Providers still receive only
+            # role/content fields inside the agent.
+            history=chat.messages[:-1],
         )
 
         response_data = answer.model_dump()

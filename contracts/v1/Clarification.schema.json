@@ -1,0 +1,35 @@
+{
+  "$id": "urn:evia:contracts:1.0:Clarification",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A resumable, non-executing choice presented before an ambiguous query.",
+  "properties": {
+    "options": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 3,
+      "minItems": 1,
+      "title": "Options",
+      "type": "array"
+    },
+    "original_question": {
+      "maxLength": 4000,
+      "minLength": 1,
+      "title": "Original Question",
+      "type": "string"
+    },
+    "reason": {
+      "maxLength": 1000,
+      "minLength": 1,
+      "title": "Reason",
+      "type": "string"
+    }
+  },
+  "required": [
+    "original_question",
+    "reason",
+    "options"
+  ],
+  "title": "Clarification",
+  "type": "object"
+}
