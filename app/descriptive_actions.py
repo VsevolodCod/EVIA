@@ -135,6 +135,16 @@ def descriptive_answer(sources, intent, columns, source_id, schema, timing, requ
             )
             if not stats.rows or stats.rows[0][0] == 0 or stats.rows[0][1] is None or stats.rows[0][2] is None:
                 parts.append('Для расчёта нет корректных числовых значений.')
+            elif stats.rows[0][0] < 4:
+                parts.append(
+                    'Для IQR-анализа нужно минимум 4 корректных числовых значения; '
+                    f'найдено {stats.rows[0][0]}. Кандидаты не определялись.'
+                )
+            elif stats.rows[0][2] <= stats.rows[0][1]:
+                parts.append(
+                    'IQR равен нулю: все корректные значения находятся на одном уровне. '
+                    'Порог для поиска кандидатов не определяется.'
+                )
             else:
                 candidates = execute(
                     'WITH numeric_values AS ('

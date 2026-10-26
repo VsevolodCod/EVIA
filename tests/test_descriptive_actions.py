@@ -108,6 +108,31 @@ async def test_outliers_use_iqr_thresholds_and_never_claim_a_cause(setup):
     assert any(float(row[0]) == 100 for result in response.results for row in result.rows)
 
 
+@pytest.mark.asyncio
+async def test_outliers_explain_when_fewer_than_four_numeric_values_are_available(setup):
+    sources, _, catalog = setup
+    source = sources.register_csv("small-sample.csv", b"revenue\n1\n2\n3\n")
+
+    response = await runtime(sources, catalog).ask("Есть ли здесь аномалии?", [source.source_id])
+
+    assert response.status == "answered"
+    assert "минимум 4" in response.answer
+    assert "найдено 3" in response.answer
+    assert len(response.results) == 1
+
+
+@pytest.mark.asyncio
+async def test_outliers_explain_zero_iqr_for_a_constant_series(setup):
+    sources, _, catalog = setup
+    source = sources.register_csv("constant.csv", b"revenue\n5\n5\n5\n5\n")
+
+    response = await runtime(sources, catalog).ask("Есть ли здесь аномалии?", [source.source_id])
+
+    assert response.status == "answered"
+    assert "IQR равен нулю" in response.answer
+    assert len(response.results) == 1
+
+
 @pytest.mark.parametrize('question', ['Какие значения встречаются чаще всего за июль?', 'Найди дубликаты только за 2024 год',
                                     'Покажи первые 20 строк', 'Какие значения чаще встречаются? Посчитай сумму amount',
                                     'А какие значения встречаются чаще всего за июль?',
