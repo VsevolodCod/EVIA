@@ -54,7 +54,7 @@ def _build_parameters(model: type) -> tuple[dict[str, Any], list[str]]:
     schema = model.model_json_schema()
     definitions = schema.pop("$defs", {})
 
-    parameters = _resolve_refs(schema, definitions)
+    parameters = _resolve_refs(schema["properties"], definitions)
     return parameters, schema.get("required", [])
 
 
