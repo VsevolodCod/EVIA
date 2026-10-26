@@ -197,6 +197,24 @@ async def test_fenced_filtered_preview_plan_returns_a_genuine_empty_result(tmp_p
 
 
 @pytest.mark.asyncio
+async def test_numeric_csv_filter_compares_values_not_raw_text(tmp_path):
+    provider = ScriptedProvider({
+        "intent": "filter",
+        "sql": "SELECT * FROM source WHERE revenue > 1000 LIMIT 10",
+        "explanation": "Filtered rows",
+    })
+    agent, source, catalog = agent_with_csv(tmp_path, provider)
+    try:
+        answer = await agent.ask("Покажи строки, где revenue больше 1000", [source.source_id])
+        assert answer.status == "answered"
+        assert answer.results[0].rows == []
+        assert "нет строк" in answer.answer.lower()
+        assert "CAST" in answer.analysis.sql
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
 async def test_fenced_preview_plan_cannot_execute_a_write(tmp_path):
     class UnsafeProvider:
         async def chat(self, messages, tools=None):
