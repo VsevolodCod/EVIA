@@ -34,6 +34,10 @@ from app.chat_manager import ChatManager, ChatNotFoundError, ChatSourceConflictE
 from app.contracts.v1 import Profile
 from app.web import mount_frontend
 
+from app.charts.engine import DashboardEngine
+from app.charts.executor import ChartExecutor
+from app.charts.repositories import ChartRepository, DashboardRepository
+
 # Логирование и настройки
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -62,10 +66,29 @@ source_service = SourceService(
     postgres_adapter=postgres_adapter,
 )
 
-tool_registry = build_tool_registry(
-    catalog,
+# Репозитории для REST API.
+# Они используют ту же БД и фабрику сессий, что и инструменты агента.
+chart_repository = ChartRepository(session_factory)
+dashboard_repository = DashboardRepository(session_factory)
+
+dashboard_engine = DashboardEngine(
+    charts=chart_repository,
+    dashboards=dashboard_repository,
+)
+
+# Исполнитель для построения сохранённых чартов.
+chart_executor = ChartExecutor.build_executor(
     source_service,
-    session_factory
+    catalog,
+    chart_repository,
+)
+
+tool_registry = build_tool_registry(
+    catalog=catalog,
+    sources=source_service,
+    dashboard_engine=dashboard_engine,
+    executor=chart_executor,
+    charts=chart_repository
 )
 
 # LLM и агент
@@ -390,6 +413,7 @@ async def get_chat(
     :param request:
     :param limit: Количество загружаемых сообщений
     :param offset: Номер последнего загруженного сообщения
+    :param before:
     :return:
     """
     chat_manager: ChatManager = request.app.state.chat_manager
@@ -454,6 +478,214 @@ async def delete_chat(
         )
 
     return None
+
+
+# ---------------------------------------------------------------------------
+# Dashboards API
+# ---------------------------------------------------------------------------
+
+@app.get("/dashboards/ids")
+def list_dashboard_ids(
+    limit: int = Query(default=100, ge=1, le=500),
+):
+    """Возвращает ID сохранённых дашбордов."""
+
+    try:
+        dashboards = dashboard_repository.list_all(limit=limit)
+        return {
+            "dashboard_ids": [dashboard.id for dashboard in dashboards],
+        }
+
+    except Exception as exc:
+        logger.exception("Could not list dashboards")
+        raise HTTPException(
+            status_code=500,
+            detail="Could not list dashboards",
+        ) from exc
+
+
+@app.get("/dashboards/{dashboard_id}")
+def get_dashboard_info(dashboard_id: str):
+    """Возвращает дашборд и определения сохранённых чартов."""
+
+    result = dashboard_engine.get_dashboard({
+        "dashboard_id": dashboard_id,
+    })
+
+    if not result.get("success"):
+        error = result.get("error") or {}
+        code = error.get("code")
+
+        if code == "dashboard_not_found":
+            raise HTTPException(
+                status_code=404,
+                detail="Dashboard not found",
+            )
+
+        if code == "invalid_arguments":
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid dashboard ID",
+            )
+
+        logger.error("Could not retrieve dashboard: %s", error)
+        raise HTTPException(
+            status_code=500,
+            detail="Could not retrieve dashboard",
+        )
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Charts API
+# ---------------------------------------------------------------------------
+
+@app.get("/charts/{chart_id}")
+def get_chart_info(chart_id: str):
+    """Возвращает определение сохранённого чарта."""
+
+    try:
+        chart = chart_repository.get_by_id(chart_id)
+
+        if chart is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Chart not found",
+            )
+
+        return chart.model_dump(mode="json")
+
+    except HTTPException:
+        raise
+
+    except Exception as exc:
+        logger.exception("Could not retrieve chart %s", chart_id)
+        raise HTTPException(
+            status_code=500,
+            detail="Could not retrieve chart",
+        ) from exc
+
+
+@app.get("/charts/{chart_id}/build")
+def build_saved_chart(chart_id: str):
+    """Выполняет сохранённый чарт и возвращает его данные."""
+
+    try:
+        chart = chart_repository.get_by_id(chart_id)
+
+        if chart is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Chart not found",
+            )
+
+        result = chart_executor.execute(chart_id=chart_id)
+
+        return {
+            "success": True,
+            "chart_id": chart.chart_id,
+            "chart_type": chart.definition.type,
+            "definition": chart.definition.model_dump(mode="json"),
+            "result": result,
+        }
+
+    except HTTPException:
+        raise
+
+    except ValueError as exc:
+        # Например, чарт не существует или его параметры некорректны.
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        ) from exc
+
+    except Exception as exc:
+        logger.exception("Could not build chart %s", chart_id)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Could not build chart: {type(exc).__name__}",
+        ) from exc
+
+
+@app.get("/dashboards/{dashboard_id}/build")
+def build_dashboard(dashboard_id: str):
+    """Выполняет все чарты дашборда в порядке их расположения."""
+
+    try:
+        dashboard = dashboard_repository.get_by_id(dashboard_id)
+
+        if dashboard is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Dashboard not found",
+            )
+
+        chart_results = []
+
+        for ref in sorted(dashboard.charts, key=lambda item: item.position):
+            chart = chart_repository.get_by_id(ref.chart_id)
+
+            if chart is None:
+                chart_results.append({
+                    "chart_id": ref.chart_id,
+                    "position": ref.position,
+                    "success": False,
+                    "error": {
+                        "code": "chart_not_found",
+                        "message": "Saved chart not found",
+                    },
+                })
+                continue
+
+            try:
+                result = chart_executor.execute(
+                    chart_id=chart.chart_id,
+                )
+
+                chart_results.append({
+                    "chart_id": chart.chart_id,
+                    "position": ref.position,
+                    "success": True,
+                    "chart_type": chart.definition.type,
+                    "definition": chart.definition.model_dump(mode="json"),
+                    "result": result,
+                })
+
+            except Exception as exc:
+                # Ошибка одного чарта не мешает построить остальные.
+                logger.exception(
+                    "Could not build chart %s in dashboard %s",
+                    ref.chart_id,
+                    dashboard_id,
+                )
+
+                chart_results.append({
+                    "chart_id": ref.chart_id,
+                    "position": ref.position,
+                    "success": False,
+                    "error": {
+                        "code": "chart_execution_failed",
+                        "message": str(exc),
+                    },
+                })
+
+        return {
+            "success": all(item["success"] for item in chart_results),
+            "dashboard": dashboard.model_dump(mode="json"),
+            "charts": chart_results,
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as exc:
+        logger.exception("Could not build dashboard %s", dashboard_id)
+        raise HTTPException(
+            status_code=500,
+            detail="Could not build dashboard",
+        ) from exc
+
 
 
 # Register last: the UI must never shadow the API or its documentation.
