@@ -55,11 +55,12 @@ function lineData(value: unknown): { points: Point[]; xLabel: string; yLabel: st
 function calculationPassport(definition: unknown): { source: string; formula: string; period: string } | null {
   if (!object(definition)) return null;
   const measure = definition.type === "kpi" ? definition.field : definition.type === "line" ? definition.y : null;
-  if (!object(measure) || typeof measure.source_id !== "string" || typeof measure.field !== "string" || typeof measure.aggregate !== "string") return null;
+  const aggregate = definition.type === "kpi" ? definition.aggregate : object(measure) ? measure.aggregate : null;
+  if (!object(measure) || typeof measure.source_id !== "string" || typeof measure.field !== "string" || typeof aggregate !== "string") return null;
   const filters = definition.filters;
   return {
     source: measure.source_id,
-    formula: `${measure.aggregate.toUpperCase()}(${measure.field})`,
+    formula: `${aggregate.toUpperCase()}(${measure.field})`,
     period: Array.isArray(filters) && filters.length ? "Применены фильтры" : "Весь источник без фильтров",
   };
 }
