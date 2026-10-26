@@ -148,8 +148,9 @@ async def test_agent_rejects_empty_continuation_after_truncated_answer():
 
 
 @pytest.mark.asyncio
-async def test_selected_csv_dashboard_uses_bounded_spec_and_computed_tool(tmp_path):
+async def test_selected_csv_dashboard_uses_bounded_spec_and_computed_tool(tmp_path, caplog):
     import json
+    import logging
 
     class LLM:
         def __init__(self):
@@ -170,10 +171,11 @@ async def test_selected_csv_dashboard_uses_bounded_spec_and_computed_tool(tmp_pa
     source = sources.register_csv("sales.csv", b"id;revenue\n1;120,5\n2;180.5\n")
     llm = LLM()
     try:
+        caplog.set_level(logging.ERROR, logger="app.charts.engine")
         result = await AgentRuntime(llm, build_tool_registry(catalog, sources), sources=sources).ask(
             "Создай дашборд с KPI по сумме revenue", [source.source_id]
         )
-        assert result.status == "answered", result.tool_results[-1].data
+        assert result.status == "answered", caplog.text
         assert result.answer_kind == "computed"
         assert result.tool_results[0].tool_name == "create_dashboard"
         assert result.tool_results[0].data["cards"][0]["data"]["value"] == "301.0"
