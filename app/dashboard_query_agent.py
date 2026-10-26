@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 from app.contracts.v1 import AgentResponse, Error
 from app.data_sources.postgresql_adapter import PostgresSourceError
 from app.llm.base import LLMProvider
-from app.models import AgentTiming, ChatMessage, LLMMessage, ModelTiming, ToolResult
+from app.models import AgentTiming, ChatMessage, LLMMessage, ModelTiming, SchemaField, ToolResult
 from app.source_service import SourceService
 from app.tools.base import ToolRegistry
 
@@ -54,6 +54,68 @@ class DashboardQueryAgent:
         self.llm = llm
         self.sources = sources
         self.tools = tools
+
+    @staticmethod
+    def _fallback_draft(fields: list[SchemaField]) -> DashboardDraft | None:
+        """Build a conservative dashboard from the source schema alone."""
+        numeric = [
+            field for field in fields
+            if field.inferred_type in {"integer", "number"}
+            and not field.is_identifier_candidate
+        ]
+        if not numeric:
+            numeric = [
+                field for field in fields
+                if field.inferred_type in {"integer", "number"}
+            ]
+        if numeric:
+            measure = numeric[0]
+            cards = [DraftCard(
+                type="kpi",
+                title=f"Сумма {measure.name}",
+                field=measure.name,
+                aggregate="sum",
+            )]
+            dimension = next(
+                (
+                    field for field in fields
+                    if field.name != measure.name
+                    and not field.is_identifier_candidate
+                    and field.inferred_type not in {"integer", "number"}
+                ),
+                None,
+            )
+            if dimension is None:
+                dimension = next(
+                    (
+                        field for field in fields
+                        if field.name != measure.name
+                        and field.inferred_type not in {"integer", "number"}
+                    ),
+                    None,
+                )
+            if dimension is not None:
+                cards.append(DraftCard(
+                    type="line",
+                    title=f"{measure.name} по {dimension.name}",
+                    x=dimension.name,
+                    y=measure.name,
+                    aggregate="sum",
+                ))
+            return DashboardDraft(title="Базовый обзор данных", cards=cards)
+
+        dimension = next((field for field in fields if not field.is_identifier_candidate), None)
+        if dimension is None:
+            return None
+        return DashboardDraft(
+            title="Базовый обзор данных",
+            cards=[DraftCard(
+                type="kpi",
+                title=f"Количество {dimension.name}",
+                field=dimension.name,
+                aggregate="count",
+            )],
+        )
 
     async def ask(
         self, question: str, source_id: str, timing: AgentTiming, request_id: str,
@@ -101,25 +163,26 @@ class DashboardQueryAgent:
             call_timing.elapsed_ms = elapsed
             timing.calls.append(call_timing)
 
-            if response.finish_reason != "stop":
-                if attempt == 0:
-                    messages.append(LLMMessage(role="user", content="Ответ оборвался. Верни короткий полный JSON для одной карточки."))
-                    continue
-                return self._error(request_id, timing, attempt + 1, trace, "MODEL_OUTPUT_INCOMPLETE")
-            try:
-                draft = DashboardDraft.model_validate(json.loads(response.content))
-            except (ValueError, ValidationError):
-                if attempt == 0:
-                    messages.append(LLMMessage(role="user", content="Неверный JSON. Верни только title и cards с 1–2 карточками по схеме."))
-                    continue
-                return self._error(request_id, timing, attempt + 1, trace, "VALIDATION_ERROR")
+            draft: DashboardDraft | None = None
+            if response.finish_reason == "stop":
+                try:
+                    candidate = DashboardDraft.model_validate(json.loads(response.content))
+                except (ValueError, ValidationError):
+                    candidate = None
+                if candidate and not any(
+                    field not in field_names for card in candidate.cards
+                    for field in (card.field, card.x, card.y) if field is not None
+                ):
+                    draft = candidate
 
-            if any(field not in field_names for card in draft.cards
-                   for field in (card.field, card.x, card.y) if field is not None):
+            fallback_used = draft is None
+            if draft is None:
                 if attempt == 0:
-                    messages.append(LLMMessage(role="user", content="Используй только точные имена доступных полей. Верни JSON заново."))
+                    messages.append(LLMMessage(role="user", content="Верни только полный JSON с title и cards из 1–2 карточек по доступной схеме."))
                     continue
-                return self._error(request_id, timing, attempt + 1, trace, "VALIDATION_ERROR")
+                draft = self._fallback_draft(fields)
+                if draft is None:
+                    return self._error(request_id, timing, attempt + 1, trace, "VALIDATION_ERROR")
 
             chart_ids = []
             rendered_cards = []
@@ -199,6 +262,8 @@ class DashboardQueryAgent:
                 count = len(chart_ids)
                 failed = len(draft.cards) - count
                 answer = f"Построено карточек: {count}."
+                if fallback_used:
+                    answer = "Создан базовый дашборд по схеме источника. " + answer
                 if failed:
                     answer += f" Не удалось рассчитать: {failed}."
                 return AgentResponse(
