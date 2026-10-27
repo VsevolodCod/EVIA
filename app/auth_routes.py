@@ -1,4 +1,4 @@
-"""Same-origin account API and SMTP password recovery."""
+"""Same-origin account API and HTTPS password recovery."""
 
 import os
 import httpx
@@ -67,15 +67,23 @@ def set_cookie(request: Request, response: Response, token: str) -> None:
 
 
 def mail_configured() -> bool:
-    return bool(os.getenv("RESEND_API_KEY") and os.getenv("MAIL_FROM"))
+    return bool((os.getenv("BREVO_API_KEY") and os.getenv("BREVO_SENDER_EMAIL"))
+                or (os.getenv("RESEND_API_KEY") and os.getenv("MAIL_FROM")))
 
 
 def send_reset_code(recipient: str, code: str) -> None:
-    response = httpx.post("https://api.resend.com/emails", timeout=10,
-        headers={"Authorization": f"Bearer {os.environ['RESEND_API_KEY']}"},
-        json={"from": os.environ["MAIL_FROM"], "to": [recipient],
-              "subject": "EVIA — код восстановления пароля",
-              "text": f"Ваш код восстановления EVIA: {code}\nКод действует 10 минут. Если вы не запрашивали его, игнорируйте письмо."})
+    subject = "EVIA — код восстановления пароля"
+    message = f"Ваш код восстановления EVIA: {code}\nКод действует 10 минут. Если вы не запрашивали его, игнорируйте письмо."
+    if os.getenv("BREVO_API_KEY") and os.getenv("BREVO_SENDER_EMAIL"):
+        response = httpx.post("https://api.brevo.com/v3/smtp/email", timeout=10,
+            headers={"api-key": os.environ["BREVO_API_KEY"]},
+            json={"sender": {"email": os.environ["BREVO_SENDER_EMAIL"], "name": "EVIA"},
+                  "to": [{"email": recipient}], "subject": subject, "textContent": message})
+    else:
+        response = httpx.post("https://api.resend.com/emails", timeout=10,
+            headers={"Authorization": f"Bearer {os.environ['RESEND_API_KEY']}"},
+            json={"from": os.environ["MAIL_FROM"], "to": [recipient],
+                  "subject": subject, "text": message})
     response.raise_for_status()
 
 
