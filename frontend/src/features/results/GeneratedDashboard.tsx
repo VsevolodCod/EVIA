@@ -149,7 +149,7 @@ export function GeneratedDashboard({ dashboard, scope, sourceLabel = "Резул
   };
   return <div className="dashboard generated-dashboard" data-print-report="true" style={{ "--dashboard-primary": preference.colors[0], "--dashboard-secondary": preference.colors[1] } as React.CSSProperties}>
     <div className="dashboard-top"><div><h2>{dashboard.title}</h2><p>{sourceLabel}</p></div>
-      <div className="dashboard-actions"><button type="button" aria-expanded={showPalette} onClick={() => setShowPalette(!showPalette)}>Цвета</button><button type="button" onClick={exportPdf}>Экспорт PDF</button></div>
+      <div className="dashboard-actions"><button type="button" aria-expanded={showPalette} onClick={() => setShowPalette(!showPalette)}>Цвета</button><button type="button" onClick={exportPdf}>Печать / PDF</button></div>
     </div>
     {showPalette && <PaletteEditor colors={preference.colors} gradient={preference.gradient} onChange={changePalette} onClose={() => setShowPalette(false)} />}
     <div className="generated-grid">

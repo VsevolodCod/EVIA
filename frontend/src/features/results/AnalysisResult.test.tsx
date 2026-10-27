@@ -164,7 +164,7 @@ it("renders a computed dashboard with KPI, line, colors and PDF export", () => {
     expect(screen.getByText("2026-01")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Цвета" }));
     expect(screen.getByText("Цвета графиков")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Экспорт PDF" }));
+    fireEvent.click(screen.getByRole("button", { name: "Печать / PDF" }));
     expect(print).toHaveBeenCalledOnce();
     expect(screen.queryByText(/\"version\"/)).not.toBeInTheDocument();
   } finally {

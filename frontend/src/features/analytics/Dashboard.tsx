@@ -205,7 +205,7 @@ export function Dashboard({
   return <div className="dashboard" data-testid="print-report" data-print-report="true" style={{ "--dashboard-primary": primary, "--dashboard-secondary": secondary } as React.CSSProperties}>
     <div className="dashboard-top">
       <div><h2>{title}</h2><p>{context === "source" ? "Ключевые показатели и первые строки данных" : sourceLabel}</p></div>
-      <div className="dashboard-actions"><button onClick={exportCsv}>Скачать CSV</button><button className="desktop-export" onClick={exportPdf}>Печать / PDF</button><button className="mobile-export-trigger" onClick={() => setShowMobileExport(true)}>Ещё</button></div>
+      <div className="dashboard-actions"><button onClick={exportCsv}>{context === "source" ? "Скачать предпросмотр" : "Скачать результат"}</button><button className="desktop-export" onClick={exportPdf}>Печать / PDF</button><button className="mobile-export-trigger" onClick={() => setShowMobileExport(true)}>Ещё</button></div>
     </div>
     {showMobileExport && <div className="mobile-export-backdrop" onClick={() => setShowMobileExport(false)}>
       <section className="mobile-export-sheet" aria-label="Экспорт результатов" onClick={(event) => event.stopPropagation()}>
