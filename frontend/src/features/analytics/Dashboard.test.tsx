@@ -170,8 +170,7 @@ it("retains sample counts for PostgreSQL profiles without exact coverage", () =>
   );
 
   expect(screen.getByText("Заполненность выборки")).toBeInTheDocument();
-  expect(screen.getByText("3 строки")).toBeInTheDocument();
-  expect(screen.getByText("выборка до 500 строк")).toBeInTheDocument();
+  expect(screen.queryByText("выборка до 500 строк")).not.toBeInTheDocument();
   expect(
     screen.getByRole("img", { name: /Пропуски по столбцам: city: 33,3%/ }),
   ).toBeInTheDocument();

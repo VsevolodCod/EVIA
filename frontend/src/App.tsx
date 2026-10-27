@@ -739,13 +739,16 @@ export default function App() {
                 onRetry={() => void loadChatList()}
                 label="Повторить загрузку диалогов"
               />
-            ) : failedServerChat && !history.length ? (
-              <ErrorNotice
-                message={historyPages[failedServerChat.chat_id]?.error ?? "Не удалось загрузить историю."}
-                onRetry={() => historyKey && void loadChatHistory(historyKey, failedServerChat.chat_id)}
-                label="Повторить загрузку истории"
-              />
-            ) : historyCount > 0 ? (
+            ) : (
+              <>
+                {failedServerChat && !history.length && (
+                  <ErrorNotice
+                    message={historyPages[failedServerChat.chat_id]?.error ?? "Не удалось загрузить историю."}
+                    onRetry={() => historyKey && void loadChatHistory(historyKey, failedServerChat.chat_id)}
+                    label="Повторить загрузку истории"
+                  />
+                )}
+                {historyCount > 0 ? (
               <div className="history-list">
                 {selectedId && [...conversations].reverse().map((entry) => (
                   <button
@@ -799,8 +802,10 @@ export default function App() {
                   </button>
                 ))}
               </div>
-            ) : (
-              <p className="sidebar-note">Нет диалогов</p>
+                ) : !failedServerChat && (
+                  <p className="sidebar-note">Нет диалогов</p>
+                )}
+              </>
             )}
           </section>
         </aside>

@@ -321,6 +321,24 @@ it("continues an unbound legacy chat only after the user explicitly chooses a so
   expect(sent).toEqual([{ url: "/agent/chat?chat_id=legacy", body: { question: "Продолжи", source_ids: ["A"] } }]);
 });
 
+it("keeps readable old chats visible when the selected source history fails", async () => {
+  setup();
+  const original = vi.mocked(fetch).getMockImplementation()!;
+  vi.mocked(fetch).mockImplementation((url: string | URL | Request, init?: RequestInit) => {
+    if (url === "/chats?limit=100") return Promise.resolve(Response.json([
+      { chat_id: "broken", title: "Текущий", source_id: "A", created_at: "2026-10-18T08:00:00Z", updated_at: "2026-10-18T08:01:00Z" },
+      { chat_id: "old", title: "Старый", source_id: null, created_at: "2026-10-18T08:00:00Z", updated_at: "2026-10-18T08:01:00Z" },
+    ]));
+    if (url === "/chats/broken?limit=50") return Promise.resolve(new Response(null, { status: 500 }));
+    return original(url, init);
+  });
+  render(<App />);
+  await select("A");
+  expect(await screen.findByRole("button", { name: "Повторить загрузку истории" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Без источника: Старый" })).toBeInTheDocument();
+  expect(screen.getAllByRole("heading", { name: "История диалогов" })).toHaveLength(1);
+});
+
 it("silently forgets a stale local chat mapping when its server history is gone", async () => {
   localStorage.setItem("evia.chat-sources.v1", JSON.stringify({ "chat-a": "A" }));
   const fetcher = vi.fn((url: string) => {

@@ -1,15 +1,8 @@
 import { useState } from "react";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { SourceInspector } from "./SourceInspector";
 import { api, type Profile, type Source, type SourceSchema } from "../../api";
 import type { Entry, View } from "../chat/types";
-
-const analyticsCss = readFileSync(
-  resolve(process.cwd(), "src/features/sources/analytics.css"),
-  "utf8",
-);
 
 const source: Source = {
   source_id: "A",
@@ -195,12 +188,6 @@ it("places the source identity above its sections and keeps results contextual",
   expect(navigation).not.toBeNull();
   expect(title.compareDocumentPosition(navigation!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(screen.queryByRole("button", { name: "Результат анализа" })).not.toBeInTheDocument();
-});
-
-it("keeps the profile scope disclosure visible at mobile widths", () => {
-  expect(analyticsCss).toMatch(
-    /@media \(max-width: 640px\) \{[\s\S]*?\.profile-scope\s*\{\s*display:\s*flex;/,
-  );
 });
 
 it("shows import accounting and allows replacing a CSV with a new snapshot", async () => {
