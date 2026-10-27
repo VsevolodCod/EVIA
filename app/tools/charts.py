@@ -254,7 +254,7 @@ def register_chart_tools(
 
         try:
             result = executor.execute(
-                chart_id=chart.id,
+                chart_id=chart.chart_id,
                 filters=filters,
             )
         except Exception:
@@ -270,7 +270,7 @@ def register_chart_tools(
 
         return {
             "success": True,
-            "chart_id": chart.id,
+            "chart_id": chart.chart_id,
             "chart_type": parsed_definition.type,
             "definition": parsed_definition.model_dump(mode="json"),
             "result": result,

@@ -73,7 +73,9 @@ chart_executor = ChartExecutor.build_executor(
 tool_registry = build_tool_registry(
     catalog=catalog,
     sources=source_service,
-    session_factory=session_factory,
+    dashboard_engine=dashboard_engine,
+    executor=chart_executor,
+    charts=chart_repository
 )
 
 # LLM и агент
@@ -272,7 +274,7 @@ async def ask_agent(body: AskRequest):
         return await agent.ask(
             question=body.question,
             source_ids=body.source_ids,
-            **({"dashboard_id": body.dashboard_id} if body.dashboard_id is not None else {}),
+            dashboard_id=body.dashboard_id,
         )
 
     except HTTPException:
@@ -331,11 +333,8 @@ async def chat_agent(
         answer = await agent.ask(
             question=body.question,
             source_ids=[chat.source_id],
-            # CSV clarification choices need their persisted structured payload
-            # to resume the original request. Providers still receive only
-            # role/content fields inside the agent.
+            dashboard_id=body.dashboard_id,
             history=chat.messages[:-1],
-            **({"dashboard_id": body.dashboard_id} if body.dashboard_id is not None else {}),
         )
 
         response_data = answer.model_dump()
@@ -584,7 +583,7 @@ def build_saved_chart(chart_id: str):
 
         return {
             "success": True,
-            "chart_id": chart.id,
+            "chart_id": chart.chart_id,
             "chart_type": chart.definition.type,
             "definition": chart.definition.model_dump(mode="json"),
             "result": result,
@@ -605,7 +604,7 @@ def build_saved_chart(chart_id: str):
         logger.exception("Could not build chart %s", chart_id)
         raise HTTPException(
             status_code=500,
-            detail="Could not build chart",
+            detail=f"Could not build chart: {type(exc).__name__}",
         ) from exc
 
 
@@ -641,11 +640,11 @@ def build_dashboard(dashboard_id: str):
 
             try:
                 result = chart_executor.execute(
-                    chart_id=chart.id,
+                    chart_id=chart.chart_id,
                 )
 
                 chart_results.append({
-                    "chart_id": chart.id,
+                    "chart_id": chart.chart_id,
                     "position": ref.position,
                     "success": True,
                     "chart_type": chart.definition.type,
@@ -686,7 +685,6 @@ def build_dashboard(dashboard_id: str):
             status_code=500,
             detail="Could not build dashboard",
         ) from exc
-
 
 
 # Register last: the UI must never shadow the API or its documentation.
