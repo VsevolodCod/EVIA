@@ -98,7 +98,7 @@ def test_real_workspace_keyboard_mobile_and_safe_markdown(server):
             chat_id = parse_qs(urlparse(sent.value.url).query)['chat_id'][0]
             expect(page.get_by_role('region', name='Ответ EVIA').get_by_text('Тестовый режим показал первые строки выбранного источника.', exact=False)).to_be_visible()
             assert page.locator('.history-list').evaluate('(node) => node.scrollWidth <= node.clientWidth')
-            page.get_by_role('button', name='Результаты инструментов', exact=True).click()
+            page.get_by_role('button', name='Открыть результат', exact=True).click()
             expect(page.get_by_role('region', name='Результат preview_data').get_by_text('0001', exact=True)).to_be_visible()
             # Server source binding and the complete tool result survive without the old browser cache.
             page.evaluate("localStorage.removeItem('evia.chat-sources.v1')")
@@ -106,7 +106,7 @@ def test_real_workspace_keyboard_mobile_and_safe_markdown(server):
             page.get_by_role('button', name='sales', exact=True).click()
             page.get_by_role('button', name=first_question.strip()).click()
             expect(page.get_by_role('region', name='Ответ EVIA').get_by_text('Тестовый режим показал первые строки выбранного источника.', exact=False)).to_be_visible()
-            page.get_by_role('button', name='Результаты инструментов', exact=True).click()
+            page.get_by_role('button', name='Открыть результат', exact=True).click()
             expect(page.get_by_role('region', name='Результат preview_data').get_by_text('0001', exact=True)).to_be_visible()
             page.screenshot(path=str(artifacts / 'desktop.png'), full_page=True)
 
@@ -137,7 +137,7 @@ def test_real_workspace_keyboard_mobile_and_safe_markdown(server):
             expect(page.locator('.markdown pre code')).to_contain_text('SELECT 1')
             expect(page.locator('.markdown img, .markdown script, .markdown a')).to_have_count(0)
             assert page.evaluate('window.pwned') is None
-            page.get_by_role('button', name='Результаты инструментов', exact=True).last.click()
+            page.get_by_role('button', name='Открыть результат', exact=True).last.click()
             expect(page.get_by_text('Нет строк для отображения', exact=True)).to_be_visible()
             page.set_viewport_size({'width': 390, 'height': 844})
             page.get_by_role('button', name='Чат').click()
@@ -199,7 +199,7 @@ def test_profile_overview_drilldown_search_and_responsive_layout(server):
             expect(page.get_by_role('region', name='Предпросмотр источника').get_by_text('1200', exact=True)).to_be_visible()
             page.get_by_role('textbox', name='Ваш вопрос').fill('Какие данные доступны?')
             page.get_by_role('button', name='Отправить вопрос').click()
-            page.get_by_role('button', name='Результаты инструментов', exact=True).click()
+            page.get_by_role('button', name='Открыть результат', exact=True).click()
             expect(page.get_by_role('heading', name='Результат анализа')).to_be_visible()
             expect(page.get_by_role('region', name='Вывод EVIA')).to_contain_text('Тестовый режим')
             page.screenshot(path=str(artifacts / 'analytics-result-desktop.png'), full_page=True)

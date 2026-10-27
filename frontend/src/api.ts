@@ -389,8 +389,8 @@ async function request<T>(
 }
 const path = (id: string) => `/sources/${encodeURIComponent(id)}`;
 export const api = {
-  dashboardIds: (signal?: AbortSignal) =>
-    request("/dashboards/ids?limit=100", z.object({ dashboard_ids: z.array(z.string()) }), { signal }),
+  dashboardIds: (signal?: AbortSignal, offset = 0) =>
+    request(`/dashboards/ids?limit=100&offset=${offset}`, z.object({ dashboard_ids: z.array(z.string()) }), { signal }),
   dashboardInfo: (id: string, signal?: AbortSignal) =>
     request(`/dashboards/${encodeURIComponent(id)}`, savedDashboardInfoSchema, { signal }),
   dashboardBuild: (id: string, signal?: AbortSignal) =>

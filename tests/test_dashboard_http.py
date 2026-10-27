@@ -42,6 +42,11 @@ async def test_saved_dashboard_can_be_listed_reopened_and_built(tmp_path, monkey
     })
     assert dashboard.ok and dashboard.data["success"], dashboard.error or dashboard.data
     dashboard_id = dashboard.data["dashboard"]["id"]
+    second_dashboard = registry.execute("compose_dashboard", {
+        "title": "Sales copy", "chart_ids": [chart_id],
+    })
+    assert second_dashboard.ok and second_dashboard.data["success"]
+    second_dashboard_id = second_dashboard.data["dashboard"]["id"]
 
     monkeypatch.setattr(module, "chart_repository", charts)
     monkeypatch.setattr(module, "dashboard_repository", dashboards)
@@ -52,6 +57,10 @@ async def test_saved_dashboard_can_be_listed_reopened_and_built(tmp_path, monkey
             ids = await client.get("/dashboards/ids")
             assert ids.status_code == 200
             assert dashboard_id in ids.json()["dashboard_ids"]
+            first_page = await client.get("/dashboards/ids?limit=1&offset=0")
+            second_page = await client.get("/dashboards/ids?limit=1&offset=1")
+            assert {first_page.json()["dashboard_ids"][0], second_page.json()["dashboard_ids"][0]} == {dashboard_id, second_dashboard_id}
+            assert (await client.get("/dashboards/ids?limit=1&offset=2")).json()["dashboard_ids"] == []
 
             definition = await client.get(f"/dashboards/{dashboard_id}")
             assert definition.status_code == 200

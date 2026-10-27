@@ -26,13 +26,22 @@ export function DashboardGallery({ onClose, onAttach }: { onClose: () => void; o
     setError("");
     void (async () => {
       try {
-        const { dashboard_ids: ids } = await api.dashboardIds(controller.signal);
-        for (let start = 0; start < ids.length && !controller.signal.aborted; start += 6) {
-          const batch = await Promise.allSettled(ids.slice(start, start + 6).map((id) => api.dashboardInfo(id, controller.signal)));
-          if (controller.signal.aborted) return;
-          setItems((previous) => [...previous, ...batch.flatMap((result) =>
-            result.status === "fulfilled" && result.value.success ? [result.value.dashboard] : [])]);
+        let offset = 0;
+        let failedDetails = 0;
+        while (!controller.signal.aborted) {
+          const { dashboard_ids: ids } = await api.dashboardIds(controller.signal, offset);
+          for (let start = 0; start < ids.length && !controller.signal.aborted; start += 6) {
+            const batch = await Promise.allSettled(ids.slice(start, start + 6).map((id) => api.dashboardInfo(id, controller.signal)));
+            if (controller.signal.aborted) return;
+            failedDetails += batch.filter((result) => result.status === "rejected" || !result.value.success).length;
+            setItems((previous) => [...previous, ...batch.flatMap((result) =>
+              result.status === "fulfilled" && result.value.success ? [result.value.dashboard] : [])]);
+          }
+          offset += ids.length;
+          if (ids.length < 100) break;
         }
+        if (failedDetails && !controller.signal.aborted)
+          setError(`Не удалось загрузить ${failedDetails} из сохранённых отчётов. Повторите загрузку списка.`);
       } catch (cause) {
         if (!controller.signal.aborted) setError(errorMessage(cause));
       } finally {

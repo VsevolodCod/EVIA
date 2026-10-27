@@ -387,9 +387,8 @@ it("shows the actual answer safely in the analysis pane with its table", async (
     await screen.findByRole("heading", { name: "Результат анализа" }),
   ).toBeInTheDocument();
   expect(screen.getByText("Север", { selector: "strong" })).toBeInTheDocument();
-  expect(
-    screen.getByRole("region", { name: "Результат execute_sql" }),
-  ).toBeInTheDocument();
+  fireEvent.click(screen.getByText("Таблица и детали расчёта"));
+  expect(screen.getByRole("region", { name: "Результат execute_sql" })).toBeInTheDocument();
   expect(
     screen.getByRole("img", { name: "Распределение поля revenue" }),
   ).toBeInTheDocument();

@@ -114,6 +114,36 @@ it("shows an incomplete model response as a retryable error", async () => {
   expect(screen.getByRole("button", { name: "Повторить вопрос" })).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: /Результаты инструментов/ })).not.toBeInTheDocument();
 });
+
+it("attaches a selected saved report to one source conversation and clears it on source change", async () => {
+  setup(() => Promise.resolve(Response.json({ answer: "Готово", steps: 1, tool_results: [] })));
+  const original = vi.mocked(fetch).getMockImplementation()!;
+  vi.mocked(fetch).mockImplementation((url: string, init?: RequestInit) => {
+    if (url.startsWith("/dashboards/ids")) return Promise.resolve(Response.json({ dashboard_ids: ["report-1"] }));
+    if (url === "/dashboards/report-1") return Promise.resolve(Response.json({ success: true, dashboard: {
+      id: "report-1", title: "Отчёт продаж", version: 1, charts: [{ chart_id: "total", position: 0 }],
+    } }));
+    if (url === "/dashboards/report-1/build") return Promise.resolve(Response.json({ success: true,
+      dashboard: { id: "report-1", title: "Отчёт продаж", version: 1, charts: [{ chart_id: "total", position: 0 }] },
+      charts: [{ chart_id: "total", position: 0, success: true, chart_type: "kpi", definition: { type: "kpi", title: "Выручка" }, result: { value: 30 } }],
+    }));
+    return original(url, init);
+  });
+  render(<App />);
+  await select("A");
+  fireEvent.click(screen.getByRole("button", { name: /Сохранённые отчёты/ }));
+  fireEvent.click(await screen.findByRole("button", { name: /Отчёт продаж/ }));
+  fireEvent.click(screen.getByRole("button", { name: /Обсудить этот отчёт/ }));
+  expect(screen.getByLabelText("Прикреплённый отчёт")).toHaveTextContent("Отчёт продаж");
+  await ask("Поясни отчёт");
+  const calls = vi.mocked(fetch).mock.calls.filter(([url]) => String(url).startsWith("/agent/chat?"));
+  expect(JSON.parse(String(calls.at(-1)![1]?.body))).toMatchObject({ dashboard_id: "report-1", source_ids: ["A"] });
+  await select("B");
+  expect(screen.queryByLabelText("Прикреплённый отчёт")).not.toBeInTheDocument();
+  await ask("Вопрос по B");
+  const next = vi.mocked(fetch).mock.calls.filter(([url]) => String(url).startsWith("/agent/chat?"));
+  expect(JSON.parse(String(next.at(-1)![1]?.body))).toEqual({ question: "Вопрос по B", source_ids: ["B"] });
+});
 it("keeps late answers and history bound to their source", async () => {
   let now = 1000;
   vi.spyOn(performance, "now").mockImplementation(() => now);

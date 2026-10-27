@@ -19,7 +19,13 @@ export function dashboardFromBuild(build: SavedDashboardBuild): Dashboard {
     cards: [...build.charts].sort((left, right) => left.position - right.position).flatMap((chart) => {
       const definition = record(chart.definition) ? chart.definition : null;
       const type = definition?.type;
-      if (!definition || (type !== "kpi" && type !== "line")) return [];
+      if (!definition || (type !== "kpi" && type !== "line")) return [{
+        id: chart.chart_id,
+        type: "kpi" as const,
+        title: "Недоступный график",
+        status: "error" as const,
+        error: chart.error,
+      }];
       return [{
         id: chart.chart_id,
         type,
@@ -56,7 +62,7 @@ export function SavedDashboard({ id }: { id: string }) {
   const dashboard = dashboardFromBuild(current.build!);
   return <section className="saved-dashboard" aria-label="Сохранённый дашборд">
     <div className="saved-dashboard-toolbar"><span>Сохранённый дашборд</span><button type="button" onClick={() => setRevision((value) => value + 1)}>Обновить данные</button></div>
-    {dashboard.cards.length ? <GeneratedDashboard dashboard={dashboard} scope={`saved-${id}`} sourceLabel="Карточки пересчитаны по текущим данным" />
+    {dashboard.cards.length ? <GeneratedDashboard dashboard={dashboard} scope={`saved-${id}`} sourceLabel={current.build!.success ? "Карточки пересчитаны по текущим данным" : "Часть карточек не удалось пересчитать"} />
       : <p className="dashboard-empty">В этом дашборде пока нет графиков.</p>}
   </section>;
 }

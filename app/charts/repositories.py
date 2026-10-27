@@ -269,11 +269,13 @@ class DashboardRepository:
                 session.flush()
                 return True
 
-    def list_all(self, limit: int = 100) -> list[DashboardModel]:
+    def list_all(self, limit: int = 100, offset: int = 0) -> list[DashboardModel]:
         """Возвращает дашборды вместе с их ссылками на чарты."""
 
         if limit < 1:
             raise ValueError("limit must be greater than zero")
+        if offset < 0:
+            raise ValueError("offset must not be negative")
 
         with self.session_maker() as session:
             statement = (
@@ -281,6 +283,7 @@ class DashboardRepository:
                 .options(selectinload(DashboardORM.chart_refs))
                 .order_by(DashboardORM.dashboard_id)
                 .limit(limit)
+                .offset(offset)
             )
             result = session.scalars(statement)
             return [self._to_model(orm) for orm in result.all()]

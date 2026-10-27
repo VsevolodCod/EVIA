@@ -2030,6 +2030,7 @@ summary {
   .settings-options button + button { border-top: 1px solid #edf1ef; }
   .settings-options button[aria-pressed="true"] { background: #e4f6ec; color: #075d49; font-weight: 700; }
   .settings-info { display: flex; justify-content: space-between; margin-top: 24px; padding: 16px; border: 1px solid #e2ebe7; border-radius: 12px; background: #fff; font-size: 12px; }
+}
 
   .app[data-theme="dark"] { --surface: #192a31; --paper: #12232a; --ink: #e5f0ef; --muted: #b4c4c4; --line: #2d4449; --soft: #183c37; --button-face: #233941; --button-edge: #34545a; --button-ink: #e5f2ef; color: #e5f0ef; background: #12232a; }
   .app[data-theme="dark"] :is(.topbar,.sidebar,.analysis,.chat-panel,.chat-header,.chat-bottom,.mobile-page-header,.mobile-profile,.mobile-fullscreen,.mobile-nav) { background: #12232a; color: #e5f0ef; }
@@ -2124,7 +2125,11 @@ summary {
 .app[data-theme="dark"] .reports-nav { background: #1c3530; color: #d7eee1; border-color: #31594a; }
 .app[data-theme="dark"] .attached-report { background: #1c4032; color: #d7eee1; border-color: #31594a; }
 .app[data-theme="dark"] :is(.source-workspace-heading p,.source-workspace-eyebrow,.dashboard-section-heading p,.chat-welcome .mobile-chat-intro) { color: #b4c4c4; }
-}
+.app[data-theme="dark"] .sidebar { background: #12232a; }
+.app[data-theme="dark"] .source-title,.app[data-theme="dark"] .chat-welcome h3 { color: #e5f0ef; }
+.app[data-theme="dark"] .nav-item.selected { background: #164b40; }
+.app[data-theme="dark"] .user-message { background: #1c4032; color: #e5f0ef; }
+.app[data-theme="dark"] .dashboard-gallery-list button { background: #192a31; }
 @media (max-width: 640px) and (prefers-color-scheme: dark) {
   .app[data-theme="system"] { color-scheme: dark; }
 }

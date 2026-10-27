@@ -34,3 +34,12 @@ it("accepts only a successfully saved dashboard id", () => {
   expect(savedDashboardId({ success: false, dashboard: { id: "report-1" } })).toBeNull();
   expect(savedDashboardId({ success: true, dashboard: { id: "" } })).toBeNull();
 });
+
+it("keeps a failed saved chart visible instead of calling the dashboard empty", () => {
+  const failed = dashboardFromBuild({
+    success: false,
+    dashboard: { id: "report-2", title: "Продажи", version: 1, charts: [{ chart_id: "lost", position: 0 }] },
+    charts: [{ chart_id: "lost", position: 0, success: false, error: { code: "chart_not_found", message: "Saved chart not found" } }],
+  });
+  expect(failed.cards).toMatchObject([{ id: "lost", status: "error", title: "Недоступный график" }]);
+});

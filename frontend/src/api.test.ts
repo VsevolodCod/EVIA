@@ -30,6 +30,13 @@ it("sends a dashboard id only when the user attached a saved report", async () =
   }));
 });
 
+it("requests the next page of saved report ids", async () => {
+  const fetcher = vi.fn().mockResolvedValue(Response.json({ dashboard_ids: [] }));
+  vi.stubGlobal("fetch", fetcher);
+  await api.dashboardIds(undefined, 100);
+  expect(fetcher).toHaveBeenCalledWith("/dashboards/ids?limit=100&offset=100", expect.any(Object));
+});
+
 it("keeps a future stored-analysis envelope readable without inventing results", () => {
   const message: ChatMessage = {
     message_id: "old-answer", role: "assistant", content: "Старый ответ", created_at: "2026-10-25T10:00:00Z",

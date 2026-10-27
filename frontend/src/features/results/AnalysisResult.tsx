@@ -149,7 +149,7 @@ export function AnalysisResult({ entry }: { entry?: Entry }) {
             <summary>Показать SQL</summary>
             <code>{entry.answer.analysis.sql}</code>
           </details>}
-          {otherResults.length > 0 && (scalar ? (
+          {otherResults.length > 0 && (result || generated || savedId || generatedCharts.length ? (
             <details className="analysis-details">
               <summary>Таблица и детали расчёта</summary>
               <ToolResults results={otherResults} />

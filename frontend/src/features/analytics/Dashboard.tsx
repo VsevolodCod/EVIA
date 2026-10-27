@@ -210,7 +210,7 @@ export function Dashboard({
     {showMobileExport && <div className="mobile-export-backdrop" onClick={() => setShowMobileExport(false)}>
       <section className="mobile-export-sheet" aria-label="Экспорт результатов" onClick={(event) => event.stopPropagation()}>
         <div className="mobile-export-heading"><h2>Экспорт результатов</h2><button aria-label="Закрыть экспорт" onClick={() => setShowMobileExport(false)}>✕</button></div>
-        <button className="mobile-export-option" onClick={exportCsv}><span>CSV</span><span><strong>Скачать CSV</strong><small>Строки из предпросмотра</small></span><b>↓</b></button>
+        <button className="mobile-export-option" onClick={exportCsv}><span>CSV</span><span><strong>Скачать CSV</strong><small>{context === "source" ? "Строки из предпросмотра" : "Строки результата"}</small></span><b>↓</b></button>
         <button className="mobile-export-option" onClick={exportPdf}><span>PDF</span><span><strong>Печать / PDF</strong><small>Сохраните PDF в окне печати</small></span><b>↗</b></button>
         <button className="mobile-export-option" onClick={() => { setShowMobileExport(false); setShowPalette(true); }}><span>●</span><span><strong>Цвета графиков</strong><small>Настроить палитру</small></span><b>↗</b></button>
       </section>
