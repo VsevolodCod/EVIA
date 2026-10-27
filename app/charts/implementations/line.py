@@ -17,47 +17,19 @@ class LineImplementation(ChartImplementation):
         return isinstance(card, LineCard)
 
     def execute(
-            self,
-            card: ChartDefinition,
-            filters: list[DashboardFilter],
+        self,
+        card: ChartDefinition,
+        filters: list[DashboardFilter],
     ) -> dict[str, Any]:
         if not isinstance(card, LineCard):
             raise TypeError("LineImplementation only supports line cards")
 
         plan = self.planner.plan(card, filters)
 
-        # В рамках одного SQL-запроса все поля должны относиться
-        # к одному источнику данных.
-        source_ids = {
-            card.x.field.source_id,
-            card.y.field.source_id,
-        }
-        if card.series is not None:
-            source_ids.add(card.series.source_id)
-
-        source_ids.update(item.field.source_id for item in filters)
-        source_ids.update(
-            item.field.source_id
-            for item in card.filters
-        )
-
-        if len(source_ids) != 1:
-            raise ValueError(
-                "Line chart fields and filters must belong to the same source"
-            )
-
-        source_id = next(iter(source_ids))
-
-        if source_id != plan.source_id:
-            raise ValueError(
-                "Planned source_id does not match the chart field source_id"
-            )
-
-        # FieldRef.field содержит имя колонки, а не сам объект FieldRef.
-        x_field = quote_identifier(card.x.field.field)
+        x_field = quote_identifier(card.x.field)
         y_expression = aggregate_expression(
             card.y.aggregate,
-            card.y.field.field,
+            card.y.field,
         )
 
         select_parts = [
@@ -74,31 +46,27 @@ class LineImplementation(ChartImplementation):
             )
             group_parts.append(series_field)
 
-        # Сортировка выполняется по исходному значению X.
-        direction = (
-            "DESC"
-            if card.x.sort in {"desc", "label_desc"}
-            else "ASC"
-        )
-
-        # Объединяем фильтры карточки и фильтры дашборда.
-        all_filters = [*card.filters, *filters]
+        # Сортируем именно по исходному значению X, а не по
+        # форматированной подписи. label_* здесь также сортирует
+        # по исходному полю: отдельного display-label в данных нет.
+        direction = "DESC" if card.x.sort in {"desc", "label_desc"} else "ASC"
 
         sql = (
             f"SELECT {', '.join(select_parts)} "
             f"FROM {plan.table_name}"
-            f"{where_clause(all_filters)} "
+            f"{where_clause(filters)} "
             f"GROUP BY {', '.join(group_parts)} "
             f"ORDER BY {x_field} {direction}"
         )
 
         if series_field is not None:
+            # Для одинаковых X сохраняем стабильный порядок серий.
             sql += f", {series_field} ASC"
 
         sql += f" LIMIT {card.limit}"
 
         result = self.sources.query(
-            source_id,
+            plan.source_id,
             sql,
             row_limit=card.limit,
         )
@@ -118,23 +86,23 @@ class LineImplementation(ChartImplementation):
 
         return {
             "x": {
-                "field": card.x.field.model_dump(mode="json"),
-                "label": card.x.label or card.x.field.field,
+                "field": card.x.field,
+                "label": card.x.label or card.x.field,
                 "type": card.x.type,
             },
             "y": {
-                "field": card.y.field.model_dump(mode="json"),
-                "label": card.y.label or card.y.field.field,
+                "field": card.y.field,
+                "label": card.y.label or card.y.field,
                 "aggregate": card.y.aggregate,
                 "format": card.y.format.model_dump(mode="json"),
             },
             "series_field": (
-                card.series.model_dump(mode="json")
-                if card.series is not None
-                else None
+                card.series.field if card.series is not None else None
             ),
             "points": points,
             "limit": card.limit,
+            # Это флаг достижения лимита, а не доказательство
+            # наличия дополнительных точек.
             "limit_reached": len(points) == card.limit,
             "provenance": [
                 item.model_dump(mode="json")

@@ -8,15 +8,9 @@ from app.charts.executor import ChartExecutor
 from app.charts.models import (
     ChartDefinition,
     DashboardFilter,
-    GetChartArgs,
 )
 from app.charts.repositories import ChartRepository
 from app.tools.base import ToolDefinition, ToolRegistry
-
-import logging
-
-
-logger = logging.getLogger(__name__)
 
 
 def _resolve_refs(value: Any, definitions: dict[str, Any]) -> Any:
@@ -260,22 +254,23 @@ def register_chart_tools(
 
         try:
             result = executor.execute(
-                chart_id=chart.chart_id,
+                chart_id=chart.id,
                 filters=filters,
             )
-        except Exception as exc:
-            # Конфигурация уже сохранена. Возвращаем ID, чтобы агент
-            # мог сообщить об ошибке выполнения и повторить попытку.
+        except Exception:
+            # A failed attempt must not leave an artifact that a retry can add
+            # to a dashboard. Error details can contain schema names, so keep
+            # the public response stable and log-free of source internals.
+            charts.delete(chart.id)
             return {
                 "success": False,
-                "chart_id": chart.chart_id,
                 "chart_type": parsed_definition.type,
-                "error": str(exc),
+                "error": "Не удалось построить график по выбранным полям.",
             }
 
         return {
             "success": True,
-            "chart_id": chart.chart_id,
+            "chart_id": chart.id,
             "chart_type": parsed_definition.type,
             "definition": parsed_definition.model_dump(mode="json"),
             "result": result,
@@ -285,7 +280,7 @@ def register_chart_tools(
         ToolDefinition(
             name="build_chart",
             description=(
-                "Build and automatically save a chart from a generic chart definition, "
+                "Build and save a chart from a generic chart definition, "
                 "then execute it and return its data. The definition must "
                 "match one of the chart models supported by ChartDefinition. "
                 "Use list_chart_models to discover supported types and "
@@ -296,69 +291,5 @@ def register_chart_tools(
             parameters=build_parameters,
             required=build_required,
             handler=build_chart,
-        )
-    )
-
-    get_chart_parameters, get_chart_required = _build_parameters(
-        GetChartArgs
-    )
-
-    def get_chart_definition(**payload: Any) -> dict[str, Any]:
-        """Возвращает сохранённое определение чарта по ID."""
-
-        try:
-            args = GetChartArgs.model_validate(payload)
-        except Exception:
-            return {
-                "success": False,
-                "error": {
-                    "code": "invalid_arguments",
-                    "message": "Invalid chart arguments",
-                },
-            }
-
-        try:
-            chart = charts.get_by_id(args.chart_id)
-
-            if chart is None:
-                return {
-                    "success": False,
-                    "error": {
-                        "code": "chart_not_found",
-                        "message": "Chart not found",
-                    },
-                }
-
-            return {
-                "success": True,
-                "chart_id": chart.chart_id,
-                "version": chart.version,
-                "definition": chart.definition.model_dump(mode="json"),
-            }
-
-        except Exception:
-            logger.exception("Failed to retrieve chart definition")
-            return {
-                "success": False,
-                "error": {
-                    "code": "chart_read_failed",
-                    "message": "Failed to retrieve chart definition",
-                },
-            }
-
-    registry.register(
-        ToolDefinition(
-            name="get_chart_definition",
-            description=(
-                "Retrieve the saved definition of a chart by chart_id. "
-                "Returns the chart configuration, including its type, "
-                "fields, aggregation, filters, and formatting. "
-                "Does not execute the chart or query source data. "
-                "Use this to inspect an existing chart before modifying "
-                "or reusing its definition."
-            ),
-            parameters=get_chart_parameters,
-            required=get_chart_required,
-            handler=get_chart_definition,
         )
     )

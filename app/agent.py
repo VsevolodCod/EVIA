@@ -6,6 +6,8 @@ from uuid import uuid4
 import httpx
 
 from app.contracts.v1 import AgentResponse, Error
+from app.csv_query_agent import CSVQueryAgent
+from app.dashboard_query_agent import DashboardQueryAgent, is_dashboard_question
 from app.llm.base import LLMProvider
 from app.llm.mock import MockLLMProvider
 from app.source_service import SourceService
@@ -57,6 +59,8 @@ class AgentRuntime:
         self.tools = tools
         self.max_steps = max(1, max_steps)
         self.sources = sources
+        self.csv_query = CSVQueryAgent(llm, sources) if sources is not None else None
+        self.dashboard_query = DashboardQueryAgent(llm, sources, tools) if sources is not None else None
 
     async def ask(
             self,
@@ -102,6 +106,11 @@ class AgentRuntime:
                         request_id=request_id,
                     ),
                 )
+            elif selected and dashboard_id is None and not isinstance(self.llm, MockLLMProvider) and is_dashboard_question(question):
+                result = await self.dashboard_query.ask(question, selected.source_id, timing, request_id, history)
+            elif selected and dashboard_id is None and selected.source_type == "csv" and not isinstance(self.llm, MockLLMProvider):
+                result = await self.csv_query.ask(question, selected.source_id, timing, request_id, history)
+                result.answer_kind = "computed" if result.status == "answered" else "model"
             else:
                 try:
                     legacy = await self._ask(

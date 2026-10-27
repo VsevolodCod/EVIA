@@ -52,7 +52,15 @@ function ResultChart({ data, type }: { data: ChartData; type: "bar" | "line" }) 
   </div>;
 }
 
-export function ResultVisualization({ rows, label }: { rows: Row[]; label: string }) {
+export function ResultVisualization({
+  rows,
+  label,
+  copyableIdentifierColumns,
+}: {
+  rows: Row[];
+  label: string;
+  copyableIdentifierColumns?: readonly string[];
+}) {
   const data = useMemo(() => chartData(rows), [rows]);
   const [view, setView] = useState<View>("table");
   const select = (next: View) => setView(next);
@@ -62,6 +70,6 @@ export function ResultVisualization({ rows, label }: { rows: Row[]; label: strin
       <button aria-pressed={view === "bar"} onClick={() => select("bar")}>Столбцы</button>
       <button aria-pressed={view === "line"} onClick={() => select("line")}>Линия</button>
     </nav> : <p className="result-visualization-note">Для графика нужен числовой показатель и поле для подписей.</p>}
-    {view === "table" || !data ? <DataTable rows={rows} label={label} /> : <ResultChart data={data} type={view} />}
+    {view === "table" || !data ? <DataTable rows={rows} label={label} copyableIdentifierColumns={copyableIdentifierColumns} /> : <ResultChart data={data} type={view} />}
   </div>;
 }

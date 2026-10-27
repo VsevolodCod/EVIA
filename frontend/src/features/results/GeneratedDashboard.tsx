@@ -6,7 +6,7 @@ import "../analytics/dashboard.css";
 import "../analytics/dashboardPrint.css";
 import "./generatedDashboard.css";
 
-type Card = { id: string; type: "kpi" | "line"; title: string; status: "success" | "error"; data?: unknown; error?: { code?: string; message?: string } };
+type Card = { id: string; type: "kpi" | "line"; title: string; status: "success" | "error"; definition?: unknown; data?: unknown; error?: { code?: string; message?: string } };
 type Dashboard = { version: 1; title: string; palette?: string[] | null; cards: Card[] };
 type Point = { x: string | number | null; y: string | number | null; series?: string | null };
 
@@ -50,6 +50,31 @@ function lineData(value: unknown): { points: Point[]; xLabel: string; yLabel: st
   const x = object(value.x) ? value.x : {};
   const y = object(value.y) ? value.y : {};
   return { points, xLabel: String(x.label ?? x.field ?? "Категория"), yLabel: String(y.label ?? y.field ?? "Значение") };
+}
+
+function calculationPassport(card: Card): { source: string; formula: string; period: string; filters: string[]; snapshot?: string; schemaVersion?: number } | null {
+  const definition = card.definition;
+  if (!object(definition)) return null;
+  const measure = definition.type === "kpi" ? definition.field : definition.type === "line" ? definition.y : null;
+  const aggregate = definition.type === "kpi" ? definition.aggregate : object(measure) ? measure.aggregate : null;
+  if (!object(measure) || typeof measure.source_id !== "string" || typeof measure.field !== "string" || typeof aggregate !== "string") return null;
+  const filters = Array.isArray(definition.filters) ? definition.filters.flatMap((item) => {
+    if (!object(item) || !object(item.field) || typeof item.field.field !== "string" || typeof item.operator !== "string") return [];
+    const operators: Record<string, string> = { eq: "=", ne: "≠", gt: ">", gte: "≥", lt: "<", lte: "≤", in: "в", not_in: "не в", between: "между", is_null: "пусто", is_not_null: "не пусто" };
+    const value = Array.isArray(item.value) ? item.value.map(String).join(", ") : item.value == null ? "" : String(item.value);
+    return [`${item.field.field} ${operators[item.operator] ?? item.operator}${value ? ` ${value}` : ""}`];
+  }) : [];
+  const result = object(card.data) ? card.data : null;
+  const provenance = result && Array.isArray(result.provenance)
+    ? result.provenance.find((item) => object(item) && item.source_id === measure.source_id) : null;
+  return {
+    source: measure.source_id,
+    formula: `${aggregate.toUpperCase()}(${measure.field})`,
+    period: filters.length ? "Применены фильтры" : "Весь источник без фильтров",
+    filters,
+    snapshot: object(provenance) && typeof provenance.snapshot_id === "string" ? provenance.snapshot_id : undefined,
+    schemaVersion: object(provenance) && typeof provenance.schema_version === "number" ? provenance.schema_version : undefined,
+  };
 }
 
 function ResultLine({ card, colors, gradient }: { card: Card; colors: string[]; gradient: boolean }) {
@@ -120,6 +145,17 @@ export function GeneratedDashboard({ dashboard, scope }: { dashboard: Dashboard;
         {card.status === "error" ? <p className="generated-empty">Не удалось рассчитать эту карточку.</p>
           : card.type === "kpi" && object(card.data) ? <strong className="generated-value">{displayValue(card.data.value)}</strong>
             : card.type === "line" ? <ResultLine card={card} colors={preference.colors} gradient={preference.gradient} /> : null}
+        {card.status === "success" && (() => {
+          const passport = calculationPassport(card);
+          return passport ? <details className="generated-passport">
+            <summary>Паспорт расчёта</summary>
+            <dl><div><dt>Формула</dt><dd>{passport.formula}</dd></div><div><dt>Источник</dt><dd>{passport.source}</dd></div><div><dt>Период</dt><dd>{passport.period}</dd></div>
+              {passport.filters.length > 0 && <div><dt>Фильтры</dt><dd>{passport.filters.join("; ")}</dd></div>}
+              {passport.snapshot && <div><dt>Снимок данных</dt><dd>{passport.snapshot}</dd></div>}
+              {passport.schemaVersion !== undefined && <div><dt>Версия схемы</dt><dd>{passport.schemaVersion}</dd></div>}
+            </dl>
+          </details> : null;
+        })()}
       </section>)}
     </div>
   </div>;

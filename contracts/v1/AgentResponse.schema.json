@@ -61,6 +61,39 @@
       "title": "AnalysisPlan",
       "type": "object"
     },
+    "Clarification": {
+      "description": "A resumable, non-executing choice presented before an ambiguous query.",
+      "properties": {
+        "options": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 3,
+          "minItems": 1,
+          "title": "Options",
+          "type": "array"
+        },
+        "original_question": {
+          "maxLength": 4000,
+          "minLength": 1,
+          "title": "Original Question",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "original_question",
+        "reason",
+        "options"
+      ],
+      "title": "Clarification",
+      "type": "object"
+    },
     "Error": {
       "properties": {
         "code": {
@@ -431,6 +464,17 @@
       "default": null,
       "title": "Chat Id"
     },
+    "clarification": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Clarification"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "contract_version": {
       "const": "1.0",
       "default": "1.0",
@@ -461,6 +505,24 @@
       ],
       "default": null,
       "title": "Job Id"
+    },
+    "outcome": {
+      "anyOf": [
+        {
+          "enum": [
+            "answer",
+            "clarification",
+            "unsupported",
+            "error"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Outcome"
     },
     "request_id": {
       "maxLength": 200,

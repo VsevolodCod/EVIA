@@ -47,7 +47,7 @@ class ChartRepository:
                 orm.definition
             )
             return ChartModel(
-                chart_id=orm.chart_id,
+                id=orm.chart_id,
                 definition=definition,
                 version=orm.version,
             )
@@ -61,7 +61,7 @@ class ChartRepository:
         """Преобразует Pydantic-модель в ORM-сущность."""
 
         return ChartORM(
-            chart_id=chart.chart_id,
+            chart_id=chart.id,
             definition=chart.definition.model_dump(mode="json"),
             version=chart.version,
         )
@@ -97,7 +97,7 @@ class ChartRepository:
             ) from exc
 
         chart = ChartModel(
-            chart_id=chart_id or str(uuid4()),
+            id=chart_id or str(uuid4()),
             definition=parsed_definition,
             version=version,
         )

@@ -23,8 +23,7 @@ from app.csv_import import CSVImportError
 from app.data_sources.postgresql_adapter import PostgresSourceError, PostgreSQLAdapter
 from app.db import create_chat_database, initialize_chat_database, CatalogBase
 from app.llm.factory import create_llm_provider
-from app.models import AnalysisPayload, LLMMessage, AskRequest, AskResponse, ChatMessage, DataSource, CSVVersion, Chat, \
-    ChatCreateRequest, ChatSummary, \
+from app.models import AnalysisPayload, AskRequest, AskResponse, ChatMessage, DataSource, CSVVersion, Chat, ChatCreateRequest, ChatSummary, \
     ChatHistoryResponse
 from app.schema_catalog import SchemaCatalog
 from app.source_service import SourceService
@@ -86,9 +85,7 @@ chart_executor = ChartExecutor.build_executor(
 tool_registry = build_tool_registry(
     catalog=catalog,
     sources=source_service,
-    dashboard_engine=dashboard_engine,
-    executor=chart_executor,
-    charts=chart_repository
+    session_factory=session_factory,
 )
 
 # LLM и агент
@@ -337,7 +334,10 @@ async def chat_agent(
             question=body.question,
             source_ids=[chat.source_id],
             dashboard_id=body.dashboard_id,
-            history=[ChatMessage.model_validate(message.model_dump()) for message in chat.messages[:-1]],
+            # CSV clarification choices need their persisted structured payload
+            # to resume the original request. Providers still receive only
+            # role/content fields inside the agent.
+            history=chat.messages[:-1],
         )
 
         response_data = answer.model_dump()
@@ -586,7 +586,7 @@ def build_saved_chart(chart_id: str):
 
         return {
             "success": True,
-            "chart_id": chart.chart_id,
+            "chart_id": chart.id,
             "chart_type": chart.definition.type,
             "definition": chart.definition.model_dump(mode="json"),
             "result": result,
@@ -642,11 +642,11 @@ def build_dashboard(dashboard_id: str):
 
             try:
                 result = chart_executor.execute(
-                    chart_id=chart.chart_id,
+                    chart_id=chart.id,
                 )
 
                 chart_results.append({
-                    "chart_id": chart.chart_id,
+                    "chart_id": chart.id,
                     "position": ref.position,
                     "success": True,
                     "chart_type": chart.definition.type,

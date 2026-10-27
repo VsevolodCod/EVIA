@@ -18,7 +18,15 @@ from app.charts.models import (
     GetChartArgs,
     RemoveChartFromDashboardArgs,
     ToolError,
+    DashboardSpec,
+    DashboardResult,
+    CardResult,
 )
+from app.charts.errors import ChartError, InvalidDashboardError
+from app.charts.implementations import KPIImplementation, LineImplementation
+from app.charts.query_planner import QueryPlanner
+from app.schema_catalog import SchemaCatalog
+from app.source_service import SourceService
 
 from app.charts.repositories import ChartRepository, DashboardRepository
 
@@ -34,9 +42,18 @@ class DashboardEngine:
     отдельно на SQLAlchemy.
     """
 
-    def __init__(self, charts: ChartRepository, dashboards: DashboardRepository) -> None:
-        self.charts = charts
-        self.dashboards = dashboards
+    def __init__(self, charts: ChartRepository | SchemaCatalog, dashboards: DashboardRepository | SourceService) -> None:
+        # The persisted-artifact API uses repositories. Keep the older
+        # create_dashboard API alive while existing clients migrate.
+        self.charts = charts if isinstance(charts, ChartRepository) else None
+        self.dashboards = dashboards if isinstance(dashboards, DashboardRepository) else None
+        self._legacy_executor = None
+        if self.charts is None and self.dashboards is None:
+            planner = QueryPlanner(charts)
+            self._legacy_executor = [
+                KPIImplementation(dashboards, planner),
+                LineImplementation(dashboards, planner),
+            ]
 
     @staticmethod
     def _parse(
@@ -92,6 +109,8 @@ class DashboardEngine:
         """
 
         try:
+            if self.charts is None or self.dashboards is None:
+                raise RuntimeError("Persistent dashboard storage is not configured")
             args = self._parse(
                 ComposeDashboardArgs,
                 payload,
@@ -121,7 +140,7 @@ class DashboardEngine:
                 title=args.title,
                 summary=args.summary,
                 charts=[
-                    ChartReference(chart_id=chart.chart_id, position=position)
+                    ChartReference(chart_id=chart.id, position=position)
                     for position, chart in enumerate(chart_models)
                 ],
                 version=1,
@@ -151,6 +170,8 @@ class DashboardEngine:
         """
 
         try:
+            if self.charts is None or self.dashboards is None:
+                raise RuntimeError("Persistent dashboard storage is not configured")
             args = self._parse(
                 AddChartToDashboardArgs,
                 payload,
@@ -174,7 +195,7 @@ class DashboardEngine:
                     error=self._error("chart_not_found", "Chart not found")
                 )
 
-            if any(ref.chart_id == chart.chart_id for ref in dashboard.charts):
+            if any(ref.chart_id == chart.id for ref in dashboard.charts):
                 return self._dashboard_result(
                     error=self._error(
                         "chart_already_added",
@@ -195,7 +216,7 @@ class DashboardEngine:
 
             refs.insert(
                 position,
-                ChartReference(chart_id=chart.chart_id, position=position),
+                ChartReference(chart_id=chart.id, position=position),
             )
             normalized_refs = [
                 ChartReference(chart_id=ref.chart_id, position=index)
@@ -221,12 +242,14 @@ class DashboardEngine:
             )
 
     def remove_chart_from_dashboard(
-            self,
-            payload: dict[str, Any],
+        self,
+        payload: dict[str, Any],
     ) -> dict[str, Any]:
-        """Удаляет чарт из дашборда по позиции и перенумеровывает остальные."""
+        """Удаляет ссылку на чарт из дашборда и уплотняет позиции."""
 
         try:
+            if self.dashboards is None:
+                raise RuntimeError("Persistent dashboard storage is not configured")
             args = self._parse(
                 RemoveChartFromDashboardArgs,
                 payload,
@@ -244,35 +267,24 @@ class DashboardEngine:
             dashboard = self.dashboards.get_by_id(args.dashboard_id)
             if dashboard is None:
                 return self._dashboard_result(
+                    error=self._error("dashboard_not_found", "Dashboard not found")
+                )
+
+            if not any(ref.chart_id == args.chart_id for ref in dashboard.charts):
+                return self._dashboard_result(
                     error=self._error(
-                        "dashboard_not_found",
-                        "Dashboard not found",
+                        "chart_not_on_dashboard",
+                        "The chart is not on this dashboard",
                     )
                 )
 
             refs = sorted(
-                dashboard.charts,
+                (ref for ref in dashboard.charts if ref.chart_id != args.chart_id),
                 key=lambda ref: ref.position,
             )
-
-            target = next(
-                (ref for ref in refs if ref.position == args.position),
-                None,
-            )
-
-            if target is None:
-                return self._dashboard_result(
-                    error=self._error(
-                        "chart_position_not_found",
-                        f"No chart at position {args.position}",
-                    )
-                )
-
             normalized_refs = [
                 ChartReference(chart_id=ref.chart_id, position=index)
-                for index, ref in enumerate(
-                    ref for ref in refs if ref.position != args.position
-                )
+                for index, ref in enumerate(refs)
             ]
 
             updated = dashboard.model_copy(
@@ -281,7 +293,6 @@ class DashboardEngine:
                     "version": dashboard.version + 1,
                 }
             )
-
             saved = self.dashboards.update(updated)
             return self._dashboard_result(dashboard=saved)
 
@@ -303,6 +314,8 @@ class DashboardEngine:
         """
 
         try:
+            if self.charts is None or self.dashboards is None:
+                raise RuntimeError("Persistent dashboard storage is not configured")
             args = self._parse(
                 GetDashboardArgs,
                 payload,
@@ -344,7 +357,7 @@ class DashboardEngine:
                     continue
 
                 chart_items.append({
-                    "chart_id": chart.chart_id,
+                    "chart_id": chart.id,
                     "position": ref.position,
                     "status": "success",
                     "chart": chart.model_dump(mode="json"),
@@ -370,6 +383,8 @@ class DashboardEngine:
         """Возвращает конфигурацию сохранённого чарта по ID."""
 
         try:
+            if self.charts is None:
+                raise RuntimeError("Persistent chart storage is not configured")
             args = self._parse(
                 GetChartArgs,
                 payload,
@@ -396,3 +411,28 @@ class DashboardEngine:
                     "Failed to retrieve chart",
                 )
             )
+
+    def create_dashboard(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Compute a transient dashboard for clients using the v1 contract."""
+        if self._legacy_executor is None:
+            raise InvalidDashboardError("Transient dashboard execution is not configured")
+        try:
+            spec = DashboardSpec.model_validate(payload)
+        except ValidationError as exc:
+            raise InvalidDashboardError("Dashboard specification does not match version 1") from exc
+        results = []
+        for card in spec.cards:
+            filters = [*spec.filters, *card.filters]
+            try:
+                implementation = next(item for item in self._legacy_executor if item.supports(card))
+                results.append(CardResult(id=card.id, type=card.type, title=card.title,
+                                          status="success", data=implementation.execute(card, filters)))
+            except ChartError as exc:
+                results.append(CardResult(id=card.id, type=card.type, title=card.title,
+                                          status="error", error=exc.to_dict()))
+            except Exception:
+                logger.exception("Failed to execute legacy dashboard card: card_id=%s", card.id)
+                results.append(CardResult(id=card.id, type=card.type, title=card.title, status="error",
+                                          error={"code": "execution_error", "message": "Failed to compute this card"}))
+        return DashboardResult(title=spec.title, summary=spec.summary, palette=spec.palette,
+                               cards=results).model_dump(mode="json")

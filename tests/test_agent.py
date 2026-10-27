@@ -177,6 +177,10 @@ async def test_selected_csv_dashboard_uses_bounded_spec_and_computed_tool(tmp_pa
         assert result.answer_kind == "computed"
         assert result.tool_results[0].tool_name == "create_dashboard"
         assert result.tool_results[0].data["cards"][0]["data"]["value"] == "301.0"
+        card = result.tool_results[0].data["cards"][0]
+        assert card["definition"]["field"] == {"source_id": source.source_id, "field": "revenue"}
+        assert card["definition"]["aggregate"] == "sum"
+        assert card["data"]["provenance"][0]["source_id"] == source.source_id
         assert llm.schemas[0]["properties"]["cards"]["maxItems"] == 2
     finally:
         catalog.close()
@@ -206,6 +210,34 @@ async def test_failed_dashboard_does_not_claim_success(tmp_path):
         assert result.status == "error"
         assert result.answer_kind != "computed"
         assert result.tool_results[0].tool_name == "create_dashboard"
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
+async def test_dashboard_uses_schema_fallback_after_invalid_model_draft(tmp_path):
+    class LLM:
+        async def chat(self, messages, tools=None):
+            return LLMResponse(content="Построю график по данным.", finish_reason="stop")
+
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    sources = SourceService(tmp_path / "data", catalog)
+    source = sources.register_csv(
+        "sales.csv",
+        b"month;revenue\nJan;120,5\nFeb;180,5\n",
+    )
+    try:
+        result = await AgentRuntime(LLM(), build_tool_registry(catalog, sources), sources=sources).ask(
+            "Построй дашборд", [source.source_id]
+        )
+
+        assert result.status == "answered"
+        assert result.answer_kind == "computed"
+        dashboard = result.tool_results[-1]
+        assert dashboard.tool_name == "create_dashboard"
+        assert dashboard.data["id"]
+        assert [card["type"] for card in dashboard.data["cards"]] == ["kpi", "line"]
+        assert all(card["status"] == "success" for card in dashboard.data["cards"])
     finally:
         catalog.close()
 

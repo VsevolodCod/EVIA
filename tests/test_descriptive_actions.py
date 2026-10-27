@@ -35,7 +35,7 @@ def runtime(sources, catalog, provider=None):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('question', ['какие значения встречаются чаще всего?', 'Покажи наиболее частые значения', 'Какие значения чаще встречаются?'])
+@pytest.mark.parametrize('question', ['какие значения встречаются чаще всего?', 'Покажи наиболее частые значения', 'Какие значения чаще встречаются?', 'А какие значения встречаются чаще всего?', 'А теперь покажи наиболее частые значения'])
 async def test_generic_frequency_is_exact_and_states_default_fields(setup, question):
     sources, source, catalog = setup
     response = await runtime(sources, catalog).ask(question, [source.source_id])
@@ -89,8 +89,107 @@ async def test_empty_dataset_and_all_empty_field_are_not_model_errors(setup):
     assert duplicates.results[0].rows == [[0, 0]]
 
 
+@pytest.mark.asyncio
+async def test_outliers_use_iqr_thresholds_and_never_claim_a_cause(setup):
+    sources, _, catalog = setup
+    source = sources.register_csv(
+        "outliers.csv",
+        b"month;revenue\nJan;1\nFeb;2\nMar;2\nApr;3\nMay;100\n",
+    )
+
+    assert descriptive_route("Есть ли здесь аномалии?") == "outliers"
+    response = await runtime(sources, catalog).ask("Есть ли здесь аномалии?", [source.source_id])
+
+    assert response.status == "answered"
+    assert response.analysis.intent == "outliers"
+    assert response.timing.calls == []
+    assert "IQR" in response.answer
+    assert "не удалены" in response.answer
+    assert any(float(row[0]) == 100 for result in response.results for row in result.rows)
+
+
+@pytest.mark.asyncio
+async def test_outliers_explain_when_fewer_than_four_numeric_values_are_available(setup):
+    sources, _, catalog = setup
+    source = sources.register_csv("small-sample.csv", b"revenue\n1\n2\n3\n")
+
+    response = await runtime(sources, catalog).ask("Есть ли здесь аномалии?", [source.source_id])
+
+    assert response.status == "answered"
+    assert "минимум 4" in response.answer
+    assert "найдено 3" in response.answer
+    assert len(response.results) == 1
+
+
+@pytest.mark.asyncio
+async def test_outliers_explain_zero_iqr_for_a_constant_series(setup):
+    sources, _, catalog = setup
+    source = sources.register_csv("constant.csv", b"revenue\n5\n5\n5\n5\n")
+
+    response = await runtime(sources, catalog).ask("Есть ли здесь аномалии?", [source.source_id])
+
+    assert response.status == "answered"
+    assert "IQR равен нулю" in response.answer
+    assert len(response.results) == 1
+
+
+@pytest.mark.asyncio
+async def test_zero_iqr_with_rare_different_value_does_not_claim_all_values_are_equal(setup):
+    sources, _, catalog = setup
+    source = sources.register_csv("rare-value.csv", b"revenue\n5\n5\n5\n5\n100\n")
+
+    response = await runtime(sources, catalog).ask("Есть ли здесь аномалии?", [source.source_id])
+
+    assert response.status == "answered"
+    assert "IQR равен нулю" in response.answer
+    assert "есть отличающиеся значения" in response.answer
+    assert "все корректные значения находятся на одном уровне" not in response.answer
+    assert len(response.results) == 1
+
+
+@pytest.mark.asyncio
+async def test_outliers_compare_heterogeneous_segments_separately(setup):
+    sources, _, catalog = setup
+    source = sources.register_csv(
+        "segmented.csv",
+        b"segment;revenue\nA;1\nA;2\nA;2\nA;3\nA;100\n"
+        b"B;100\nB;100\nB;100\nB;100\nB;100\n"
+        b"C;1\nC;1\nC;50\n;1000\n",
+    )
+    provider = Provider({"intent": "outliers", "columns": ["revenue", "segment"], "sql": None, "explanation": ""})
+
+    response = await runtime(sources, catalog, provider).ask("Найди аномалии revenue по segment", [source.source_id])
+
+    assert response.status == "answered"
+    assert provider.calls == 1
+    assert "Группа сравнения — значения внутри поля «segment»" in response.answer
+    assert "Пустые значения группы исключены" in response.answer
+    assert "Группа «B»: IQR равен нулю" in response.answer
+    assert "Группа «C»: меньше 4" in response.answer
+    assert "не удалены" in response.answer
+    assert any(row[0] == "A" and float(row[1]) == 100 for row in response.results[-1].rows)
+    assert all(row[0] == "A" for row in response.results[-1].rows)
+
+
+@pytest.mark.asyncio
+async def test_grouped_outliers_do_not_silently_analyze_only_first_twenty_groups(setup):
+    sources, _, catalog = setup
+    rows = ["segment;revenue"] + [f"G{index:02d};{value}" for index in range(21) for value in (1, 2, 3, 4)]
+    source = sources.register_csv("many-groups.csv", ("\n".join(rows) + "\n").encode())
+    provider = Provider({"intent": "outliers", "columns": ["revenue", "segment"], "sql": None, "explanation": ""})
+
+    response = await runtime(sources, catalog, provider).ask("Найди аномалии revenue по segment", [source.source_id])
+
+    assert response.status == "answered"
+    assert "больше 20 групп" in response.answer
+    assert "Анализ кандидатов не выполнялся" in response.answer
+    assert len(response.results) == 1
+
+
 @pytest.mark.parametrize('question', ['Какие значения встречаются чаще всего за июль?', 'Найди дубликаты только за 2024 год',
-                                    'Покажи первые 20 строк', 'Какие значения чаще встречаются? Посчитай сумму amount'])
+                                    'Покажи первые 20 строк', 'Какие значения чаще встречаются? Посчитай сумму amount',
+                                    'А какие значения встречаются чаще всего за июль?',
+                                    'А теперь покажи первые строки только по региону A'])
 def test_filtered_queries_are_not_replaced_by_default_actions(question):
     assert descriptive_route(question) is None
 

@@ -616,6 +616,33 @@ a {
 .table-scroll td {
   min-width: 100px;
 }
+.identifier-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 100%;
+  white-space: nowrap;
+}
+.identifier-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font: inherit;
+}
+.identifier-copy {
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 5px;
+  padding: 3px 6px;
+  background: #edf3e8;
+  color: #4c6a51;
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+.identifier-copy:hover,
+.identifier-copy:focus-visible {
+  background: #dfeada;
+}
 .table-scroll td.row-number,
 .table-scroll th.row-number {
   min-width: 38px;
@@ -1182,6 +1209,15 @@ summary {
   color: var(--accent);
   text-decoration: underline;
   text-underline-offset: 3px;
+}
+.clarification-options {
+  display: grid;
+  gap: 4px;
+  margin-top: 9px;
+}
+.clarification-options .text-button {
+  width: fit-content;
+  text-align: left;
 }
 .error-notice {
   color: var(--error);
