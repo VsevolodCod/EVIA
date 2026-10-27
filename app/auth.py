@@ -8,7 +8,9 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from pwdlib import PasswordHash
-from sqlalchemy import DateTime, ForeignKey, Integer, String, create_engine, delete, select
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, create_engine, delete, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
@@ -38,6 +40,7 @@ class UserRow(AuthBase):
     name: Mapped[str] = mapped_column(String(80), nullable=False)
     password_digest: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    is_legacy_owner: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
 
 class SessionRow(AuthBase):
@@ -97,7 +100,7 @@ class AuthStore:
     def close(self) -> None:
         self.engine.dispose()
 
-    def register(self, email: str, password: str, name: str) -> Account:
+    def register(self, email: str, password: str, name: str, *, _legacy_owner: bool = False) -> Account:
         if not 12 <= len(password) <= 128:
             raise ValueError("Password must contain 12–128 characters")
         email = normalized_email(email)
@@ -105,7 +108,8 @@ class AuthStore:
         if not name or len(name) > 80:
             raise ValueError("Name must contain 1–80 characters")
         row = UserRow(id=str(uuid4()), email=email, name=name,
-                      password_digest=password_hash.hash(password), created_at=utc_now())
+                      password_digest=password_hash.hash(password), created_at=utc_now(),
+                      is_legacy_owner=_legacy_owner)
         try:
             with self.sessions.begin() as session:
                 session.add(row)
@@ -118,8 +122,10 @@ class AuthStore:
         with self.sessions() as session:
             existing = session.scalar(select(UserRow).where(UserRow.email == email))
             if existing:
+                if not existing.is_legacy_owner:
+                    raise ValueError("bootstrap account already exists without trusted ownership")
                 return Account.from_row(existing)
-        return self.register(email, password, name)
+        return self.register(email, password, name, _legacy_owner=True)
 
     def authenticate(self, email: str, password: str) -> Account | None:
         with self.sessions() as session:
@@ -150,23 +156,21 @@ class AuthStore:
             with self.sessions.begin() as session:
                 session.execute(delete(SessionRow).where(SessionRow.token_digest == hashlib.sha256(token.encode()).hexdigest()))
 
-    def login_allowed(self, email: str, remote: str) -> bool:
-        key = self._attempt_key(email, remote)
-        with self.sessions() as session:
-            row = session.get(AttemptRow, key)
-            return row is None or _aware(row.resets_at) <= utc_now() or row.count < 8
-
-    def record_login_failure(self, email: str, remote: str) -> None:
+    def reserve_login_attempt(self, email: str, remote: str) -> bool:
         key = self._attempt_key(email, remote)
         with self.sessions.begin() as session:
+            insert = pg_insert if self.engine.dialect.name == "postgresql" else sqlite_insert
+            session.execute(insert(AttemptRow).values(
+                key=key, count=0, resets_at=utc_now() + timedelta(minutes=15)
+            ).on_conflict_do_nothing(index_elements=["key"]))
             row = session.get(AttemptRow, key, with_for_update=True)
-            if row is None:
-                session.add(AttemptRow(key=key, count=1, resets_at=utc_now() + timedelta(minutes=15)))
-            elif _aware(row.resets_at) <= utc_now():
-                row.count = 1
+            if _aware(row.resets_at) <= utc_now():
+                row.count = 0
                 row.resets_at = utc_now() + timedelta(minutes=15)
-            else:
-                row.count += 1
+            if row.count >= 8:
+                return False
+            row.count += 1
+            return True
 
     def clear_login_failures(self, email: str, remote: str) -> None:
         with self.sessions.begin() as session:

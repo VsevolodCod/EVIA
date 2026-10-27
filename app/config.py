@@ -72,7 +72,8 @@ class Settings:
             statement_timeout_ms=max(1, int(os.getenv("POSTGRES_STATEMENT_TIMEOUT_MS", "10000"))),
         )
 
-        self.auth_enabled = os.getenv("AUTH_ENABLED", "0") == "1"
+        # A missing/mistyped flag on Railway must never expose owned records.
+        self.auth_enabled = bool(os.getenv("RAILWAY_ENVIRONMENT")) or os.getenv("AUTH_ENABLED", "0") == "1"
         self.auth_database_url = os.getenv("AUTH_DATABASE_URL", "")
         self.auth_secret = os.getenv("AUTH_SECRET", "")
         self.auth_bootstrap_email = os.getenv("AUTH_BOOTSTRAP_EMAIL", "")

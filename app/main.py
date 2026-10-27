@@ -249,6 +249,8 @@ def download_csv_version(source_id: str, snapshot_id: str):
 def postgresql_status():
     if postgres_adapter is None:
         return {"configured": False, "connected": False}
+    if settings.auth_enabled and not any(source.source_type == "postgresql" for source in source_service.list_sources()):
+        return {"configured": False, "connected": False}
     return {"configured": True, "connected": postgres_adapter.connection_status()}
 
 

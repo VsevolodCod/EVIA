@@ -1,6 +1,7 @@
 """Account behavior and tenant boundaries; uses an ephemeral auth database."""
 
 import importlib
+import os
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -142,3 +143,50 @@ async def test_reset_code_is_single_use_and_revokes_sessions(tmp_path):
     assert store.authenticate("user@example.com", "new correct horse battery") is not None
     assert store.authenticate("user@example.com", "correct horse battery") is None
     store.close()
+
+
+def test_existing_account_cannot_claim_legacy_data_by_email(tmp_path):
+    from app.auth import AuthStore
+
+    store = AuthStore(f"sqlite:///{tmp_path / 'auth.db'}", secret="test-secret-only-for-ci")
+    store.initialize()
+    store.register("owner@example.com", "attacker-known password", "Impostor")
+    with pytest.raises(ValueError, match="bootstrap"):
+        store.bootstrap("owner@example.com", "different bootstrap password", "Owner")
+    store.close()
+
+
+def test_railway_authentication_cannot_be_disabled(monkeypatch):
+    from app.config import Settings
+
+    monkeypatch.setenv("RAILWAY_ENVIRONMENT", "production")
+    monkeypatch.setenv("AUTH_ENABLED", "0")
+    assert Settings().auth_enabled is True
+
+
+def test_login_attempts_are_reserved_before_password_check(tmp_path):
+    from app.auth import AuthStore
+
+    store = AuthStore(f"sqlite:///{tmp_path / 'auth.db'}", secret="test-secret-only-for-ci")
+    store.initialize()
+    assert [store.reserve_login_attempt("person@example.com", "127.0.0.1") for _ in range(9)] == [True] * 8 + [False]
+    store.close()
+
+
+@pytest.mark.skipif(not os.getenv("EVIA_TEST_PG_URL"), reason="hosted PostgreSQL service only")
+def test_auth_store_uses_postgresql_in_hosted_ci():
+    from app.auth import AuthBase, AuthStore
+
+    store = AuthStore(os.environ["EVIA_TEST_PG_URL"], secret="test-secret-only-for-ci")
+    store.initialize()
+    try:
+        user = store.register("postgres@example.com", "long postgres password", "Postgres")
+        session = store.create_session(user.id)
+        assert store.get_session_user(session).id == user.id
+        assert store.reserve_login_attempt(user.email, "127.0.0.1")
+        code = store.issue_reset_code(user.email)
+        assert store.reset_password(user.email, code, "another postgres password")
+        assert store.get_session_user(session) is None
+    finally:
+        AuthBase.metadata.drop_all(store.engine)
+        store.close()

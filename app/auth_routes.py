@@ -106,11 +106,10 @@ async def register(body: Registration, request: Request, response: Response):
 async def login(body: Credentials, request: Request, response: Response):
     remote = request.client.host if request.client else "unknown"
     auth = store(request)
-    if not await run_in_threadpool(auth.login_allowed, str(body.email), remote):
+    if not await run_in_threadpool(auth.reserve_login_attempt, str(body.email), remote):
         raise HTTPException(status_code=429, detail="Too many attempts. Try again in 15 minutes")
     user = await run_in_threadpool(auth.authenticate, str(body.email), body.password)
     if user is None:
-        await run_in_threadpool(auth.record_login_failure, str(body.email), remote)
         raise HTTPException(status_code=401, detail="Invalid email or password")
     await run_in_threadpool(auth.clear_login_failures, str(body.email), remote)
     token = await run_in_threadpool(auth.create_session, user.id)
