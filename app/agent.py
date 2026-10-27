@@ -62,6 +62,7 @@ class AgentRuntime:
             self,
             question: str,
             source_ids: list[str] | None = None,
+            dashboard_id: str | None = None,
             history: list[ChatMessage] | None = None,
     ) -> AgentResponse:
         # Запоминаем время начала запроса и создаём объект для сбора метрик.
@@ -104,7 +105,7 @@ class AgentRuntime:
             else:
                 try:
                     legacy = await self._ask(
-                        question, source_ids, history, timing
+                        question, source_ids, history, timing, dashboard_id
                     )
 
                 # Отдельно обрабатываем ситуацию, когда модель не успела
@@ -182,6 +183,7 @@ class AgentRuntime:
             source_ids: list[str] | None,
             history: list[ChatMessage] | None,
             timing: AgentTiming,
+            dashboard_id: str | None
     ) -> AskResponse:
         """
         Это основной метод, который запускает работу агента.
@@ -196,9 +198,13 @@ class AgentRuntime:
 
         context = ""
         if source_ids:
-            context = (
+            context += (
                     "\nИсточники, указанные пользователем: "
                     + ", ".join(source_ids)
+            )
+        if dashboard_id:
+            context += (
+                f"\nДашборд, приложенный пользователем: {dashboard_id}"
             )
 
         messages = (
@@ -304,7 +310,7 @@ class AgentRuntime:
                 raise IncompleteModelOutput(step, results)
 
             answer_parts.clear()
-            logger.info(response.finish_reason)
+            # logger.info(response.finish_reason)
 
             if response.finish_reason == "stop":
                 answer = ("".join(answer_parts) + response.content).strip()
@@ -354,7 +360,7 @@ class AgentRuntime:
                 # Надо добавить проверку на корректность и обработку ошибок
                 tool_started = perf_counter()
                 try:
-                    logger.info(call.arguments)
+                    # logger.info(call.arguments)
                     result = self.tools.execute(call.name, call.arguments)
                 finally:
                     timing.tools_ms += (perf_counter() - tool_started) * 1000

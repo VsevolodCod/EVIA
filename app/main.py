@@ -281,6 +281,7 @@ async def ask_agent(body: AskRequest):
         return await agent.ask(
             question=body.question,
             source_ids=body.source_ids,
+            dashboard_id=body.dashboard_id,
         )
 
     except Exception as exc:
@@ -335,6 +336,7 @@ async def chat_agent(
         answer = await agent.ask(
             question=body.question,
             source_ids=[chat.source_id],
+            dashboard_id=body.dashboard_id,
             history=[ChatMessage.model_validate(message.model_dump()) for message in chat.messages[:-1]],
         )
 
