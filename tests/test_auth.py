@@ -156,6 +156,17 @@ def test_existing_account_cannot_claim_legacy_data_by_email(tmp_path):
     store.close()
 
 
+def test_bootstrap_owner_cannot_change_to_another_email(tmp_path):
+    from app.auth import AuthStore
+
+    store = AuthStore(f"sqlite:///{tmp_path / 'auth.db'}", secret="test-secret-only-for-ci")
+    store.initialize()
+    store.bootstrap("first@example.com", "first bootstrap password", "First")
+    with pytest.raises(ValueError, match="bootstrap"):
+        store.bootstrap("second@example.com", "second bootstrap password", "Second")
+    store.close()
+
+
 def test_railway_authentication_cannot_be_disabled(monkeypatch):
     from app.config import Settings
 

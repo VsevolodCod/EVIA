@@ -120,6 +120,9 @@ class AuthStore:
     def bootstrap(self, email: str, password: str, name: str) -> Account:
         email = normalized_email(email)
         with self.sessions() as session:
+            owner = session.scalar(select(UserRow).where(UserRow.is_legacy_owner.is_(True)))
+            if owner is not None and owner.email != email:
+                raise ValueError("bootstrap owner cannot be changed")
             existing = session.scalar(select(UserRow).where(UserRow.email == email))
             if existing:
                 if not existing.is_legacy_owner:
