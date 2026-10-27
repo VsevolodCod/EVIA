@@ -102,5 +102,5 @@ export function profileModel(schema: SourceSchema, profile: Profile) {
 export type ProfileModel = ReturnType<typeof profileModel>;
 
 export function sampleDescription(profile: Profile) {
-  return `Выборка: ${rowsText(profile.sample_size)} · до ${numberText(profile.sample_limit)} первых строк`;
+  return `Выборка: ${rowsText(profile.sample_size)}`;
 }

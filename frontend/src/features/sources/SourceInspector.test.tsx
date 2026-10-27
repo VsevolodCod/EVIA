@@ -180,7 +180,7 @@ it("distinguishes the full source from its preview in the dashboard", async () =
   expect(screen.getByRole("heading", { name: "Продажи" })).toBeInTheDocument();
   expect(screen.getByText("Строк в источнике")).toBeInTheDocument();
   expect(screen.getByText("2 000")).toBeInTheDocument();
-  expect(screen.getByText(/1 строка в предпросмотре источника/)).toBeInTheDocument();
+  expect(screen.queryByText(/1 строка в предпросмотре источника/)).not.toBeInTheDocument();
   expect(screen.getByText("Полный датасет")).toBeInTheDocument();
   expect(screen.getByRole("region", { name: "Первые строки источника" })).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: /Открыть данные/ }));
