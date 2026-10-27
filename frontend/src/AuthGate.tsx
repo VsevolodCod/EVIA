@@ -37,6 +37,15 @@ export default function AuthGate() {
     return () => { alive = false; };
   }, []);
 
+  useEffect(() => {
+    const expired = () => {
+      localStorage.removeItem("evia.chat-sources.v1");
+      setAccount(null);
+    };
+    window.addEventListener("evia:unauthorized", expired);
+    return () => window.removeEventListener("evia:unauthorized", expired);
+  }, []);
+
   async function submit(event: FormEvent) {
     event.preventDefault();
     setBusy(true);

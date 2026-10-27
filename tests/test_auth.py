@@ -47,6 +47,26 @@ async def test_auth_session_profile_and_source_isolation(auth_module):
             assert (await second.get("/sources")).json() == []
             assert (await second.get(f"/sources/{source_id}/preview")).status_code == 404
             assert (await second.post("/agent/ask", json={"question": "show", "source_ids": [source_id]})).status_code == 404
+            from app.ownership import current_owner
+            token = current_owner.set(created.json()["id"])
+            try:
+                chart = module.tool_registry.execute("build_chart", {"definition": {
+                    "type": "kpi", "title": "Private KPI",
+                    "field": {"source_id": source_id, "field": "b"}, "aggregate": "sum",
+                }, "filters": []})
+                assert chart.ok and chart.data["success"]
+                chart_id = chart.data["chart_id"]
+                dashboard = module.tool_registry.execute("compose_dashboard", {
+                    "title": "Private dashboard", "chart_ids": [chart_id],
+                })
+                assert dashboard.ok and dashboard.data["success"]
+                dashboard_id = dashboard.data["dashboard"]["id"]
+            finally:
+                current_owner.reset(token)
+            assert (await first.get(f"/charts/{chart_id}")).status_code == 200
+            assert (await second.get(f"/charts/{chart_id}")).status_code == 404
+            assert (await second.get(f"/dashboards/{dashboard_id}")).status_code == 404
+            assert dashboard_id not in (await second.get("/dashboards/ids")).json()["dashboard_ids"]
             chat_id = (await first.post("/chats", json={"title": "Private"})).json()["chat_id"]
             assert (await second.get(f"/chats/{chat_id}")).status_code == 404
             assert (await second.delete(f"/chats/{chat_id}")).status_code == 404
@@ -54,6 +74,56 @@ async def test_auth_session_profile_and_source_isolation(auth_module):
             assert (await first.patch("/auth/profile", json={"name": "Новое имя"})).json()["name"] == "Новое имя"
             assert (await first.post("/auth/logout")).status_code == 204
             assert (await first.get("/sources")).status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_recovery_request_is_generic_for_unknown_email(auth_module, monkeypatch):
+    module = auth_module
+    sent = []
+    monkeypatch.setenv("RESEND_API_KEY", "test-key")
+    monkeypatch.setenv("MAIL_FROM", "EVIA <hello@example.com>")
+    monkeypatch.setattr("app.auth_routes.send_reset_code", lambda address, code: sent.append((address, code)))
+    async with module.app.router.lifespan_context(module.app), AsyncClient(
+        transport=ASGITransport(app=module.app), base_url="http://test"
+    ) as client:
+        assert (await client.post("/auth/register", json={
+            "email": "known@example.com", "password": "known strong password", "name": "Known",
+        })).status_code == 201
+        known = await client.post("/auth/reset/request", json={"email": "known@example.com"})
+        unknown = await client.post("/auth/reset/request", json={"email": "missing@example.com"})
+        assert known.status_code == unknown.status_code == 200
+        assert known.json() == unknown.json() == {"ok": True}
+        assert len(sent) == 1 and sent[0][0] == "known@example.com"
+
+
+@pytest.mark.asyncio
+async def test_legacy_data_is_claimed_by_explicit_bootstrap_account(auth_module, monkeypatch):
+    from app.chat_manager import ChatManager
+    from app.db.chat.engine import create_chat_database, initialize_chat_database
+    from app.models import Chat, DataSource
+
+    module = auth_module
+    module.catalog.upsert_source(DataSource(source_id="old-source", name="Old", source_type="csv"))
+    old_engine, old_sessions = create_chat_database(module.settings.chat_db_path)
+    await initialize_chat_database(old_engine)
+    await ChatManager(old_sessions).create_persistent_chat(Chat(chat_id="old-chat", title="Old chat", temporary=False))
+    await old_engine.dispose()
+    monkeypatch.setattr(module.settings, "auth_bootstrap_email", "owner@example.com")
+    monkeypatch.setattr(module.settings, "auth_bootstrap_password", "temporary bootstrap password")
+    async with module.app.router.lifespan_context(module.app):
+        async with AsyncClient(transport=ASGITransport(app=module.app), base_url="http://test") as owner, AsyncClient(
+            transport=ASGITransport(app=module.app), base_url="http://test"
+        ) as stranger:
+            assert (await owner.post("/auth/login", json={
+                "email": "owner@example.com", "password": "temporary bootstrap password",
+            })).status_code == 200
+            assert [source["source_id"] for source in (await owner.get("/sources")).json()] == ["old-source"]
+            assert [chat["chat_id"] for chat in (await owner.get("/chats")).json()] == ["old-chat"]
+            await stranger.post("/auth/register", json={
+                "email": "other@example.com", "password": "another strong password", "name": "Other",
+            })
+            assert (await stranger.get("/sources")).json() == []
+            assert (await stranger.get("/chats")).json() == []
 
 
 @pytest.mark.asyncio

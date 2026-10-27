@@ -2,8 +2,9 @@
 
 import os
 import httpx
+import logging
 
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, EmailStr, Field
 
@@ -12,6 +13,7 @@ from app.auth import Account, AuthStore, SESSION_DAYS
 
 router = APIRouter(prefix="/auth", tags=["account"])
 COOKIE = "evia_session"
+logger = logging.getLogger(__name__)
 
 
 class Credentials(BaseModel):
@@ -75,6 +77,13 @@ def send_reset_code(recipient: str, code: str) -> None:
               "subject": "EVIA — код восстановления пароля",
               "text": f"Ваш код восстановления EVIA: {code}\nКод действует 10 минут. Если вы не запрашивали его, игнорируйте письмо."})
     response.raise_for_status()
+
+
+def deliver_reset_code(recipient: str, code: str) -> None:
+    try:
+        send_reset_code(recipient, code)
+    except (OSError, httpx.HTTPError):
+        logger.exception("Password recovery delivery failed")
 
 
 @router.get("/status")
@@ -144,15 +153,12 @@ async def logout(request: Request, response: Response):
 
 
 @router.post("/reset/request")
-async def request_reset(body: ResetRequest, request: Request):
+async def request_reset(body: ResetRequest, request: Request, background_tasks: BackgroundTasks):
     if not mail_configured():
         raise HTTPException(status_code=503, detail="Email delivery is not configured")
     code = await run_in_threadpool(store(request).issue_reset_code, str(body.email))
     if code:
-        try:
-            await run_in_threadpool(send_reset_code, str(body.email), code)
-        except (OSError, httpx.HTTPError) as exc:
-            raise HTTPException(status_code=503, detail="Email delivery is temporarily unavailable") from exc
+        background_tasks.add_task(deliver_reset_code, str(body.email), code)
     return {"ok": True}
 
 

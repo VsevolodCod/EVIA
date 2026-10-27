@@ -103,6 +103,13 @@ async def lifespan(app: FastAPI):
     try:
         await initialize_chat_database(chat_engine)
 
+        if postgres_adapter is not None:
+            try:
+                source_service.register_postgresql_sources()
+            except Exception as exc:
+                # Keep CSV usable when the optional remote source is offline.
+                logger.warning("PostgreSQL source registration failed: %s", type(exc).__name__)
+
         if settings.auth_enabled:
             if not settings.auth_database_url or not settings.auth_secret:
                 raise RuntimeError("AUTH_DATABASE_URL and AUTH_SECRET are required when auth is enabled")
@@ -120,13 +127,6 @@ async def lifespan(app: FastAPI):
             except Exception:
                 await run_in_threadpool(auth_store.close)
                 raise
-
-        if postgres_adapter is not None:
-            try:
-                source_service.register_postgresql_sources()
-            except Exception as exc:
-                # Keep CSV usable when the optional remote source is offline.
-                logger.warning("PostgreSQL source registration failed: %s", type(exc).__name__)
 
         # Менеджер получает фабрику асинхронных сессий.
         app.state.chat_manager = ChatManager(chat_sessions)
@@ -168,7 +168,10 @@ async def account_boundary(request: Request, call_next):
             return JSONResponse({"detail": "Sign in required"}, status_code=401)
         token = current_owner.set(user.id if user else None)
         try:
-            return await call_next(request)
+            response = await call_next(request)
+            if protected or path.startswith("/auth/"):
+                response.headers["Cache-Control"] = "no-store"
+            return response
         finally:
             current_owner.reset(token)
     return await call_next(request)
