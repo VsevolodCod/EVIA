@@ -1,7 +1,9 @@
 import pytest
+import httpx
 
 from app.agent import AgentRuntime
 from app.llm.mock import MockLLMProvider
+from app.llm.openai_provider import OpenAIProvider
 from app.schema_catalog import SchemaCatalog
 from app.source_service import SourceService
 from app.tools import build_tool_registry
@@ -145,6 +147,82 @@ async def test_agent_rejects_empty_continuation_after_truncated_answer():
     assert result.status == "error"
     assert result.error and result.error.code == "MODEL_OUTPUT_INCOMPLETE"
     assert "Период начинается с" not in result.answer
+
+
+@pytest.mark.asyncio
+async def test_agent_retries_transient_502_without_spending_a_step(monkeypatch):
+    class LLM:
+        calls = 0
+
+        async def chat(self, messages, tools=None):
+            self.calls += 1
+            if self.calls == 1:
+                request = httpx.Request("POST", "https://model.example/chat")
+                response = httpx.Response(502, request=request)
+                raise httpx.HTTPStatusError("temporary", request=request, response=response)
+            return LLMResponse(content="Ответ получен", finish_reason="stop")
+
+    class Tools:
+        def descriptions(self): return []
+
+    async def no_wait(_delay):
+        return None
+
+    monkeypatch.setattr("app.agent.asyncio.sleep", no_wait)
+    llm = LLM()
+    result = await AgentRuntime(llm, Tools(), max_steps=1).ask("Вопрос")
+    assert result.status == "answered"
+    assert result.answer == "Ответ получен"
+    assert result.steps == 1
+    assert llm.calls == 2
+
+
+@pytest.mark.asyncio
+async def test_openai_provider_502_is_not_retried_again_by_agent(monkeypatch):
+    class FailingOpenAI(OpenAIProvider):
+        calls = 0
+
+        async def chat(self, messages, tools=None):
+            self.calls += 1
+            request = httpx.Request("POST", "https://model.example/chat")
+            response = httpx.Response(502, request=request)
+            raise httpx.HTTPStatusError("temporary", request=request, response=response)
+
+    class Tools:
+        def descriptions(self): return []
+
+    async def no_wait(_delay):
+        return None
+
+    monkeypatch.setattr("app.agent.asyncio.sleep", no_wait)
+    provider = FailingOpenAI.__new__(FailingOpenAI)
+    with pytest.raises(httpx.HTTPStatusError):
+        await AgentRuntime(provider, Tools()).ask("Вопрос")
+    assert provider.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_attached_dashboard_id_reaches_general_agent_context(tmp_path):
+    class LLM:
+        def __init__(self):
+            self.messages = []
+
+        async def chat(self, messages, tools=None):
+            self.messages = list(messages)
+            return LLMResponse(content="Готово", finish_reason="stop")
+
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    sources = SourceService(tmp_path / "data", catalog)
+    source = sources.register_csv("sales.csv", b"month;revenue\nJan;10\n")
+    try:
+        llm = LLM()
+        agent = AgentRuntime(llm, build_tool_registry(catalog, sources), sources=sources)
+        result = await agent.ask("Покажи текущий дашборд", [source.source_id], dashboard_id="dashboard-123")
+        assert result.status == "answered"
+        assert "dashboard-123" in llm.messages[-1].content
+        assert source.source_id in llm.messages[-1].content
+    finally:
+        catalog.close()
 
 
 @pytest.mark.asyncio

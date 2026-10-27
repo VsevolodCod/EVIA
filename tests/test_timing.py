@@ -63,6 +63,25 @@ async def test_openai_chat_completion_uses_integer_token_limit(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_openai_model_retries_transient_502_for_structured_and_tool_calls(monkeypatch):
+    monkeypatch.setenv('OPENAI_API_KEY', 'test-key')
+    original = httpx.AsyncClient
+    attempts = []
+
+    def handle(request):
+        attempts.append(json.loads(request.content))
+        if len(attempts) == 1:
+            return httpx.Response(502, json={'error': 'temporary'})
+        return httpx.Response(200, json={'choices': [{'finish_reason': 'stop', 'message': {'content': 'ok'}}]})
+
+    monkeypatch.setattr(httpx, 'AsyncClient', lambda **kwargs: original(transport=httpx.MockTransport(handle), **kwargs))
+    result = await OpenAIModel(Settings()).generate({'model': 'test', 'messages': [], 'tools': []})
+    assert result['choices'][0]['message']['content'] == 'ok'
+    assert len(attempts) == 2
+    assert attempts[0] == attempts[1]
+
+
+@pytest.mark.asyncio
 async def test_agent_timings_accumulate_across_tool_rounds(monkeypatch):
     clock = iter([0, 1, 3, 4, 5, 6, 9, 10])
     monkeypatch.setattr('app.agent.perf_counter', lambda: next(clock))

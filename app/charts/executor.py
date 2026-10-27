@@ -46,10 +46,11 @@ class ChartExecutor:
             raise ValueError(f"Chart '{chart_id}' does not exist")
 
         definition = chart.definition
+        effective_filters = [*definition.filters, *(filters or [])]
 
         for implementation in self.implementations:
             if implementation.supports(definition):
-                return implementation.execute(definition, filters or [])
+                return implementation.execute(definition, effective_filters)
 
         raise UnsupportedTypeError(
             f"Chart type '{definition.type}' is not implemented"
