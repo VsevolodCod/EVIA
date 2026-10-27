@@ -129,6 +129,8 @@ export default function App() {
   const [dragOver, setDragOver] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const composer = useRef<HTMLTextAreaElement>(null);
+  const settingsDialog = useRef<HTMLElement>(null);
+  const settingsReturnFocus = useRef<HTMLElement | null>(null);
   const sourceController = useRef<AbortController | null>(null);
   const postgresController = useRef<AbortController | null>(null);
   const uploadController = useRef<AbortController | null>(null);
@@ -348,6 +350,34 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (mobileOverlay !== "settings") return;
+    const dialog = settingsDialog.current;
+    const buttons = Array.from(dialog?.querySelectorAll("button") ?? []);
+    buttons[0]?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setMobileOverlay(null);
+      } else if (event.key === "Tab" && buttons.length) {
+        const first = buttons[0];
+        const last = buttons[buttons.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      settingsReturnFocus.current?.focus();
+    };
+  }, [mobileOverlay]);
+
+  useEffect(() => {
     if (!selectedId || historyListLoading) return;
     chatSummaries
       .filter((chat) => (chat.source_id ?? chatSources[chat.chat_id]) === selectedId)
@@ -438,8 +468,15 @@ export default function App() {
     setMobilePanel("chat");
   }
   function openMobileUpload() {
-    resetAnalysis();
+    setSelectedUploadFile(null);
+    setUploadError("");
+    setFailedFile(null);
+    setMobilePanel("analytics");
     setMobileOverlay("upload");
+  }
+  function openSettings() {
+    settingsReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setMobileOverlay("settings");
   }
   function chooseTheme(value: "light" | "dark" | "system") {
     setTheme(value);
@@ -614,7 +651,7 @@ export default function App() {
         >
           EVIA
         </a>
-        <button className="mobile-settings-entry" aria-label="Открыть настройки" onClick={() => setMobileOverlay("settings")}><Icon name="settings" size={18} /></button>
+        <button className="mobile-settings-entry" aria-label="Открыть настройки" onClick={openSettings}><Icon name="settings" size={18} /></button>
       </header>
       <div className="workspace">
         <aside className="sidebar" aria-label="Навигация рабочего пространства">
@@ -817,16 +854,16 @@ export default function App() {
             <button aria-label={mobileOverlay === "upload" ? "Закрыть загрузку CSV" : "Назад к источникам"} onClick={() => { setMobileOverlay(null); setMobilePanel("home"); }}>
               <Icon name="back" size={22} />
             </button>
-            <strong>{showDashboardGallery ? "Отчёты" : source ? "Анализ данных" : sourceSetup === "postgres" ? "PostgreSQL" : "Загрузка CSV"}</strong>
+            <strong>{mobileOverlay === "upload" ? "Загрузка CSV" : showDashboardGallery ? "Отчёты" : source ? "Данные источника" : sourceSetup === "postgres" ? "PostgreSQL" : "Загрузка CSV"}</strong>
             <span aria-hidden="true" />
           </div>
-          {showDashboardGallery ? (
+          {showDashboardGallery && mobileOverlay !== "upload" ? (
             <DashboardGallery onClose={() => setShowDashboardGallery(false)} onAttach={source ? (id, title) => {
               setAttachedDashboard({ id, title });
               setShowDashboardGallery(false);
               setMobilePanel("chat");
             } : undefined} />
-          ) : source ? (
+          ) : source && mobileOverlay !== "upload" ? (
             <SourceInspector
               source={source}
               entry={activeEntry}
@@ -835,7 +872,7 @@ export default function App() {
               onOpenChat={() => setMobilePanel("chat")}
               onReimport={(file, id) => void upload(file, id)}
             />
-          ) : sourceSetup === "postgres" ? (
+          ) : sourceSetup === "postgres" && mobileOverlay !== "upload" ? (
             <PostgresSetup
               status={postgresStatus}
               loading={postgresLoading}
@@ -1130,7 +1167,7 @@ export default function App() {
           </div>
         </aside>
       </div>
-      {mobileOverlay === "settings" && <section className="mobile-fullscreen mobile-settings" role="dialog" aria-label="Настройки" aria-modal="true">
+      {mobileOverlay === "settings" && <section className="mobile-fullscreen mobile-settings" role="dialog" aria-label="Настройки" aria-modal="true" ref={settingsDialog}>
         <header><h2>Настройки</h2><button aria-label="Закрыть настройки" onClick={() => setMobileOverlay(null)}><Icon name="close" size={19} /></button></header>
         <h3>Тема</h3>
         <div className="settings-options">
@@ -1162,6 +1199,14 @@ export default function App() {
         >
           <Icon name="chat" size={18} />
           <span>Чат</span>
+        </button>
+        <button
+          aria-label="Настройки"
+          aria-pressed={mobileOverlay === "settings"}
+          onClick={openSettings}
+        >
+          <Icon name="settings" size={18} />
+          <span>Настройки</span>
         </button>
       </nav>
     </div>

@@ -1629,7 +1629,7 @@ summary {
     font-size: 25px;
     letter-spacing: -1px;
   }
-  .mobile-settings-entry { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; background: #edf5f0; color: #1c7352; }
+  .mobile-settings-entry { display: none; }
   .mobile-source-chevron { display: flex; margin-left: auto; color: #869a8c; }
 
   .workspace {
@@ -1836,7 +1836,7 @@ summary {
     left: 0;
     z-index: 20;
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     min-height: 66px;
     padding: 7px 16px calc(7px + env(safe-area-inset-bottom));
     border-top: 1px solid #dce8e1;
