@@ -34,7 +34,6 @@ const views: [View, string][] = [
   ["quality", "Качество"],
   ["preview", "Данные"],
   ["schema", "Схема"],
-  ["results", "Результат"],
 ];
 
 function previewLabel(type: string, count: number) {
@@ -136,9 +135,17 @@ export function SourceInspector({
 
   return (
     <div className="analytics-workspace">
-      <div className="mobile-source-context">
-        <strong>{source.name}</strong>
-        <span>{source.source_type.toUpperCase()} · {current ? numberText(sourceRowCount(current.schema) ?? current.rows.length) : "…"} строк</span>
+      <div className="source-workspace-heading">
+        <div className="source-workspace-identity">
+          <span className="source-workspace-eyebrow">Источник данных</span>
+          <h1>{source.name}</h1>
+          <p>{source.source_type.toUpperCase()} · {current && sourceRowCount(current.schema) !== null
+            ? `${numberText(sourceRowCount(current.schema)!)} строк в источнике`
+            : "Объём источника уточняется"}</p>
+        </div>
+        <button className="source-refresh" type="button" onClick={() => setRevision((value) => value + 1)}>
+          <Icon name="refresh" size={16} /> Обновить
+        </button>
       </div>
       <nav className="analytics-tabs" aria-label="Разделы источника">
         {views.map(([id, label]) => (
@@ -156,48 +163,8 @@ export function SourceInspector({
             )}
           </button>
         ))}
+        {view === "results" && <button aria-pressed="true" onClick={() => setView("results")}>Результат анализа</button>}
       </nav>
-      {view !== "overview" && <div className="analysis-heading">
-        <div>
-          <p className="analytics-kicker">ИССЛЕДОВАНИЕ ДАННЫХ</p>
-          <h1>{source.name}</h1>
-          <p className="source-line">
-            <span className="status-dot" />
-            {source.source_type.toUpperCase()} ·{" "}
-            {source.status === "available" ? "Доступен" : source.status}
-          </p>
-        </div>
-        <button
-          className="icon-button"
-          aria-label="Обновить данные источника"
-          onClick={() => setRevision((value) => value + 1)}
-        >
-          <Icon name="refresh" />
-        </button>
-      </div>}
-      {view !== "overview" && <div className="analytics-metrics" aria-label="Сведения об источнике">
-        <div>
-          <span>Строк в источнике</span>
-          <strong>
-            {model?.totalRows == null ? "—" : numberText(model.totalRows)}
-          </strong>
-          <small>Полный датасет</small>
-        </div>
-        <div>
-          <span>Столбцов</span>
-          <strong>{model ? numberText(model.fields.length) : "—"}</strong>
-          <small>В схеме источника</small>
-        </div>
-        <div>
-          <span>{current?.profile?.coverage === "full" ? "Строк обработано" : "Строк изучено"}</span>
-          <strong>
-            {current?.profile
-              ? numberText(current.profile.coverage === "full" ? current.profile.processed_rows : current.profile.sample_size)
-              : "—"}
-          </strong>
-          <small>{current?.profile?.coverage === "full" ? "Полный датасет" : "Для профиля выборки"}</small>
-        </div>
-      </div>}
       <section className="analytics-report" aria-label="Исследование данных">
         {view === "results" ? (
           <AnalysisResult entry={entry} />
@@ -233,13 +200,14 @@ export function SourceInspector({
             )}
             {view === "overview" ? (
               <Dashboard
-                title={source.name}
+                title="Обзор источника"
                 sourceLabel={previewLabel(source.source_type, current.rows.length)}
                 scope={source.source_id}
                 schema={current.schema}
                 rows={current.rows}
                 profile={current.profile}
                 fullSourceRows={sourceRowCount(current.schema)}
+                onOpenData={() => setView("preview")}
               />
             ) : view === "profile" ? (
               model ? <ProfileColumns

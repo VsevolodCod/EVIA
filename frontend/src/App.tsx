@@ -419,6 +419,14 @@ export default function App() {
     }
     resetAnalysis();
   }
+  function newDialog() {
+    if (!selectedId) return;
+    setActiveIds((previous) => ({ ...previous, [selectedId]: undefined }));
+    activeConversations.current.delete(selectedId);
+    setDrafts((previous) => ({ ...previous, [selectedId]: "" }));
+    setView("overview");
+    setMobilePanel("chat");
+  }
   function openMobileUpload() {
     resetAnalysis();
     setMobileOverlay("upload");
@@ -600,7 +608,7 @@ export default function App() {
         <aside className="sidebar" aria-label="Навигация рабочего пространства">
           <button className="primary new-analysis" onClick={newAnalysis}>
             <Icon name="plus" />
-            Новый анализ
+            Добавить источник
           </button>
           <section className="nav-section">
             <div className="nav-heading">
@@ -702,7 +710,7 @@ export default function App() {
           </section>
           <section className="nav-section history-section">
             <div className="nav-heading">
-              <h2>История</h2>
+              <h2>История диалогов</h2>
               {conversations.length > 0 && (
                 <span className="nav-count">{conversations.length}</span>
               )}
@@ -889,7 +897,8 @@ export default function App() {
         </main>
         <aside className="chat-panel" aria-label="Чат с EVIA">
           <header className="chat-header">
-            <h2>Чат</h2><strong className="mobile-chat-brand">EVIA</strong>
+            <h2>AI-помощник</h2><strong className="mobile-chat-brand">EVIA</strong>
+            {source && <button className="new-dialog" type="button" onClick={newDialog}><Icon name="plus" size={15} /> Новый диалог</button>}
           </header>
           <div className="chat-content">
             {activeEntry ? (
@@ -963,7 +972,7 @@ export default function App() {
                               : "Сохранённые детали этого ответа повреждены, поэтому показан только текст."}
                         </p>
                       )}
-                      {!message.historyDetail && <button
+                      {!message.historyDetail && Boolean(message.answer?.tool_results.length || message.answer?.analysis?.sql) && <button
                         className="result-link"
                         onClick={() => {
                           if (historyKey) setActiveIds((previous) => ({ ...previous, [historyKey]: message.id }));
@@ -972,7 +981,7 @@ export default function App() {
                         }}
                       >
                         <Icon name="grid" />
-                        Результаты инструментов
+                        Открыть результат
                         <Icon name="chevron" size={15} />
                       </button>
                       }
@@ -985,7 +994,8 @@ export default function App() {
             ) : (
               <div className="chat-welcome">
                 <Evia large state={mascotState} />
-                {source && <p className="mobile-chat-intro">Источник подключён. Можно исследовать данные.</p>}
+                <h3>{source ? "Спросите о своих данных" : "Добавьте источник данных"}</h3>
+                <p className="mobile-chat-intro">{source ? "EVIA поможет найти ответ, построить график или разобраться в таблице." : "Загрузите CSV или подключите PostgreSQL, чтобы начать анализ."}</p>
                 <p
                   className={`evia-live-status ${["welcome", "waiting", "listening", "explaining"].includes(mascotState) ? "visually-hidden" : ""}`}
                   role="status"
@@ -1017,14 +1027,7 @@ export default function App() {
             )}
           </div>
           <div className="chat-bottom">
-            {activeEntry && (
-              <div className="helper">
-                <Evia state={mascotState} />
-                <div role="status">
-                  <strong>{eviaStatus(mascotState)}</strong>
-                </div>
-              </div>
-            )}
+            {activeEntry?.state === "pending" && <div className="helper" role="status"><strong>{eviaStatus(mascotState)}</strong></div>}
             {archivedChat && !archivedChat.source_id && (
               <p className="history-details-notice">
                 Для продолжения этого старого диалога выберите источник в левой панели.
@@ -1103,7 +1106,7 @@ export default function App() {
               <summary>О чате</summary>
               <p>
                 Вопросы продолжают выбранный диалог: модель получает предыдущие
-                сообщения. «Новый анализ» открывает экран добавления источника. У каждого
+                сообщения. «Добавить источник» открывает экран загрузки данных. У каждого
                 источника своя история. Сообщения сохраняются на сервере;
                 список диалогов этой вкладки пока доступен до обновления страницы.
               </p>

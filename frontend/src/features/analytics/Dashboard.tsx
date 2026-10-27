@@ -4,6 +4,8 @@ import { hasExactStats, numberText, percentText } from "../sources/profileModel"
 import { buildDashboardModel, type ChartValue } from "./dashboardModel";
 import { defaultPalette, loadPalette, savePalette, seriesColor, type PalettePreference } from "./palette";
 import { PaletteEditor } from "./PaletteEditor";
+import { DataTable } from "../results/DataTable";
+import { serializeCsv } from "../results/csvExport";
 import "./dashboard.css";
 import "./dashboardPrint.css";
 import "./dashboardControls.css";
@@ -91,6 +93,7 @@ export function Dashboard({
   profile,
   context = "source",
   fullSourceRows,
+  onOpenData,
 }: {
   title: string;
   sourceLabel: string;
@@ -100,6 +103,7 @@ export function Dashboard({
   profile?: Profile;
   context?: "source" | "result";
   fullSourceRows?: number | null;
+  onOpenData?: () => void;
 }) {
   const model = useMemo(() => buildDashboardModel(schema, rows), [schema, rows]);
   const [showPalette, setShowPalette] = useState(false);
@@ -188,27 +192,27 @@ export function Dashboard({
   const exportCsv = () => {
     const columns = [...new Set(schema.objects.flatMap((object) => object.fields.map((field) => field.name)))];
     const headers = columns.length ? columns : Object.keys(rows[0] ?? {});
-    const cell = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
-    const csv = [headers.map(cell).join(","), ...rows.map((row) => headers.map((header) => cell(row[header])).join(","))].join("\r\n");
-    const url = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
+    const csv = serializeCsv({ columns: headers, rows: rows.map((row) => headers.map((header) => row[header])), truncated: false });
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
     const anchor = document.createElement("a");
     anchor.href = url;
     anchor.download = `${title.replace(/[\\/:*?"<>|]/g, "_")}.csv`;
     anchor.click();
-    setTimeout(() => URL.revokeObjectURL(url), 0);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
     setShowMobileExport(false);
   };
 
   return <div className="dashboard" data-testid="print-report" data-print-report="true" style={{ "--dashboard-primary": primary, "--dashboard-secondary": secondary } as React.CSSProperties}>
     <div className="dashboard-top">
-      <div><h2>{title}</h2><p>{sourceLabel}</p></div>
-      <div className="dashboard-actions"><button onClick={() => setShowPalette((open) => !open)} aria-expanded={showPalette}>Цвета</button><button className="desktop-export" onClick={exportPdf}>Экспорт PDF</button><button className="mobile-export-trigger" onClick={() => setShowMobileExport(true)}>Экспорт</button></div>
+      <div><h2>{title}</h2><p>{context === "source" ? "Ключевые показатели и первые строки данных" : sourceLabel}</p></div>
+      <div className="dashboard-actions"><button onClick={exportCsv}>Скачать CSV</button><button className="desktop-export" onClick={exportPdf}>Печать / PDF</button><button className="mobile-export-trigger" onClick={() => setShowMobileExport(true)}>Ещё</button></div>
     </div>
     {showMobileExport && <div className="mobile-export-backdrop" onClick={() => setShowMobileExport(false)}>
       <section className="mobile-export-sheet" aria-label="Экспорт результатов" onClick={(event) => event.stopPropagation()}>
         <div className="mobile-export-heading"><h2>Экспорт результатов</h2><button aria-label="Закрыть экспорт" onClick={() => setShowMobileExport(false)}>✕</button></div>
         <button className="mobile-export-option" onClick={exportCsv}><span>CSV</span><span><strong>Скачать CSV</strong><small>Строки из предпросмотра</small></span><b>↓</b></button>
-        <button className="mobile-export-option" onClick={exportPdf}><span>PDF</span><span><strong>Скачать PDF</strong><small>Отчёт с графиками</small></span><b>↓</b></button>
+        <button className="mobile-export-option" onClick={exportPdf}><span>PDF</span><span><strong>Печать / PDF</strong><small>Сохраните PDF в окне печати</small></span><b>↗</b></button>
+        <button className="mobile-export-option" onClick={() => { setShowMobileExport(false); setShowPalette(true); }}><span>●</span><span><strong>Цвета графиков</strong><small>Настроить палитру</small></span><b>↗</b></button>
       </section>
     </div>}
     {showPalette && <PaletteEditor colors={colors} gradient={gradient} onChange={updateColors} onClose={() => setShowPalette(false)} />}
@@ -217,8 +221,13 @@ export function Dashboard({
       <section className="dashboard-card"><span>{context === "result" ? "Строк в результате" : hasSourceTotal ? "Строк в источнике" : "Строк в предпросмотре"}</span><strong>{numberText(hasSourceTotal ? fullSourceRows : model.rowCount)}</strong><small>{context === "result" ? "Ответ инструмента" : hasSourceTotal ? "Полный датасет" : "Полный объём неизвестен"}</small></section>
       <section className="dashboard-card"><span>Столбцов</span><strong>{numberText(model.columnCount)}</strong></section>
       <section className="dashboard-card"><span>{profile ? (fullProfile ? "Профиль покрывает весь датасет" : "Профиль покрывает") : "Заполнено ячеек"}</span><strong>{profile ? (profileReady ? fullProfile ? `${rowsText(profiledRows)} обработано` : rowsText(profiledRows) : "Нет данных") : percentText(model.completeness)}</strong><small>{profile ? (profileReady ? fullProfile ? "Точная статистика" : `выборка до ${numberText(profileLimit)} строк` : "Нет строк для анализа") : "доступных ячеек"}</small></section>
-      {profile && <section className={`dashboard-card quality-kpi ${profileReady && missingFields ? "needs-attention" : ""}`}><span>Качество данных</span><strong>{!profileReady ? "Нет профиля" : missingFields ? "Нужна проверка" : "Без пропусков"}</strong><small>{!profileReady ? "Нет строк для проверки" : missingFields ? `${fieldsText(missingFields)} с пропусками` : `${percentText(profileCompleteness)} заполнено`}</small></section>}
+      {profile && <section className={`dashboard-card quality-kpi ${profileReady && missingFields ? "needs-attention" : ""}`}><span>Заполненность {fullProfile ? "источника" : "выборки"}</span><strong>{!profileReady ? "Нет профиля" : percentText(profileCompleteness)}</strong><small>{!profileReady ? "Нет строк для проверки" : missingFields ? `${fieldsText(missingFields)} с пропусками` : fullProfile ? "Пропусков не найдено" : "В выборке пропусков нет"}</small></section>}
     </div>
+    {rows.length > 0 && <section className="dashboard-preview" aria-label={context === "source" ? "Первые строки источника" : "Таблица результата"}>
+      <div className="dashboard-section-heading"><div><h3>{context === "source" ? "Первые строки" : "Таблица результата"}</h3><p>{context === "source" ? `Показано ${rowsText(rows.length)} из предпросмотра · полный объём ${hasSourceTotal ? rowsText(fullSourceRows!) : "неизвестен"}` : rowsText(rows.length)}</p></div>{onOpenData && <button type="button" onClick={onOpenData}>Открыть данные →</button>}</div>
+      <DataTable rows={rows} columns={schema.objects.flatMap((object) => object.fields.map((field) => field.name))} label={context === "source" ? "Первые строки источника" : "Таблица результата"} />
+    </section>}
+    {hasCharts && <div className="dashboard-section-heading dashboard-charts-heading"><div><h3>Что видно в данных</h3><p>{context === "source" ? "Графики построены по строкам предпросмотра" : "Графики построены по строкам ответа"}</p></div><button type="button" onClick={() => setShowPalette((open) => !open)} aria-expanded={showPalette}>Цвета графиков</button></div>}
     {hasCharts || missingColumns.length > 0 ? <div className="dashboard-grid">
       {model.timeline && <ChartCard title={`Динамика по полю ${model.timeline.field}`} unit="строки"><LineChart values={model.timeline.values} color={primary} gradient={gradient} label={`Динамика по полю ${model.timeline.field}`} /><p className="visually-hidden">{model.timeline.values.map((point) => `${point.label}: ${numberText(point.value)}`).join("; ")}</p></ChartCard>}
       {model.category && <ChartCard title={`Частые значения: ${model.category.field}`} unit="строки"><HorizontalBars values={model.category.values} color={model.timeline ? secondary : primary} label={`Частые значения поля ${model.category.field}`} /></ChartCard>}

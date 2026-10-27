@@ -1,6 +1,6 @@
 .dashboard {
-  --dashboard-primary: #518ed5;
-  --dashboard-secondary: #ddaa65;
+  --dashboard-primary: #13845d;
+  --dashboard-secondary: #67b89a;
   display: grid;
   gap: 16px;
   padding: 4px 0 18px;
@@ -20,6 +20,49 @@
   line-height: 1.12;
   letter-spacing: -1px;
 }
+
+.dashboard-preview {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #dce9e2;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 12px 32px #123b2a09;
+}
+
+.dashboard-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 22px 14px;
+}
+.dashboard-section-heading h3 {
+  margin: 0;
+  color: #173a2b;
+  font-size: 18px;
+  letter-spacing: -.35px;
+}
+.dashboard-section-heading p {
+  margin: 5px 0 0;
+  color: #677b70;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.dashboard-section-heading button {
+  flex: none;
+  min-height: 38px;
+  padding: 8px 12px;
+  border: 1px solid #d0e6d9;
+  border-radius: 10px;
+  color: #176b4a;
+  background: #f3faf6;
+  font-size: 13px;
+  font-weight: 700;
+}
+.dashboard-section-heading button:hover { background: #e3f4e9; }
+.dashboard-preview .data-table { margin: 0 14px 14px; }
+.dashboard-charts-heading { padding: 12px 0 0; }
 
 .dashboard-top p,
 .dashboard-scope {
@@ -332,4 +375,37 @@
   .chart-card-expanded .chart-detail-footer p { margin: 0; color: #698079; font-size: 11px; }
   .chart-card-expanded .chart-detail-footer .quality-chart { min-height: 0; padding: 0; border: 0; }
   .chart-card-expanded .bar-chart,.chart-card-expanded .quality-chart,.chart-card-expanded .line-chart { padding: 14px; border: 1px solid #e4ece9; border-radius: 13px; background: #fff; }
+}
+
+.dashboard { color: #183d2e; }
+.dashboard-top p,.dashboard-scope { color: #687c70; font-size: 13px; }
+.dashboard-card { border-color: #dce9e1; border-radius: 16px; box-shadow: 0 8px 24px #14382a08; }
+.kpi-grid .dashboard-card:first-child { background: linear-gradient(145deg, #e8f7ed, #f7fcf8); border-color: #cce7d5; }
+.kpi-grid span { color: #536f60; font-size: 13px; }
+.kpi-grid strong { color: #123a2a; }
+.kpi-grid small { color: #6f8075; font-size: 12px; }
+.chart-heading h3 { color: #183d2e; font-size: 15px; }
+.chart-heading small { color: #728479; font-size: 12px; }
+.bar-row,.quality-row { font-size: 13px; }
+.bar-row b,.quality-row b { font-size: 12px; }
+
+@media (max-width: 640px) {
+  .dashboard { gap: 12px; }
+  .dashboard-top { align-items: flex-start; }
+  .dashboard-top h2 { font-size: 23px; }
+  .dashboard-top p { font-size: 12px; }
+  .dashboard-actions > button:not(.mobile-export-trigger) { display: none; }
+  .dashboard-actions .mobile-export-trigger { display: inline-flex; }
+  .dashboard-preview { order: 2; border-radius: 13px; }
+  .dashboard-section-heading { align-items: flex-start; padding: 15px 14px 11px; }
+  .dashboard-section-heading h3 { font-size: 16px; }
+  .dashboard-section-heading p { font-size: 11px; }
+  .dashboard-section-heading button { min-height: 36px; padding: 6px 9px; font-size: 11px; }
+  .dashboard-preview .data-table { margin: 0 8px 8px; }
+  .dashboard-charts-heading { order: 3; padding: 10px 0 0; }
+  .dashboard-grid { order: 4; }
+  .kpi-grid span { font-size: 12px; }
+  .kpi-grid small { font-size: 11px; }
+  .chart-heading h3 { font-size: 14px; }
+  .bar-row,.quality-row { font-size: 12px; }
 }

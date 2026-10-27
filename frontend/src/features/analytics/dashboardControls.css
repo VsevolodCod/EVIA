@@ -1,7 +1,5 @@
 .analytics-workspace:has(.dashboard) .dashboard-actions {
-  position: absolute;
-  top: 3px;
-  right: 0;
+  position: static;
   z-index: 1;
 }
 

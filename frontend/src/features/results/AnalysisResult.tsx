@@ -134,12 +134,10 @@ export function AnalysisResult({ entry }: { entry?: Entry }) {
             context="result"
           />}
           <p className="analysis-question">{entry.question}</p>
-          <section className="analysis-answer" aria-label="Вывод EVIA">
-            <span className="answer-signature">EVIA</span>
-            <SafeMarkdown>
-              {entry.answer.answer || "Модель вернула пустой ответ."}
-            </SafeMarkdown>
-          </section>
+          <details className="analysis-answer" aria-label="Вывод EVIA" open={!result && !generated}>
+            <summary>Вывод EVIA <span>{result || generated ? "Полный ответ также есть в чате" : ""}</span></summary>
+            <SafeMarkdown>{entry.answer.answer || "Модель вернула пустой ответ."}</SafeMarkdown>
+          </details>
           {entry.answer.analysis?.sql && <details className="analysis-sql">
             <summary>Показать SQL</summary>
             <code>{entry.answer.analysis.sql}</code>

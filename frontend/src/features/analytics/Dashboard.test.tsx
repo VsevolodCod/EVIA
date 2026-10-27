@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, vi } from "vitest";
 import type { Profile, SourceSchema } from "../../api";
 import { Dashboard } from "./Dashboard";
@@ -131,7 +131,7 @@ it("separates the full source from profile coverage and highlights data quality"
   expect(screen.getByText("Профиль покрывает весь датасет")).toBeInTheDocument();
   expect(screen.getByText("2 000 строк обработано")).toBeInTheDocument();
   expect(screen.queryByText("выборка до 500 строк")).not.toBeInTheDocument();
-  expect(screen.getByText("Нужна проверка")).toBeInTheDocument();
+  expect(screen.getByText("Заполненность источника")).toBeInTheDocument();
   expect(screen.getByText("1 поле с пропусками")).toBeInTheDocument();
   expect(
     screen.getByRole("img", { name: /Пропуски по столбцам: city: 5%/ }),
@@ -235,7 +235,7 @@ it("applies a valid custom palette, rejects bad input and opens the print dialog
   render(<Dashboard title="Поездки" sourceLabel="Поездки.csv" scope="palette-test" schema={schema} rows={rows} />);
   expect(screen.getByTestId("print-report")).toHaveAttribute("data-print-report", "true");
 
-  fireEvent.click(screen.getByRole("button", { name: "Цвета" }));
+  fireEvent.click(screen.getByRole("button", { name: "Цвета графиков" }));
   const input = screen.getByLabelText("Своя палитра");
   fireEvent.change(input, { target: { value: "#2563eb, #bf5e47" } });
   fireEvent.click(screen.getByRole("button", { name: "Применить" }));
@@ -247,7 +247,7 @@ it("applies a valid custom palette, rejects bad input and opens the print dialog
   expect(screen.getByTestId("chart-color-0")).toHaveAttribute("data-color", "#2563eb");
 
   const pageTitle = document.title;
-  fireEvent.click(screen.getByRole("button", { name: "Экспорт PDF" }));
+  fireEvent.click(screen.getByRole("button", { name: "Печать / PDF" }));
   expect(print).toHaveBeenCalledOnce();
   expect(document.title).toBe("EVIA — Поездки");
   window.dispatchEvent(new Event("afterprint"));
@@ -256,7 +256,7 @@ it("applies a valid custom palette, rejects bad input and opens the print dialog
 
 it("imports a palette file and applies the optional line gradient", async () => {
   render(<Dashboard title="Поездки" sourceLabel="Поездки.csv" scope="palette-import" schema={schema} rows={rows} />);
-  fireEvent.click(screen.getByRole("button", { name: "Цвета" }));
+  fireEvent.click(screen.getByRole("button", { name: "Цвета графиков" }));
   const file = new File(["unused"], "palette.json", { type: "application/json" });
   Object.defineProperty(file, "text", { value: () => Promise.resolve('["#112233", "#445566"]') });
   const upload = document.querySelector('input[type="file"]');
@@ -292,9 +292,9 @@ it("exports preview rows as a CSV from the mobile export sheet", () => {
   vi.stubGlobal("URL", { ...URL, createObjectURL, revokeObjectURL: vi.fn() });
   const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
   render(<Dashboard title="Поездки" sourceLabel="Поездки.csv" scope="mobile-export" schema={schema} rows={rows} />);
-  fireEvent.click(screen.getByRole("button", { name: "Экспорт" }));
+  fireEvent.click(screen.getByRole("button", { name: "Ещё" }));
   expect(screen.getByRole("region", { name: "Экспорт результатов" })).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: /Скачать CSV/ }));
+  fireEvent.click(within(screen.getByRole("region", { name: "Экспорт результатов" })).getByRole("button", { name: /Скачать CSV/ }));
   expect(createObjectURL).toHaveBeenCalledTimes(1);
   expect(click).toHaveBeenCalledTimes(1);
   expect(screen.queryByRole("region", { name: "Экспорт результатов" })).not.toBeInTheDocument();
