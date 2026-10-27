@@ -16,17 +16,17 @@ export function dashboardFromBuild(build: SavedDashboardBuild): Dashboard {
   return {
     version: 1,
     title: build.dashboard.title,
-    cards: [...build.charts].sort((left, right) => left.position - right.position).flatMap((chart) => {
+    cards: [...build.charts].sort((left, right) => left.position - right.position).map((chart): Dashboard["cards"][number] => {
       const definition = record(chart.definition) ? chart.definition : null;
       const type = definition?.type;
-      if (!definition || (type !== "kpi" && type !== "line")) return [{
+      if (!definition || (type !== "kpi" && type !== "line")) return {
         id: chart.chart_id,
         type: "kpi" as const,
         title: "Недоступный график",
         status: "error" as const,
         error: chart.error,
-      }];
-      return [{
+      };
+      return {
         id: chart.chart_id,
         type,
         title: typeof definition.title === "string" ? definition.title : "График",
@@ -34,7 +34,7 @@ export function dashboardFromBuild(build: SavedDashboardBuild): Dashboard {
         definition: chart.definition,
         data: chart.result,
         error: chart.error,
-      }];
+      };
     }),
   };
 }

@@ -118,8 +118,8 @@ it("shows an incomplete model response as a retryable error", async () => {
 it("attaches a selected saved report to one source conversation and clears it on source change", async () => {
   setup(() => Promise.resolve(Response.json({ answer: "Готово", steps: 1, tool_results: [] })));
   const original = vi.mocked(fetch).getMockImplementation()!;
-  vi.mocked(fetch).mockImplementation((url: string, init?: RequestInit) => {
-    if (url.startsWith("/dashboards/ids")) return Promise.resolve(Response.json({ dashboard_ids: ["report-1"] }));
+  vi.mocked(fetch).mockImplementation((url: string | URL | Request, init?: RequestInit) => {
+    if (String(url).startsWith("/dashboards/ids")) return Promise.resolve(Response.json({ dashboard_ids: ["report-1"] }));
     if (url === "/dashboards/report-1") return Promise.resolve(Response.json({ success: true, dashboard: {
       id: "report-1", title: "Отчёт продаж", version: 1, charts: [{ chart_id: "total", position: 0 }],
     } }));
