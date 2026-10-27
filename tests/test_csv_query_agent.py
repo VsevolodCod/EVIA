@@ -197,6 +197,28 @@ async def test_fenced_filtered_preview_plan_returns_a_genuine_empty_result(tmp_p
 
 
 @pytest.mark.asyncio
+async def test_cloud_120b_count_sql_is_executed_even_when_labeled_overview(tmp_path):
+    # The deployed model returned this shape for a row-count question. Its
+    # computed SQL must go through the normal read-only query validation.
+    model_plan = {
+        "intent": "dataset_overview",
+        "sql": "SELECT COUNT(*) AS row_count FROM source;",
+        "explanation": "Подсчитывает количество строк в CSV.",
+    }
+    provider = ScriptedProvider(model_plan, model_plan)
+    agent, source, catalog = agent_with_csv(tmp_path, provider)
+    try:
+        answer = await agent.ask("Сколько строк в выбранном CSV?", [source.source_id])
+        assert answer.status == "answered"
+        assert answer.results[0].rows == [[2]]
+        assert answer.analysis.intent == "sql_query"
+        assert [tool.ok for tool in answer.tool_results] == [True]
+        assert len(provider.messages) == 1
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
 async def test_numeric_csv_filter_compares_values_not_raw_text(tmp_path):
     plan = {
         "intent": "filter",
