@@ -5,11 +5,6 @@ from app.models import ToolResult
 from app.postgresql_sql import PostgresQueryError
 from app.safe_sql import SafeQueryError
 
-import logging
-
-
-logger = logging.getLogger(__name__)
-
 
 class ToolDefinition:
     """
