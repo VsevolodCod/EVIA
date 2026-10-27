@@ -603,6 +603,9 @@ it("opens mobile settings and applies a selected theme", async () => {
   expect(screen.getByTestId("app-shell")).toHaveAttribute("data-theme", "dark");
   fireEvent.click(screen.getByRole("button", { name: "Закрыть настройки" }));
   expect(screen.queryByRole("dialog", { name: "Настройки" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Открыть настройки" }));
+  fireEvent.click(screen.getByTestId("settings-backdrop"));
+  expect(screen.queryByRole("dialog", { name: "Настройки" })).not.toBeInTheDocument();
 });
 
 it("system theme follows a dark device preference", async () => {

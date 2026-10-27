@@ -1904,7 +1904,8 @@ summary {
 .chat-turn + .chat-turn { margin-top: 28px; padding-top: 20px; border-top: 1px solid #d9e7df; }
 
 /* Mobile reference screens: restrained cards, compact controls and real full-screen flows. */
-.mobile-fullscreen { position: fixed; z-index: 60; top: 50%; left: 50%; display: flex; flex-direction: column; width: min(420px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 24px; overflow-y: auto; transform: translate(-50%, -50%); border: 1px solid var(--line); border-radius: 18px; background: var(--surface); box-shadow: 0 0 0 100vmax rgb(10 28 22 / 42%), 0 24px 80px rgb(10 28 22 / 18%); }
+.settings-backdrop { position: fixed; z-index: 59; inset: 0; background: rgb(10 28 22 / 42%); }
+.mobile-fullscreen { position: fixed; z-index: 60; top: 50%; left: 50%; display: flex; flex-direction: column; width: min(420px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 24px; overflow-y: auto; transform: translate(-50%, -50%); border: 1px solid var(--line); border-radius: 18px; background: var(--surface); box-shadow: 0 24px 80px rgb(10 28 22 / 18%); }
 .mobile-fullscreen > header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
 .mobile-fullscreen > header button { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 10px; }
 .mobile-fullscreen h2 { margin: 0; font-size: 18px; }
