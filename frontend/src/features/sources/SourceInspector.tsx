@@ -47,12 +47,14 @@ export function SourceInspector({
   entry,
   view,
   setView,
+  onOpenChat,
   onReimport,
 }: {
   source: Source;
   entry?: Entry;
   view: View;
   setView: (view: View) => void;
+  onOpenChat?: () => void;
   onReimport?: (file: File, sourceId: string) => void;
 }) {
   const [data, setData] = useState<SourceData | null>(null);
@@ -156,7 +158,7 @@ export function SourceInspector({
       </nav>
       <section className="analytics-report" aria-label="Исследование данных">
         {view === "results" ? (
-          <AnalysisResult entry={entry} />
+          <AnalysisResult entry={entry} onOpenChat={onOpenChat} />
         ) : error ? (
           <div className="pane-padding">
             <ErrorNotice

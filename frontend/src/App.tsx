@@ -98,8 +98,8 @@ export default function App() {
   const [postgresLoading, setPostgresLoading] = useState(false);
   const [postgresError, setPostgresError] = useState("");
   const [sourceSetup, setSourceSetup] = useState<"csv" | "postgres">("csv");
-  const [mobilePanel, setMobilePanel] = useState<"home" | "analytics" | "chat" | "profile">("home");
-  const [mobileOverlay, setMobileOverlay] = useState<"wizard" | "upload" | "settings" | null>(null);
+  const [mobilePanel, setMobilePanel] = useState<"home" | "analytics" | "chat">("home");
+  const [mobileOverlay, setMobileOverlay] = useState<"upload" | "settings" | null>(null);
   const [theme, setTheme] = useState<"light" | "dark" | "system">(() => {
     const saved = localStorage.getItem("evia.theme");
     return saved === "dark" || saved === "system" ? saved : "light";
@@ -129,6 +129,8 @@ export default function App() {
   const [dragOver, setDragOver] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const composer = useRef<HTMLTextAreaElement>(null);
+  const settingsDialog = useRef<HTMLElement>(null);
+  const settingsReturnFocus = useRef<HTMLElement | null>(null);
   const sourceController = useRef<AbortController | null>(null);
   const postgresController = useRef<AbortController | null>(null);
   const uploadController = useRef<AbortController | null>(null);
@@ -348,6 +350,34 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (mobileOverlay !== "settings") return;
+    const dialog = settingsDialog.current;
+    const buttons = Array.from(dialog?.querySelectorAll("button") ?? []);
+    buttons[0]?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setMobileOverlay(null);
+      } else if (event.key === "Tab" && buttons.length) {
+        const first = buttons[0];
+        const last = buttons[buttons.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      settingsReturnFocus.current?.focus();
+    };
+  }, [mobileOverlay]);
+
+  useEffect(() => {
     if (!selectedId || historyListLoading) return;
     chatSummaries
       .filter((chat) => (chat.source_id ?? chatSources[chat.chat_id]) === selectedId)
@@ -423,8 +453,7 @@ export default function App() {
   }
   function newAnalysis() {
     if (window.matchMedia?.("(max-width: 640px)").matches) {
-      setMobilePanel("home");
-      setMobileOverlay("wizard");
+      openMobileUpload();
       return;
     }
     resetAnalysis();
@@ -439,8 +468,15 @@ export default function App() {
     setMobilePanel("chat");
   }
   function openMobileUpload() {
-    resetAnalysis();
+    setSelectedUploadFile(null);
+    setUploadError("");
+    setFailedFile(null);
+    setMobilePanel("analytics");
     setMobileOverlay("upload");
+  }
+  function openSettings() {
+    settingsReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setMobileOverlay("settings");
   }
   function chooseTheme(value: "light" | "dark" | "system") {
     setTheme(value);
@@ -615,7 +651,7 @@ export default function App() {
         >
           EVIA
         </a>
-        <button className="mobile-profile-entry" aria-label="Открыть профиль" onClick={() => setMobilePanel("profile")}><Icon name="user" size={18} /></button>
+        <button className="mobile-settings-entry" aria-label="Открыть настройки" onClick={openSettings}><Icon name="settings" size={18} /></button>
       </header>
       <div className="workspace">
         <aside className="sidebar" aria-label="Навигация рабочего пространства">
@@ -818,24 +854,25 @@ export default function App() {
             <button aria-label={mobileOverlay === "upload" ? "Закрыть загрузку CSV" : "Назад к источникам"} onClick={() => { setMobileOverlay(null); setMobilePanel("home"); }}>
               <Icon name="back" size={22} />
             </button>
-            <strong>{showDashboardGallery ? "Отчёты" : source ? "Анализ данных" : sourceSetup === "postgres" ? "PostgreSQL" : "Загрузка CSV"}</strong>
+            <strong>{mobileOverlay === "upload" ? "Загрузка CSV" : showDashboardGallery ? "Отчёты" : source ? "Данные источника" : sourceSetup === "postgres" ? "PostgreSQL" : "Загрузка CSV"}</strong>
             <span aria-hidden="true" />
           </div>
-          {showDashboardGallery ? (
+          {showDashboardGallery && mobileOverlay !== "upload" ? (
             <DashboardGallery onClose={() => setShowDashboardGallery(false)} onAttach={source ? (id, title) => {
               setAttachedDashboard({ id, title });
               setShowDashboardGallery(false);
               setMobilePanel("chat");
             } : undefined} />
-          ) : source ? (
+          ) : source && mobileOverlay !== "upload" ? (
             <SourceInspector
               source={source}
               entry={activeEntry}
               view={view}
               setView={setView}
+              onOpenChat={() => setMobilePanel("chat")}
               onReimport={(file, id) => void upload(file, id)}
             />
-          ) : sourceSetup === "postgres" ? (
+          ) : sourceSetup === "postgres" && mobileOverlay !== "upload" ? (
             <PostgresSetup
               status={postgresStatus}
               loading={postgresLoading}
@@ -1130,36 +1167,8 @@ export default function App() {
           </div>
         </aside>
       </div>
-      <section className="mobile-profile" aria-label="Профиль и настройки">
-        <header className="mobile-page-header">
-          <button aria-label="Назад к источникам" onClick={() => setMobilePanel("home")}>
-            <Icon name="back" size={22} />
-          </button>
-          <strong>Профиль</strong>
-          <span aria-hidden="true" />
-        </header>
-        <div className="mobile-profile-card">
-          <span className="mobile-profile-avatar"><Icon name="user" size={24} /></span>
-          <div><strong>Гостевой доступ</strong><small>Ваши источники доступны в этом рабочем пространстве</small></div>
-        </div>
-        <div className="mobile-profile-list">
-          <button type="button" onClick={() => setMobileOverlay("settings")} aria-label="Открыть настройки"><strong>Настройки</strong><Icon name="chevron" size={16} /></button>
-          <div><strong>Язык</strong><span>Русский</span></div>
-          <div><strong>О приложении</strong><span>EVIA</span></div>
-        </div>
-      </section>
-      {mobileOverlay === "wizard" && <section className="mobile-fullscreen mobile-wizard" role="dialog" aria-label="Новый анализ" aria-modal="true">
-        <header><h2>Новый анализ</h2><button aria-label="Закрыть новый анализ" onClick={() => setMobileOverlay(null)}><Icon name="close" size={19} /></button></header>
-        <ol className="wizard-steps">
-          <li className="active"><b>1</b><span>Загрузка данных</span></li>
-          <li><b>2</b><span>Настройка</span></li>
-          <li><b>3</b><span>Анализ</span></li>
-          <li><b>4</b><span>Результат</span></li>
-        </ol>
-        {sources.length > 0 && <div className="wizard-existing"><h3>Или выберите источник</h3>{sources.slice(0, 3).map((item) => <button key={item.source_id} aria-label={`Использовать ${item.name}`} onClick={() => { resetAnalysis(); selectSource(item.source_id); }}><Icon name="file" size={18} /><span><strong>{item.name}</strong><small>{item.source_type.toUpperCase()}</small></span><Icon name="chevron" size={15} /></button>)}</div>}
-        <div className="wizard-bottom"><button className="primary" aria-label="Загрузить CSV в новом анализе" onClick={openMobileUpload}>Загрузить CSV <Icon name="arrow" size={17} /></button><button className="wizard-postgres" onClick={() => { setMobileOverlay(null); openPostgresSetup(); }}>Подключить PostgreSQL</button></div>
-      </section>}
-      {mobileOverlay === "settings" && <section className="mobile-fullscreen mobile-settings" role="dialog" aria-label="Настройки" aria-modal="true">
+      {mobileOverlay === "settings" && <div className="settings-backdrop" data-testid="settings-backdrop" aria-hidden="true" onClick={() => setMobileOverlay(null)} />}
+      {mobileOverlay === "settings" && <section className="mobile-fullscreen mobile-settings" role="dialog" aria-label="Настройки" aria-modal="true" ref={settingsDialog}>
         <header><h2>Настройки</h2><button aria-label="Закрыть настройки" onClick={() => setMobileOverlay(null)}><Icon name="close" size={19} /></button></header>
         <h3>Тема</h3>
         <div className="settings-options">
@@ -1169,20 +1178,20 @@ export default function App() {
       </section>}
       <nav className="mobile-nav" aria-label="Мобильная навигация">
         <button
-          aria-label="Главная"
+          aria-label="Источники"
           aria-pressed={mobilePanel === "home"}
           onClick={() => setMobilePanel("home")}
         >
           <Icon name="home" size={18} />
-          <span>Главная</span>
+          <span>Источники</span>
         </button>
         <button
-          aria-label="Аналитика"
+          aria-label="Рабочее пространство"
           aria-pressed={mobilePanel === "analytics"}
           onClick={() => setMobilePanel("analytics")}
         >
           <Icon name="file" size={18} />
-          <span>Аналитика</span>
+          <span>Данные</span>
         </button>
         <button
           aria-label="Чат"
@@ -1193,12 +1202,12 @@ export default function App() {
           <span>Чат</span>
         </button>
         <button
-          aria-label="Профиль"
-          aria-pressed={mobilePanel === "profile"}
-          onClick={() => setMobilePanel("profile")}
+          aria-label="Настройки"
+          aria-pressed={mobileOverlay === "settings"}
+          onClick={openSettings}
         >
-          <Icon name="user" size={18} />
-          <span>Профиль</span>
+          <Icon name="settings" size={18} />
+          <span>Настройки</span>
         </button>
       </nav>
     </div>

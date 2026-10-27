@@ -115,6 +115,18 @@ it("shows an incomplete model response as a retryable error", async () => {
   expect(screen.queryByRole("button", { name: /Результаты инструментов/ })).not.toBeInTheDocument();
 });
 
+it("opens a real import flow and settings without a fictional analysis wizard or guest profile", async () => {
+  setup();
+  render(<App />);
+  fireEvent.click(screen.getByRole("button", { name: "Добавить источник" }));
+  expect(screen.getByRole("heading", { name: "Добавьте CSV" })).toBeInTheDocument();
+  expect(screen.queryByRole("dialog", { name: "Новый анализ" })).not.toBeInTheDocument();
+  expect(screen.queryByText("Гостевой доступ")).not.toBeInTheDocument();
+  expect(screen.getByRole("navigation", { name: "Мобильная навигация" }).querySelectorAll("button")).toHaveLength(4);
+  fireEvent.click(screen.getByRole("button", { name: "Открыть настройки" }));
+  expect(screen.getByRole("dialog", { name: "Настройки" })).toBeInTheDocument();
+});
+
 it("attaches a selected saved report to one source conversation and clears it on source change", async () => {
   setup(() => Promise.resolve(Response.json({ answer: "Готово", steps: 1, tool_results: [] })));
   const original = vi.mocked(fetch).getMockImplementation()!;
@@ -496,16 +508,16 @@ it("provides mobile navigation for sources, analytics, and chat", async () => {
   render(<App />);
 
   expect(await screen.findByRole("navigation", { name: "Мобильная навигация" })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Главная" })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("button", { name: "Источники" })).toHaveAttribute("aria-pressed", "true");
 
-  fireEvent.click(screen.getByRole("button", { name: "Аналитика" }));
-  expect(screen.getByRole("button", { name: "Аналитика" })).toHaveAttribute("aria-pressed", "true");
+  fireEvent.click(screen.getByRole("button", { name: "Рабочее пространство" }));
+  expect(screen.getByRole("button", { name: "Рабочее пространство" })).toHaveAttribute("aria-pressed", "true");
 
   fireEvent.click(screen.getByRole("button", { name: "Чат" }));
   expect(screen.getByRole("button", { name: "Чат" })).toHaveAttribute("aria-pressed", "true");
 
-  fireEvent.click(screen.getByRole("button", { name: "Профиль" }));
-  expect(screen.getByRole("button", { name: "Профиль" })).toHaveAttribute("aria-pressed", "true");
+  fireEvent.click(screen.getByRole("button", { name: "Источники" }));
+  expect(screen.getByRole("button", { name: "Источники" })).toHaveAttribute("aria-pressed", "true");
 });
 
 it("opens the analysis from a source and returns to the mobile home", async () => {
@@ -513,9 +525,9 @@ it("opens the analysis from a source and returns to the mobile home", async () =
   render(<App />);
 
   await select("A");
-  expect(screen.getByRole("button", { name: "Аналитика" })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("button", { name: "Рабочее пространство" })).toHaveAttribute("aria-pressed", "true");
   fireEvent.click(within(screen.getByRole("main")).getByRole("button", { name: "Назад к источникам" }));
-  expect(screen.getByRole("button", { name: "Главная" })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("button", { name: "Источники" })).toHaveAttribute("aria-pressed", "true");
   expect(screen.getByRole("button", { name: "Источник A" })).toBeInTheDocument();
 });
 
@@ -524,7 +536,7 @@ it("opens a separate CSV upload screen from the home action", async () => {
   render(<App />);
   fireEvent.click(screen.getByRole("button", { name: "Добавить источник" }));
 
-  expect(screen.getByRole("button", { name: "Аналитика" })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("button", { name: "Рабочее пространство" })).toHaveAttribute("aria-pressed", "true");
   expect(screen.getByRole("heading", { name: "Добавьте CSV" })).toBeInTheDocument();
 });
 
@@ -533,7 +545,6 @@ it("previews a selected mobile CSV before uploading it", async () => {
   vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true }));
   render(<App />);
   fireEvent.click(screen.getByRole("button", { name: "Добавить источник" }));
-  fireEvent.click(screen.getByRole("button", { name: "Загрузить CSV в новом анализе" }));
 
   fireEvent.change(screen.getByLabelText("Загрузить CSV"), {
     target: { files: [new File(["id\n1"], "orders.csv", { type: "text/csv" })] },
@@ -545,39 +556,55 @@ it("previews a selected mobile CSV before uploading it", async () => {
   await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url]) => url === "/sources/csv")).toBe(true));
 });
 
-it("shows the mobile analysis steps and opens a dismissible CSV sheet", async () => {
+it("opens a dismissible CSV sheet without fictitious analysis steps", async () => {
   setup();
   vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true }));
   render(<App />);
   fireEvent.click(screen.getByRole("button", { name: "Добавить источник" }));
-  expect(screen.getByRole("dialog", { name: "Новый анализ" })).toBeInTheDocument();
-  expect(screen.getByText("Загрузка данных")).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Загрузить CSV в новом анализе" }));
+  expect(screen.queryByRole("dialog", { name: "Новый анализ" })).not.toBeInTheDocument();
   expect(screen.getByRole("dialog", { name: "Загрузка CSV" })).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Закрыть загрузку CSV" }));
   expect(screen.queryByRole("dialog", { name: "Загрузка CSV" })).not.toBeInTheDocument();
 });
 
-it("can continue a mobile analysis from an existing source", async () => {
+it("keeps the current question when a mobile import is cancelled", async () => {
+  setup();
+  vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true }));
+  render(<App />);
+  await select("A");
+  fireEvent.change(screen.getByRole("textbox", { name: "Ваш вопрос" }), { target: { value: "Важный черновик" } });
+  fireEvent.click(screen.getByRole("button", { name: "Добавить источник" }));
+  expect(screen.getByRole("dialog", { name: "Загрузка CSV" })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Закрыть загрузку CSV" }));
+  expect(screen.getByRole("textbox", { name: "Ваш вопрос" })).toHaveValue("Важный черновик");
+  expect(screen.getByRole("button", { name: "Источник A" })).toHaveAttribute("aria-pressed", "true");
+});
+
+it("can return from mobile import and open an existing source", async () => {
   setup();
   vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true }));
   render(<App />);
   await screen.findByRole("button", { name: "Источник A" });
   fireEvent.click(screen.getByRole("button", { name: "Добавить источник" }));
-  fireEvent.click(screen.getByRole("button", { name: "Использовать Источник A" }));
+  fireEvent.click(screen.getByRole("button", { name: "Закрыть загрузку CSV" }));
+  fireEvent.click(screen.getByRole("button", { name: "Источник A" }));
   expect(screen.queryByRole("dialog", { name: "Новый анализ" })).not.toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Аналитика" })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("button", { name: "Рабочее пространство" })).toHaveAttribute("aria-pressed", "true");
 });
 
 it("opens mobile settings and applies a selected theme", async () => {
   setup();
   render(<App />);
-  fireEvent.click(screen.getByRole("button", { name: "Профиль" }));
-  fireEvent.click(screen.getByRole("button", { name: "Открыть настройки" }));
+  fireEvent.click(screen.getByRole("button", { name: "Чат" }));
+  fireEvent.click(within(screen.getByRole("navigation", { name: "Мобильная навигация" })).getByRole("button", { name: "Настройки" }));
   expect(screen.getByRole("dialog", { name: "Настройки" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Закрыть настройки" })).toHaveFocus();
   fireEvent.click(screen.getByRole("button", { name: "Тёмная тема" }));
   expect(screen.getByTestId("app-shell")).toHaveAttribute("data-theme", "dark");
   fireEvent.click(screen.getByRole("button", { name: "Закрыть настройки" }));
+  expect(screen.queryByRole("dialog", { name: "Настройки" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Открыть настройки" }));
+  fireEvent.click(screen.getByTestId("settings-backdrop"));
   expect(screen.queryByRole("dialog", { name: "Настройки" })).not.toBeInTheDocument();
 });
 
@@ -585,7 +612,6 @@ it("system theme follows a dark device preference", async () => {
   setup();
   vi.stubGlobal("matchMedia", vi.fn((query: string) => ({ matches: query.includes("prefers-color-scheme"), addEventListener: vi.fn(), removeEventListener: vi.fn() })));
   render(<App />);
-  fireEvent.click(screen.getByRole("button", { name: "Профиль" }));
   fireEvent.click(screen.getByRole("button", { name: "Открыть настройки" }));
   fireEvent.click(screen.getByRole("button", { name: "Системная тема" }));
   expect(screen.getByTestId("app-shell")).toHaveAttribute("data-theme", "dark");

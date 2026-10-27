@@ -180,7 +180,7 @@ def test_profile_overview_drilldown_search_and_responsive_layout(server):
             for width in [1280, 1024, 768, 390]:
                 page.set_viewport_size({'width': width, 'height': 844})
                 assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), f'Overflow at {width}px'
-            page.get_by_role('button', name='Аналитика').click()
+            page.get_by_role('button', name='Рабочее пространство').click()
             expect(page.get_by_role('navigation', name='Разделы источника')).to_be_visible()
             page.screenshot(path=str(artifacts / 'analytics-overview-mobile.png'), full_page=True)
             page.set_viewport_size({'width': 1440, 'height': 1000})
@@ -204,8 +204,9 @@ def test_profile_overview_drilldown_search_and_responsive_layout(server):
             page.get_by_role('button', name='Отправить вопрос').click()
             page.get_by_role('button', name='Открыть результат', exact=True).click()
             expect(page.get_by_role('heading', name='Результат анализа')).to_be_visible()
-            page.get_by_role('group', name='Вывод EVIA').locator('summary').click()
-            expect(page.get_by_role('group', name='Вывод EVIA')).to_contain_text('Тестовый режим')
+            expect(page.get_by_role('main').get_by_text('Тестовый режим', exact=False)).to_have_count(0)
+            page.get_by_role('button', name='Открыть ответ в чате').click()
+            expect(page.get_by_role('region', name='Ответ EVIA')).to_contain_text('Тестовый режим')
             page.screenshot(path=str(artifacts / 'analytics-result-desktop.png'), full_page=True)
             # Reload and choose the same persisted source: the overview uses the same real profile.
             page.reload()

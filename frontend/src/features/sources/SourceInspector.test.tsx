@@ -353,7 +353,7 @@ it("clears old analytics while a different source is loading", async () => {
   expect(screen.queryByRole("heading", { name: "Продажи" })).not.toBeInTheDocument();
 });
 
-it("shows the actual answer safely in the analysis pane with its table", async () => {
+it("shows the calculation without duplicating the chat answer", async () => {
   setup();
   const entry: Entry = {
     id: "q1",
@@ -376,7 +376,7 @@ it("shows the actual answer safely in the analysis pane with its table", async (
   expect(
     await screen.findByRole("heading", { name: "Результат анализа" }),
   ).toBeInTheDocument();
-  expect(screen.getByText("Север", { selector: "strong" })).toBeInTheDocument();
+  expect(screen.queryByText("лидирует.")).not.toBeInTheDocument();
   fireEvent.click(screen.getByText("Таблица и детали расчёта"));
   expect(screen.getByRole("region", { name: "Результат execute_sql" })).toBeInTheDocument();
   expect(
