@@ -10,6 +10,7 @@ from app.csv_query_agent import CSVQueryAgent
 from app.dashboard_query_agent import DashboardQueryAgent, is_dashboard_question
 from app.llm.base import LLMProvider
 from app.llm.mock import MockLLMProvider
+from app.llm.openai_provider import OpenAIProvider
 from app.source_service import SourceService
 from app.models import (
     AskResponse,
@@ -248,7 +249,11 @@ class AgentRuntime:
                     timing.llm_ms += elapsed
 
                     # Повторяем только временную ошибку Cloud.ru.
-                    if not isinstance(exc, httpx.HTTPStatusError) or exc.response.status_code != 502:
+                    if (
+                        not isinstance(exc, httpx.HTTPStatusError)
+                        or exc.response.status_code != 502
+                        or isinstance(self.llm, OpenAIProvider)
+                    ):
                         raise
 
                     if attempt == MAX_LLM_RETRIES:

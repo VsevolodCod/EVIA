@@ -272,14 +272,23 @@ def profile_source(source_id: str):
         ) from exc
 
 
+def _validate_attached_dashboard(dashboard_id: str | None) -> None:
+    if dashboard_id is not None and dashboard_repository.get_by_id(dashboard_id) is None:
+        raise HTTPException(status_code=404, detail="Dashboard not found")
+
+
 @app.post("/agent/ask", response_model=AgentResponse)
 async def ask_agent(body: AskRequest):
     try:
+        _validate_attached_dashboard(body.dashboard_id)
         return await agent.ask(
             question=body.question,
             source_ids=body.source_ids,
             **({"dashboard_id": body.dashboard_id} if body.dashboard_id is not None else {}),
         )
+
+    except HTTPException:
+        raise
 
     except Exception as exc:
         logger.exception("Agent execution failed")
@@ -301,6 +310,7 @@ async def chat_agent(
     try:
         if len(body.source_ids) > 1 or (not chat_id and not body.source_ids):
             raise ValueError('Select exactly one source before asking in this chat')
+        _validate_attached_dashboard(body.dashboard_id)
         # Получаем существующий чат или создаём новый.
         chat = await chat_manager.get_or_create(
             chat_id=chat_id,
@@ -668,7 +678,7 @@ def build_dashboard(dashboard_id: str):
                     "success": False,
                     "error": {
                         "code": "chart_execution_failed",
-                        "message": str(exc),
+                        "message": "Не удалось построить график по выбранным данным.",
                     },
                 })
 
