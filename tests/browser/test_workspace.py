@@ -99,6 +99,8 @@ def test_real_workspace_keyboard_mobile_and_safe_markdown(server):
             expect(page.get_by_role('region', name='Ответ EVIA').get_by_text('Тестовый режим показал первые строки выбранного источника.', exact=False)).to_be_visible()
             assert page.locator('.history-list').evaluate('(node) => node.scrollWidth <= node.clientWidth')
             page.get_by_role('button', name='Открыть результат', exact=True).click()
+            expect(page.get_by_role('region', name='Таблица результата').get_by_text('0001', exact=True)).to_be_visible()
+            page.get_by_text('Таблица и детали расчёта', exact=True).click()
             expect(page.get_by_role('region', name='Результат preview_data').get_by_text('0001', exact=True)).to_be_visible()
             # Server source binding and the complete tool result survive without the old browser cache.
             page.evaluate("localStorage.removeItem('evia.chat-sources.v1')")
@@ -107,6 +109,7 @@ def test_real_workspace_keyboard_mobile_and_safe_markdown(server):
             page.get_by_role('button', name=first_question.strip()).click()
             expect(page.get_by_role('region', name='Ответ EVIA').get_by_text('Тестовый режим показал первые строки выбранного источника.', exact=False)).to_be_visible()
             page.get_by_role('button', name='Открыть результат', exact=True).click()
+            page.get_by_text('Таблица и детали расчёта', exact=True).click()
             expect(page.get_by_role('region', name='Результат preview_data').get_by_text('0001', exact=True)).to_be_visible()
             page.screenshot(path=str(artifacts / 'desktop.png'), full_page=True)
 
@@ -201,7 +204,8 @@ def test_profile_overview_drilldown_search_and_responsive_layout(server):
             page.get_by_role('button', name='Отправить вопрос').click()
             page.get_by_role('button', name='Открыть результат', exact=True).click()
             expect(page.get_by_role('heading', name='Результат анализа')).to_be_visible()
-            expect(page.get_by_role('region', name='Вывод EVIA')).to_contain_text('Тестовый режим')
+            page.get_by_role('group', name='Вывод EVIA').locator('summary').click()
+            expect(page.get_by_role('group', name='Вывод EVIA')).to_contain_text('Тестовый режим')
             page.screenshot(path=str(artifacts / 'analytics-result-desktop.png'), full_page=True)
             # Reload and choose the same persisted source: the overview uses the same real profile.
             page.reload()
