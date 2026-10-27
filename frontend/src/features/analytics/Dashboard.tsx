@@ -225,7 +225,7 @@ export function Dashboard({
     </div>
     {rows.length > 0 && <section className="dashboard-preview" aria-label={context === "source" ? "Первые строки источника" : "Таблица результата"}>
       <div className="dashboard-section-heading"><div><h3>{context === "source" ? "Первые строки" : "Таблица результата"}</h3><p>{context === "source" ? `Показано ${rowsText(rows.length)} из предпросмотра · полный объём ${hasSourceTotal ? rowsText(fullSourceRows!) : "неизвестен"}` : rowsText(rows.length)}</p></div>{onOpenData && <button type="button" onClick={onOpenData}>Открыть данные →</button>}</div>
-      <DataTable rows={rows} columns={schema.objects.flatMap((object) => object.fields.map((field) => field.name))} label={context === "source" ? "Первые строки источника" : "Таблица результата"} />
+      <DataTable rows={rows} columns={schema.objects.flatMap((object) => object.fields.map((field) => field.name))} label={context === "source" ? "Таблица первых строк" : "Данные результата"} />
     </section>}
     {hasCharts && <div className="dashboard-section-heading dashboard-charts-heading"><div><h3>Что видно в данных</h3><p>{context === "source" ? "Графики построены по строкам предпросмотра" : "Графики построены по строкам ответа"}</p></div><button type="button" onClick={() => setShowPalette((open) => !open)} aria-expanded={showPalette}>Цвета графиков</button></div>}
     {hasCharts || missingColumns.length > 0 ? <div className="dashboard-grid">

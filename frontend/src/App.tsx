@@ -1027,7 +1027,7 @@ export default function App() {
             )}
           </div>
           <div className="chat-bottom">
-            {activeEntry?.state === "pending" && <div className="helper" role="status"><strong>{eviaStatus(mascotState)}</strong></div>}
+            {activeEntry && <div className="helper" role="status"><Evia state={mascotState} />{activeEntry.state === "pending" && <strong>{eviaStatus(mascotState)}</strong>}</div>}
             {archivedChat && !archivedChat.source_id && (
               <p className="history-details-notice">
                 Для продолжения этого старого диалога выберите источник в левой панели.
