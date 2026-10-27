@@ -163,3 +163,28 @@ async def test_dashboard_build_hides_internal_chart_errors(monkeypatch):
     assert error["code"] == "chart_execution_failed"
     assert "PRIVATE_DB_URI" not in error["message"]
     assert "/data/internal" not in error["message"]
+
+
+@pytest.mark.asyncio
+async def test_chart_build_hides_internal_errors(monkeypatch):
+    module = importlib.import_module("app.main")
+    chart = ChartModel(id="chart-1", definition={
+        "type": "kpi", "title": "Revenue", "field": {"source_id": "sales", "field": "revenue"},
+        "aggregate": "sum",
+    })
+
+    class Charts:
+        def get_by_id(self, _id): return chart
+
+    class Executor:
+        def execute(self, **_kwargs):
+            raise ValueError("PRIVATE_DB_URI=/data/internal/sales.csv")
+
+    monkeypatch.setattr(module, "chart_repository", Charts())
+    monkeypatch.setattr(module, "chart_executor", Executor())
+    async with AsyncClient(transport=ASGITransport(app=module.app), base_url="http://test") as client:
+        response = await client.get("/charts/chart-1/build")
+
+    assert response.status_code == 400
+    assert "PRIVATE_DB_URI" not in response.text
+    assert "/data/internal" not in response.text
