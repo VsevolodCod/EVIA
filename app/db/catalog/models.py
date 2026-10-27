@@ -15,6 +15,7 @@ class DataSourceORM(CatalogBase):
         primary_key=True,
     )
     payload: Mapped[str] = mapped_column(Text, nullable=False)
+    owner_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
 
 
 class SourceSchemaORM(CatalogBase):
@@ -46,6 +47,7 @@ class DashboardORM(CatalogBase):
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     summary: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    owner_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
 
     chart_refs: Mapped[list["DashboardChartRefORM"]] = relationship(
         back_populates="dashboard",
@@ -69,6 +71,7 @@ class ChartORM(CatalogBase):
         nullable=False,
     )
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    owner_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
 
 
 class DashboardChartRefORM(CatalogBase):

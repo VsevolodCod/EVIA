@@ -13,3 +13,5 @@ sqlglot>=27,<28
 jsonschema>=4.23,<5.0
 
 psycopg[binary]>=3.2,<4.0
+pwdlib[argon2]>=0.3,<1.0
+email-validator>=2.2,<3.0

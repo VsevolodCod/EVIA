@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 import logging
+from urllib.parse import urlparse
 from uuid import uuid4
 
 from fastapi import (
@@ -13,6 +14,11 @@ from fastapi import (
 )
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
+from sqlalchemy import text
+
+from app.auth import AuthStore
+from app.auth_routes import router as auth_router, COOKIE
+from app.ownership import current_owner
 
 from app.agent import AgentRuntime
 from app.contracts.v1 import AgentResponse
@@ -97,6 +103,24 @@ async def lifespan(app: FastAPI):
     try:
         await initialize_chat_database(chat_engine)
 
+        if settings.auth_enabled:
+            if not settings.auth_database_url or not settings.auth_secret:
+                raise RuntimeError("AUTH_DATABASE_URL and AUTH_SECRET are required when auth is enabled")
+            auth_store = AuthStore(settings.auth_database_url, secret=settings.auth_secret)
+            try:
+                await run_in_threadpool(auth_store.initialize)
+                app.state.auth_store = auth_store
+                if settings.auth_bootstrap_email and settings.auth_bootstrap_password:
+                    bootstrap = await run_in_threadpool(auth_store.bootstrap, settings.auth_bootstrap_email,
+                                                       settings.auth_bootstrap_password, "Всеволод")
+                    catalog.claim_legacy(bootstrap.id)
+                    async with chat_engine.begin() as connection:
+                        await connection.execute(text("UPDATE chats SET owner_id = :owner WHERE owner_id IS NULL"),
+                                                 {"owner": bootstrap.id})
+            except Exception:
+                await run_in_threadpool(auth_store.close)
+                raise
+
         if postgres_adapter is not None:
             try:
                 source_service.register_postgresql_sources()
@@ -111,6 +135,8 @@ async def lifespan(app: FastAPI):
         yield
 
     finally:
+        if hasattr(app.state, "auth_store"):
+            await run_in_threadpool(app.state.auth_store.close)
         await chat_engine.dispose()
         catalog.close()
         logger.info("Application stopped")
@@ -122,6 +148,33 @@ app = FastAPI(
     description="Local-first foundation for an AI-Native BI platform.",
     lifespan=lifespan,
 )
+
+
+@app.middleware("http")
+async def account_boundary(request: Request, call_next):
+    path = request.url.path
+    if settings.auth_enabled:
+        if request.method not in {"GET", "HEAD", "OPTIONS"}:
+            origin = request.headers.get("origin")
+            if origin:
+                parsed = urlparse(origin)
+                expected_scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
+                if parsed.scheme != expected_scheme or parsed.netloc != request.headers.get("host"):
+                    return __import__("fastapi").responses.JSONResponse({"detail": "Invalid request origin"}, status_code=403)
+        user = await run_in_threadpool(request.app.state.auth_store.get_session_user, request.cookies.get(COOKIE))
+        request.state.account = user
+        protected = path.startswith(("/sources", "/agent", "/chats", "/charts", "/dashboards"))
+        if protected and user is None:
+            return __import__("fastapi").responses.JSONResponse({"detail": "Sign in required"}, status_code=401)
+        token = current_owner.set(user.id if user else None)
+        try:
+            return await call_next(request)
+        finally:
+            current_owner.reset(token)
+    return await call_next(request)
+
+
+app.include_router(auth_router)
 
 
 @app.get("/health")
@@ -268,6 +321,8 @@ def _validate_attached_dashboard(dashboard_id: str | None) -> None:
 @app.post("/agent/ask", response_model=AgentResponse)
 async def ask_agent(body: AskRequest):
     try:
+        if settings.auth_enabled and any(catalog.get_source(source_id) is None for source_id in body.source_ids):
+            raise HTTPException(status_code=404, detail="Source not found")
         _validate_attached_dashboard(body.dashboard_id)
         return await agent.ask(
             question=body.question,
@@ -307,11 +362,15 @@ async def chat_agent(
         logger.info(f"Начат чат с айди {chat.chat_id}")
 
         selected_source = body.source_ids[0] if body.source_ids else None
+        if settings.auth_enabled and selected_source is not None and catalog.get_source(selected_source) is None:
+            raise HTTPException(status_code=404, detail='Selected source not found')
         if chat.source_id is None and selected_source is not None and catalog.get_source(selected_source) is None:
             raise HTTPException(status_code=404, detail='Selected source not found')
         chat.source_id = await chat_manager.bind_source(
             chat.chat_id, selected_source, temporary=temporary_chat,
         )
+        if settings.auth_enabled and catalog.get_source(chat.source_id) is None:
+            raise HTTPException(status_code=404, detail='Selected source not found')
 
         # Добавляем вопрос пользователя в историю.
         chat.messages.append(

@@ -1,0 +1,30 @@
+.auth-page{min-height:100vh;background:radial-gradient(circle at 15% 20%,#e3f5e9,transparent 35%),#f7faf9;display:grid;place-content:center;padding:24px;color:#203d32}
+.auth-brand{font-size:31px;font-weight:850;color:#147d50;margin:0 auto 24px;letter-spacing:-.05em}
+.auth-card{width:min(100%,420px);min-width:min(420px,calc(100vw - 48px));padding:34px;border:1px solid #dfe9e3;border-radius:24px;background:white;box-shadow:0 18px 60px #163e2b12}
+.auth-card h1{font-size:28px;letter-spacing:-.04em;color:#183c2a}
+.auth-intro{margin:10px 0 22px;color:#60766b;line-height:1.45}
+.auth-tabs{display:flex;gap:6px;background:#f1f6f2;border-radius:12px;padding:4px;margin-bottom:20px}
+.auth-tabs button{flex:1;padding:10px;border-radius:9px;font-weight:650}
+.auth-tabs button[aria-pressed=true]{background:#147d50;color:white;box-shadow:0 2px 8px #147d5033}
+.auth-card form,.account-popover form{display:grid;gap:14px}
+.auth-card label,.account-popover label{display:grid;gap:7px;font-size:14px;font-weight:650}
+.auth-card input,.account-popover input{width:100%;border:1px solid #ccded2;border-radius:11px;padding:11px 13px;background:#fff;color:#203d32;outline:none}
+.auth-card input:focus,.account-popover input:focus{border-color:#147d50;box-shadow:0 0 0 3px #147d501a}
+.auth-submit{background:#147d50;color:#fff;border-radius:11px;padding:13px;font-weight:750;margin-top:5px}
+.auth-submit:hover{background:#10643f}
+.auth-link{display:block;margin:18px auto 0;color:#147d50;font-weight:650}
+.auth-hint{font-size:12px;line-height:1.4;color:#789083;margin-top:16px;text-align:center}
+.auth-error{color:#a13f36;font-size:13px;line-height:1.4}
+.auth-notice{color:#147d50;font-size:13px;line-height:1.4}
+.auth-loading{min-height:100vh;display:grid;place-content:center;color:#60766b}
+.account-menu{margin-left:auto;position:relative;z-index:60}
+.account-trigger{display:flex;align-items:center;gap:9px;border:1px solid #d8e5dc;border-radius:12px;padding:5px 10px 5px 5px;background:#fff;font-weight:650}
+.account-avatar{width:28px;height:28px;display:grid;place-content:center;border-radius:9px;background:#dff3e7;color:#147d50}
+.account-name{max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.account-popover{position:absolute;right:0;top:calc(100% + 10px);width:min(340px,calc(100vw - 28px));padding:19px;background:white;border:1px solid #d8e5dc;border-radius:17px;box-shadow:0 18px 55px #13382322;display:grid;gap:16px}
+.account-heading{display:flex;justify-content:space-between;align-items:center}.account-heading h2{font-size:19px}.account-heading button{font-size:24px;line-height:1}
+.account-email{color:#60766b;overflow-wrap:anywhere;font-size:13px}
+.account-popover form{gap:9px;border-top:1px solid #e5ede7;padding-top:13px}
+.account-popover form button{justify-self:start;padding:8px 13px;border:1px solid #b9d9c6;border-radius:9px;color:#147d50;font-weight:700}
+.account-logout{border-top:1px solid #e5ede7;padding:13px 0 0;text-align:left;color:#a13f36;font-weight:700}
+@media(max-width:640px){.auth-card{padding:25px}.account-name{display:none}.account-trigger{padding:4px}.account-popover{right:-45px}}
