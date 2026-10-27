@@ -6,8 +6,8 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 
-@pytest.mark.asyncio
-async def test_auth_session_profile_and_source_isolation(tmp_path, monkeypatch):
+@pytest.fixture
+def auth_module(tmp_path, monkeypatch):
     monkeypatch.setenv("AUTH_DATABASE_URL", f"sqlite:///{tmp_path / 'auth.db'}")
     monkeypatch.setenv("AUTH_ENABLED", "1")
     monkeypatch.setenv("AUTH_SECRET", "test-secret-only-for-ci")
@@ -16,6 +16,14 @@ async def test_auth_session_profile_and_source_isolation(tmp_path, monkeypatch):
     monkeypatch.setenv("CHAT_DB_PATH", str(tmp_path / "chats.db"))
     monkeypatch.setenv("LLM_PROVIDER", "mock")
     module = importlib.reload(importlib.import_module("app.main"))
+    yield module
+    monkeypatch.undo()
+    importlib.reload(module)
+
+
+@pytest.mark.asyncio
+async def test_auth_session_profile_and_source_isolation(auth_module):
+    module = auth_module
     async with module.app.router.lifespan_context(module.app):
         async with AsyncClient(transport=ASGITransport(app=module.app), base_url="http://test") as first, AsyncClient(
             transport=ASGITransport(app=module.app), base_url="http://test"
@@ -52,7 +60,7 @@ async def test_auth_session_profile_and_source_isolation(tmp_path, monkeypatch):
 async def test_reset_code_is_single_use_and_revokes_sessions(tmp_path):
     from app.auth import AuthStore
 
-    store = AuthStore(f"sqlite:///{tmp_path / 'auth.db'}", secret="test-secret")
+    store = AuthStore(f"sqlite:///{tmp_path / 'auth.db'}", secret="test-secret-only-for-ci")
     store.initialize()
     account = store.register("user@example.com", "correct horse battery", "User")
     token = store.create_session(account.id)

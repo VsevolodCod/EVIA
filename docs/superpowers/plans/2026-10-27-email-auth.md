@@ -11,7 +11,7 @@
 ### Task 1: Auth contracts and persistence
 - [ ] Add failing hosted tests for registration, login, logout, profile, reset codes, throttling, and session expiry.
 - [ ] Implement PostgreSQL-backed auth store and HTTP routes.
-- [ ] Add SMTP delivery for recovery and explicit unavailable state when not configured.
+- [ ] Add HTTPS email delivery through Resend and explicit unavailable state when not configured.
 
 ### Task 2: Tenant isolation
 - [ ] Add failing hosted tests for cross-user source, chat, chart, dashboard and agent access.

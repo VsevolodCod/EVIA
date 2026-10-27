@@ -1,8 +1,7 @@
 """Same-origin account API and SMTP password recovery."""
 
 import os
-import smtplib
-from email.message import EmailMessage
+import httpx
 
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.concurrency import run_in_threadpool
@@ -66,25 +65,16 @@ def set_cookie(request: Request, response: Response, token: str) -> None:
 
 
 def mail_configured() -> bool:
-    return all(os.getenv(key) for key in ("SMTP_HOST", "SMTP_USER", "SMTP_PASSWORD", "MAIL_FROM"))
+    return bool(os.getenv("RESEND_API_KEY") and os.getenv("MAIL_FROM"))
 
 
 def send_reset_code(recipient: str, code: str) -> None:
-    message = EmailMessage()
-    message["From"] = os.environ["MAIL_FROM"]
-    message["To"] = recipient
-    message["Subject"] = "EVIA — код восстановления пароля"
-    message.set_content(f"Ваш код восстановления EVIA: {code}\nКод действует 10 минут. Если вы не запрашивали его, игнорируйте письмо.")
-    port = int(os.getenv("SMTP_PORT", "465"))
-    if port == 465:
-        with smtplib.SMTP_SSL(os.environ["SMTP_HOST"], port, timeout=10) as smtp:
-            smtp.login(os.environ["SMTP_USER"], os.environ["SMTP_PASSWORD"])
-            smtp.send_message(message)
-    else:
-        with smtplib.SMTP(os.environ["SMTP_HOST"], port, timeout=10) as smtp:
-            smtp.starttls()
-            smtp.login(os.environ["SMTP_USER"], os.environ["SMTP_PASSWORD"])
-            smtp.send_message(message)
+    response = httpx.post("https://api.resend.com/emails", timeout=10,
+        headers={"Authorization": f"Bearer {os.environ['RESEND_API_KEY']}"},
+        json={"from": os.environ["MAIL_FROM"], "to": [recipient],
+              "subject": "EVIA — код восстановления пароля",
+              "text": f"Ваш код восстановления EVIA: {code}\nКод действует 10 минут. Если вы не запрашивали его, игнорируйте письмо."})
+    response.raise_for_status()
 
 
 @router.get("/status")
@@ -161,7 +151,7 @@ async def request_reset(body: ResetRequest, request: Request):
     if code:
         try:
             await run_in_threadpool(send_reset_code, str(body.email), code)
-        except (OSError, smtplib.SMTPException) as exc:
+        except (OSError, httpx.HTTPError) as exc:
             raise HTTPException(status_code=503, detail="Email delivery is temporarily unavailable") from exc
     return {"ok": True}
 

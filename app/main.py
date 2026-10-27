@@ -13,7 +13,7 @@ from fastapi import (
     UploadFile,
 )
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy import text
 
 from app.auth import AuthStore
@@ -160,12 +160,12 @@ async def account_boundary(request: Request, call_next):
                 parsed = urlparse(origin)
                 expected_scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
                 if parsed.scheme != expected_scheme or parsed.netloc != request.headers.get("host"):
-                    return __import__("fastapi").responses.JSONResponse({"detail": "Invalid request origin"}, status_code=403)
+                    return JSONResponse({"detail": "Invalid request origin"}, status_code=403)
         user = await run_in_threadpool(request.app.state.auth_store.get_session_user, request.cookies.get(COOKIE))
         request.state.account = user
         protected = path.startswith(("/sources", "/agent", "/chats", "/charts", "/dashboards"))
         if protected and user is None:
-            return __import__("fastapi").responses.JSONResponse({"detail": "Sign in required"}, status_code=401)
+            return JSONResponse({"detail": "Sign in required"}, status_code=401)
         token = current_owner.set(user.id if user else None)
         try:
             return await call_next(request)
