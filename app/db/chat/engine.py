@@ -39,6 +39,7 @@ async def initialize_chat_database(engine: AsyncEngine) -> None:
         await connection.run_sync(ChatBase.metadata.create_all)
         for table, column, definition in (
             ('chats', 'source_id', 'VARCHAR(200)'),
+            ('chats', 'owner_id', 'VARCHAR(36)'),
             ('chat_messages', 'analysis_payload', 'JSON'),
             ('chat_messages', 'response', 'JSON'),
         ):

@@ -16,6 +16,8 @@ import { DashboardGallery } from "./features/results/DashboardGallery";
 import { PostgresSetup } from "./features/sources/PostgresSetup";
 import type { Entry, View } from "./features/chat/types";
 import { ResponseTiming } from "./features/chat/ResponseTiming";
+import { AccountMenu } from "./AccountMenu";
+import type { Account } from "./authApi";
 import "./styles.css";
 import {
   resolveEviaState,
@@ -90,7 +92,11 @@ function mergeEntries(existing: Entry[], loaded: Entry[]): Entry[] {
   return [...loaded.filter((entry) => !known.has(entry.id)), ...existing];
 }
 
-export default function App() {
+export default function App({ account, onAccountChange, onLogout }: {
+  account?: Account;
+  onAccountChange?: (account: Account) => void;
+  onLogout?: () => Promise<void>;
+} = {}) {
   const [sources, setSources] = useState<Source[]>([]);
   const [sourcesLoading, setSourcesLoading] = useState(true);
   const [sourcesError, setSourcesError] = useState("");
@@ -651,6 +657,7 @@ export default function App() {
         >
           EVIA
         </a>
+        {account && onAccountChange && onLogout && <AccountMenu account={account} onChange={onAccountChange} onLogout={onLogout} />}
         <button className="mobile-settings-entry" aria-label="Открыть настройки" onClick={openSettings}><Icon name="settings" size={18} /></button>
       </header>
       <div className="workspace">

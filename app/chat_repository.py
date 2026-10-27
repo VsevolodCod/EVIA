@@ -7,6 +7,7 @@ from sqlalchemy.orm import lazyload
 
 from app.db.chat.models import ChatORM, ChatMessageORM
 from app.models import Chat, ChatMessage, ChatHistoryResponse
+from app.ownership import owner_id
 
 
 class ChatNotFoundError(Exception):
@@ -47,7 +48,15 @@ def message_payload(message):
 class ChatManager:
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
         self.session_factory = session_factory
-        self.temporary_chats: dict[str, Chat] = {}
+        self.temporary_chats: dict[tuple[str | None, str], Chat] = {}
+
+    @staticmethod
+    def _visible(record: ChatORM | None) -> bool:
+        return record is not None and (owner_id() is None or record.owner_id == owner_id())
+
+    @staticmethod
+    def _temporary_key(chat_id: str) -> tuple[str | None, str]:
+        return owner_id(), chat_id
 
     async def get_or_create(self, chat_id: str | None = None, temporary: bool = True) -> Chat:
         if chat_id is None:
@@ -58,14 +67,14 @@ class ChatManager:
                 await self.create_persistent_chat(chat)
             return chat
         if temporary:
-            chat = self.temporary_chats.get(chat_id)
+            chat = self.temporary_chats.get(self._temporary_key(chat_id))
             if chat is None:
                 raise ChatNotFoundError(f"Chat '{chat_id}' not found")
             return chat.model_copy(deep=True)
         async with self.session_factory() as session:
             await session.execute(text('BEGIN'))
             record = await session.get(ChatORM, chat_id, options=[lazyload(ChatORM.messages)])
-            if record is None:
+            if not self._visible(record):
                 raise ChatNotFoundError(f"Chat '{chat_id}' not found")
             messages = (await session.scalars(select(ChatMessageORM).where(
                 ChatMessageORM.chat_id == chat_id).order_by(ChatMessageORM.position))).all()
@@ -83,7 +92,7 @@ class ChatManager:
         async with self.session_factory() as session:
             await session.execute(text('BEGIN'))
             record = await session.get(ChatORM, chat_id, options=[lazyload(ChatORM.messages)])
-            if record is None:
+            if not self._visible(record):
                 return None
             total = await session.scalar(select(func.count()).select_from(ChatMessageORM).where(
                 ChatMessageORM.chat_id == chat_id)) or 0
@@ -101,7 +110,7 @@ class ChatManager:
     async def bind_source(self, chat_id: str, source_id: str | None, temporary: bool = False) -> str:
         """Bind once before generation, using a short cross-process writer transaction."""
         if temporary:
-            chat = self.temporary_chats.get(chat_id)
+            chat = self.temporary_chats.get(self._temporary_key(chat_id))
             if chat is None:
                 raise ChatNotFoundError(f"Chat '{chat_id}' not found")
             # No await between checking and assigning the in-memory binding.
@@ -110,7 +119,7 @@ class ChatManager:
         async with self.session_factory() as session:
             await session.execute(text('BEGIN IMMEDIATE'))
             record = await session.get(ChatORM, chat_id, options=[lazyload(ChatORM.messages)])
-            if record is None:
+            if not self._visible(record):
                 raise ChatNotFoundError(f"Chat '{chat_id}' not found")
             record.source_id = bound_source(record.source_id, source_id)
             await session.commit()
@@ -125,7 +134,7 @@ class ChatManager:
         if not chat.temporary:
             await self._save_persistent(chat)
             return
-        saved = self.temporary_chats.get(chat.chat_id)
+        saved = self.temporary_chats.get(self._temporary_key(chat.chat_id))
         merged = saved.model_copy(deep=True) if saved else chat.model_copy(deep=True, update={'messages': []})
         if saved and saved.source_id is not None:
             bound_source(saved.source_id, chat.source_id)
@@ -142,7 +151,7 @@ class ChatManager:
             known[message.message_id] = message
         merged.title = chat.title
         merged.updated_at = datetime.now(timezone.utc)
-        self.temporary_chats[chat.chat_id] = merged
+        self.temporary_chats[self._temporary_key(chat.chat_id)] = merged
         chat.updated_at = merged.updated_at
 
     async def _save_persistent(self, chat: Chat, create_only: bool = False) -> None:
@@ -153,11 +162,14 @@ class ChatManager:
             # happens inside this short transaction. Context exit rolls back errors.
             await session.execute(text('BEGIN IMMEDIATE'))
             record = await session.get(ChatORM, chat.chat_id, options=[lazyload(ChatORM.messages)])
+            if record is not None and not self._visible(record):
+                raise ChatNotFoundError(f"Chat '{chat.chat_id}' not found")
             if record is not None and create_only:
                 raise ValueError(f"Chat '{chat.chat_id}' already exists")
             if record is None:
                 record = ChatORM(chat_id=chat.chat_id, title=chat.title,
                                  source_id=chat.source_id,
+                                 owner_id=owner_id(),
                                  created_at=chat.created_at, updated_at=updated_at)
                 session.add(record)
                 await session.flush()
@@ -191,11 +203,11 @@ class ChatManager:
 
     async def delete(self, chat_id: str, temporary: bool) -> bool:
         if temporary:
-            return self.temporary_chats.pop(chat_id, None) is not None
+            return self.temporary_chats.pop(self._temporary_key(chat_id), None) is not None
         async with self.session_factory() as session:
             await session.execute(text('BEGIN IMMEDIATE'))
             record = await session.get(ChatORM, chat_id, options=[lazyload(ChatORM.messages)])
-            if record is None:
+            if not self._visible(record):
                 return False
             await session.execute(delete(ChatMessageORM).where(ChatMessageORM.chat_id == chat_id))
             await session.delete(record)
@@ -204,7 +216,10 @@ class ChatManager:
 
     async def list_persistent_chats(self, limit: int = 50, offset: int = 0) -> list[dict]:
         async with self.session_factory() as session:
-            records = (await session.scalars(select(ChatORM).options(lazyload(ChatORM.messages))
+            statement = select(ChatORM).options(lazyload(ChatORM.messages))
+            if owner_id() is not None:
+                statement = statement.where(ChatORM.owner_id == owner_id())
+            records = (await session.scalars(statement
                 .order_by(ChatORM.updated_at.desc(), ChatORM.chat_id).limit(limit).offset(offset))).all()
             return [{'chat_id': record.chat_id, 'title': record.title,
                      'source_id': record.source_id,

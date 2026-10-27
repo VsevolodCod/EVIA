@@ -345,6 +345,7 @@ async function request<T>(
     );
   }
   if (!response.ok) {
+    if (response.status === 401) window.dispatchEvent(new Event("evia:unauthorized"));
     const body: unknown = await response.json().catch(() => null);
     const detail =
       body && typeof body === "object" && "detail" in body ? body.detail : null;

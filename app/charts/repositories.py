@@ -14,6 +14,7 @@ from app.charts.models import (
     DashboardModel,
 )
 from app.db.catalog import DashboardORM, DashboardChartRefORM, ChartORM
+from app.ownership import owner_id
 
 
 SessionMaker = sessionmaker[Session]
@@ -64,6 +65,7 @@ class ChartRepository:
             chart_id=chart.id,
             definition=chart.definition.model_dump(mode="json"),
             version=chart.version,
+            owner_id=owner_id(),
         )
 
     def create(self, chart: ChartModel) -> ChartModel:
@@ -110,6 +112,8 @@ class ChartRepository:
             statement = select(ChartORM).where(
                 ChartORM.chart_id == chart_id
             )
+            if owner_id() is not None:
+                statement = statement.where(ChartORM.owner_id == owner_id())
             orm = session.scalar(statement)
 
             if orm is None:
@@ -129,6 +133,8 @@ class ChartRepository:
                 .order_by(ChartORM.chart_id)
                 .limit(limit)
             )
+            if owner_id() is not None:
+                statement = statement.where(ChartORM.owner_id == owner_id())
             result = session.scalars(statement)
             return [self._to_model(orm) for orm in result.all()]
 
@@ -139,7 +145,7 @@ class ChartRepository:
             with session.begin():
                 orm = session.get(ChartORM, chart_id)
 
-                if orm is None:
+                if orm is None or (owner_id() is not None and orm.owner_id != owner_id()):
                     return False
 
                 session.delete(orm)
@@ -189,6 +195,7 @@ class DashboardRepository:
                     title=dashboard.title,
                     summary=dashboard.summary,
                     version=dashboard.version,
+                    owner_id=owner_id(),
                     chart_refs=[
                         DashboardChartRefORM(
                             chart_id=ref.chart_id,
@@ -213,6 +220,8 @@ class DashboardRepository:
                 .where(DashboardORM.dashboard_id == dashboard_id)
                 .options(selectinload(DashboardORM.chart_refs))
             )
+            if owner_id() is not None:
+                statement = statement.where(DashboardORM.owner_id == owner_id())
             orm = session.scalar(statement)
 
             if orm is None:
@@ -230,6 +239,8 @@ class DashboardRepository:
                     .where(DashboardORM.dashboard_id == dashboard.id)
                     .options(selectinload(DashboardORM.chart_refs))
                 )
+                if owner_id() is not None:
+                    statement = statement.where(DashboardORM.owner_id == owner_id())
                 orm = session.scalar(statement)
 
                 if orm is None:
@@ -262,7 +273,7 @@ class DashboardRepository:
             with session.begin():
                 orm = session.get(DashboardORM, dashboard_id)
 
-                if orm is None:
+                if orm is None or (owner_id() is not None and orm.owner_id != owner_id()):
                     return False
 
                 session.delete(orm)
@@ -285,5 +296,7 @@ class DashboardRepository:
                 .limit(limit)
                 .offset(offset)
             )
+            if owner_id() is not None:
+                statement = statement.where(DashboardORM.owner_id == owner_id())
             result = session.scalars(statement)
             return [self._to_model(orm) for orm in result.all()]

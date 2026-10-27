@@ -1,12 +1,13 @@
 from pathlib import Path
 
-from sqlalchemy import create_engine, select, update
+from sqlalchemy import create_engine, select, update, text
 from sqlalchemy.engine import URL
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.db.catalog.models import DataSourceORM, SourceSchemaORM
+from app.db.catalog.models import DataSourceORM, SourceSchemaORM, ChartORM, DashboardORM
 from app.db.base import CatalogBase
 from app.models import DataSource, SourceSchema
+from app.ownership import owner_id
 
 
 class CatalogConflictError(ValueError):
@@ -31,6 +32,11 @@ class SchemaCatalog:
             )
             self._engine = create_engine(url)
             CatalogBase.metadata.create_all(self._engine)
+            with self._engine.begin() as connection:
+                for table in ("sources", "charts", "dashboards"):
+                    columns = {row[1] for row in connection.execute(text(f"PRAGMA table_info({table})"))}
+                    if "owner_id" not in columns:
+                        connection.execute(text(f"ALTER TABLE {table} ADD COLUMN owner_id VARCHAR(36)"))
             self.session_factory = sessionmaker(
                 bind=self._engine,
                 expire_on_commit=False,
@@ -46,9 +52,12 @@ class SchemaCatalog:
                 record = DataSourceORM(
                     source_id=source.source_id,
                     payload=source.model_dump_json(),
+                    owner_id=owner_id(),
                 )
                 session.add(record)
             else:
+                if owner_id() is not None and record.owner_id != owner_id():
+                    raise KeyError(source.source_id)
                 record.payload = source.model_dump_json()
 
     def save_source_and_schema(
@@ -57,11 +66,13 @@ class SchemaCatalog:
         """Publish a CSV snapshot and its schema in one catalog transaction."""
         with self.session_factory.begin() as session:
             record = session.get(DataSourceORM, source.source_id)
+            if record is not None and owner_id() is not None and record.owner_id != owner_id():
+                raise KeyError(source.source_id)
             current_snapshot = DataSource.model_validate_json(record.payload).snapshot_id if record else None
             if current_snapshot != expected_snapshot_id:
                 raise CatalogConflictError("CSV source changed during import")
             if record is None:
-                session.add(DataSourceORM(source_id=source.source_id, payload=source.model_dump_json()))
+                session.add(DataSourceORM(source_id=source.source_id, payload=source.model_dump_json(), owner_id=owner_id()))
             else:
                 changed = session.execute(
                     update(DataSourceORM)
@@ -82,7 +93,7 @@ class SchemaCatalog:
         with self.session_factory() as session:
             record = session.get(DataSourceORM, source_id)
 
-            if record is None:
+            if record is None or (owner_id() is not None and record.owner_id != owner_id()):
                 return None
 
             payload = record.payload
@@ -91,9 +102,10 @@ class SchemaCatalog:
 
     def list_sources(self) -> list[DataSource]:
         with self.session_factory() as session:
-            records = session.scalars(
-                select(DataSourceORM).order_by(DataSourceORM.source_id)
-            ).all()
+            statement = select(DataSourceORM).order_by(DataSourceORM.source_id)
+            if owner_id() is not None:
+                statement = statement.where(DataSourceORM.owner_id == owner_id())
+            records = session.scalars(statement).all()
 
             payloads = [record.payload for record in records]
 
@@ -103,6 +115,8 @@ class SchemaCatalog:
         ]
 
     def save_schema(self, schema: SourceSchema) -> None:
+        if owner_id() is not None and self.get_source(schema.source_id) is None:
+            raise KeyError(schema.source_id)
         with self.session_factory.begin() as session:
             record = session.get(SourceSchemaORM, schema.source_id)
 
@@ -118,6 +132,8 @@ class SchemaCatalog:
                 record.payload = schema.model_dump_json()
 
     def get_schema(self, source_id: str) -> SourceSchema | None:
+        if owner_id() is not None and self.get_source(source_id) is None:
+            return None
         with self.session_factory() as session:
             record = session.get(SourceSchemaORM, source_id)
 
@@ -127,6 +143,12 @@ class SchemaCatalog:
             payload = record.payload
 
         return SourceSchema.model_validate_json(payload)
+
+    def claim_legacy(self, user_id: str) -> None:
+        """Assign pre-account artifacts only to the explicit bootstrap account."""
+        with self.session_factory.begin() as session:
+            for model in (DataSourceORM, ChartORM, DashboardORM):
+                session.execute(update(model).where(model.owner_id.is_(None)).values(owner_id=user_id))
 
     def close(self) -> None:
         """Освободить ресурсы движка, если он создан этим объектом."""
