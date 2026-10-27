@@ -115,6 +115,18 @@ it("shows an incomplete model response as a retryable error", async () => {
   expect(screen.queryByRole("button", { name: /Результаты инструментов/ })).not.toBeInTheDocument();
 });
 
+it("opens a real import flow and settings without a fictional analysis wizard or guest profile", async () => {
+  setup();
+  render(<App />);
+  fireEvent.click(screen.getByRole("button", { name: "Добавить источник" }));
+  expect(screen.getByRole("heading", { name: "Добавьте CSV" })).toBeInTheDocument();
+  expect(screen.queryByRole("dialog", { name: "Новый анализ" })).not.toBeInTheDocument();
+  expect(screen.queryByText("Гостевой доступ")).not.toBeInTheDocument();
+  expect(screen.getByRole("navigation", { name: "Мобильная навигация" }).querySelectorAll("button")).toHaveLength(3);
+  fireEvent.click(screen.getByRole("button", { name: "Открыть настройки" }));
+  expect(screen.getByRole("dialog", { name: "Настройки" })).toBeInTheDocument();
+});
+
 it("attaches a selected saved report to one source conversation and clears it on source change", async () => {
   setup(() => Promise.resolve(Response.json({ answer: "Готово", steps: 1, tool_results: [] })));
   const original = vi.mocked(fetch).getMockImplementation()!;

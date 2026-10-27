@@ -2,7 +2,8 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { AnalysisResult } from "./AnalysisResult";
 
 it("builds a dashboard from one successful tabular tool result", () => {
-  render(<AnalysisResult entry={{
+  const openChat = vi.fn();
+  render(<AnalysisResult onOpenChat={openChat} entry={{
     id: "answer-1",
     question: "Как менялись продажи?",
     state: "success",
@@ -26,7 +27,17 @@ it("builds a dashboard from one successful tabular tool result", () => {
   expect(screen.queryByText("В ответе инструмента: 2 строки")).not.toBeInTheDocument();
   expect(screen.queryByText(/предпросмотре источника/)).not.toBeInTheDocument();
   expect(screen.getByRole("img", { name: /Динамика по полю month/ })).toBeInTheDocument();
-  expect(screen.getByText("Продажи растут.")).toBeInTheDocument();
+  expect(screen.queryByText("Продажи растут.")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Открыть ответ в чате" }));
+  expect(openChat).toHaveBeenCalledOnce();
+});
+
+it("keeps the answer in the result view when no visual result exists", () => {
+  render(<AnalysisResult entry={{ id: "text", question: "Что изменилось?", state: "success", answer: {
+    answer: "Продажи выросли.", steps: 1, tool_results: [],
+  } }} />);
+  expect(screen.getByText("Продажи выросли.")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Открыть ответ в чате" })).not.toBeInTheDocument();
 });
 
 it("builds a dashboard from the QueryResult container returned by query_data", () => {
