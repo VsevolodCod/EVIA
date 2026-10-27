@@ -13,15 +13,13 @@ from fastapi import (
 )
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
-from sqlalchemy import URL, create_engine
-from sqlalchemy.orm import sessionmaker
 
 from app.agent import AgentRuntime
 from app.contracts.v1 import AgentResponse
 from app.config import PROJECT_ROOT, get_settings
 from app.csv_import import CSVImportError
 from app.data_sources.postgresql_adapter import PostgresSourceError, PostgreSQLAdapter
-from app.db import create_chat_database, initialize_chat_database, CatalogBase
+from app.db import create_chat_database, initialize_chat_database
 from app.llm.factory import create_llm_provider
 from app.models import AnalysisPayload, AskRequest, AskResponse, ChatMessage, DataSource, CSVVersion, Chat, ChatCreateRequest, ChatSummary, \
     ChatHistoryResponse
@@ -43,19 +41,9 @@ logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
-# Каталог источников и схем.
-url = URL.create(
-    "sqlite+pysqlite",
-    database=str(settings.catalog_db_path),
-)
-engine = create_engine(url)
-CatalogBase.metadata.create_all(engine)
-session_factory = sessionmaker(
-    bind=engine,
-    expire_on_commit=False,
-)
-
-catalog = SchemaCatalog(settings.catalog_db_path, session_factory)
+# Каталог и инструменты используют одну фабрику сессий.
+catalog = SchemaCatalog(settings.catalog_db_path)
+session_factory = catalog.session_factory
 
 postgres_adapter = PostgreSQLAdapter(settings.postgres) if settings.postgres.enabled else None
 
@@ -607,16 +595,17 @@ def build_saved_chart(chart_id: str):
 
     except ValueError as exc:
         # Например, чарт не существует или его параметры некорректны.
+        logger.warning("Invalid chart build request for %s: %s", chart_id, type(exc).__name__)
         raise HTTPException(
             status_code=400,
-            detail=str(exc),
+            detail="Invalid chart configuration",
         ) from exc
 
     except Exception as exc:
         logger.exception("Could not build chart %s", chart_id)
         raise HTTPException(
             status_code=500,
-            detail=f"Could not build chart: {type(exc).__name__}",
+            detail="Could not build chart",
         ) from exc
 
 

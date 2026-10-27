@@ -382,7 +382,6 @@ class AgentRuntime:
                 # Надо добавить проверку на корректность и обработку ошибок
                 tool_started = perf_counter()
                 try:
-                    # logger.info(call.arguments)
                     result = self.tools.execute(call.name, call.arguments)
                 finally:
                     timing.tools_ms += (perf_counter() - tool_started) * 1000
