@@ -8,6 +8,7 @@ from httpx import ASGITransport, AsyncClient
 from app.contracts.v1 import AgentResponse
 from app.charts.engine import DashboardEngine
 from app.charts.executor import ChartExecutor
+from app.charts.models import ChartModel, ChartReference, DashboardModel
 from app.charts.repositories import ChartRepository, DashboardRepository
 from app.schema_catalog import SchemaCatalog
 from app.source_service import SourceService
@@ -101,3 +102,39 @@ async def test_dashboard_context_is_forwarded_only_when_requested(monkeypatch):
     assert attached.status_code == 200
     assert "dashboard_id" not in agent.calls[0]
     assert agent.calls[1]["dashboard_id"] == "dashboard-123"
+
+
+@pytest.mark.asyncio
+async def test_dashboard_build_hides_internal_chart_errors(monkeypatch):
+    module = importlib.import_module("app.main")
+    dashboard = DashboardModel(
+        id="dashboard-1", title="Sales", charts=[ChartReference(chart_id="chart-1", position=0)]
+    )
+    chart = ChartModel(id="chart-1", definition={
+        "type": "kpi", "title": "Revenue", "field": {"source_id": "sales", "field": "revenue"},
+        "aggregate": "sum",
+    })
+
+    class Dashboards:
+        def get_by_id(self, _id): return dashboard
+
+    class Charts:
+        def get_by_id(self, _id): return chart
+
+    class Executor:
+        def execute(self, **_kwargs):
+            raise RuntimeError("PRIVATE_DB_URI=/data/internal/sales.csv")
+
+    monkeypatch.setattr(module, "dashboard_repository", Dashboards())
+    monkeypatch.setattr(module, "chart_repository", Charts())
+    monkeypatch.setattr(module, "chart_executor", Executor())
+
+    async with AsyncClient(transport=ASGITransport(app=module.app), base_url="http://test") as client:
+        response = await client.get("/dashboards/dashboard-1/build")
+
+    assert response.status_code == 200
+    assert response.json()["success"] is False
+    error = response.json()["charts"][0]["error"]
+    assert error["code"] == "chart_execution_failed"
+    assert "PRIVATE_DB_URI" not in error["message"]
+    assert "/data/internal" not in error["message"]

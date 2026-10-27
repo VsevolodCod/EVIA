@@ -3,6 +3,7 @@ import httpx
 
 from app.agent import AgentRuntime
 from app.llm.mock import MockLLMProvider
+from app.llm.openai_provider import OpenAIProvider
 from app.schema_catalog import SchemaCatalog
 from app.source_service import SourceService
 from app.tools import build_tool_registry
@@ -174,6 +175,30 @@ async def test_agent_retries_transient_502_without_spending_a_step(monkeypatch):
     assert result.answer == "Ответ получен"
     assert result.steps == 1
     assert llm.calls == 2
+
+
+@pytest.mark.asyncio
+async def test_openai_provider_502_is_not_retried_again_by_agent(monkeypatch):
+    class FailingOpenAI(OpenAIProvider):
+        calls = 0
+
+        async def chat(self, messages, tools=None):
+            self.calls += 1
+            request = httpx.Request("POST", "https://model.example/chat")
+            response = httpx.Response(502, request=request)
+            raise httpx.HTTPStatusError("temporary", request=request, response=response)
+
+    class Tools:
+        def descriptions(self): return []
+
+    async def no_wait(_delay):
+        return None
+
+    monkeypatch.setattr("app.agent.asyncio.sleep", no_wait)
+    provider = FailingOpenAI.__new__(FailingOpenAI)
+    with pytest.raises(httpx.HTTPStatusError):
+        await AgentRuntime(provider, Tools()).ask("Вопрос")
+    assert provider.calls == 1
 
 
 @pytest.mark.asyncio
