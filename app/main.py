@@ -278,7 +278,7 @@ async def ask_agent(body: AskRequest):
         return await agent.ask(
             question=body.question,
             source_ids=body.source_ids,
-            dashboard_id=body.dashboard_id,
+            **({"dashboard_id": body.dashboard_id} if body.dashboard_id is not None else {}),
         )
 
     except Exception as exc:
@@ -333,11 +333,11 @@ async def chat_agent(
         answer = await agent.ask(
             question=body.question,
             source_ids=[chat.source_id],
-            dashboard_id=body.dashboard_id,
             # CSV clarification choices need their persisted structured payload
             # to resume the original request. Providers still receive only
             # role/content fields inside the agent.
             history=chat.messages[:-1],
+            **({"dashboard_id": body.dashboard_id} if body.dashboard_id is not None else {}),
         )
 
         response_data = answer.model_dump()

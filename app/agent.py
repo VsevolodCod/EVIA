@@ -243,14 +243,12 @@ class AgentRuntime:
                         self.tools.descriptions(),
                     )
 
-                except httpx.HTTPStatusError as exc:
+                except Exception as exc:
                     elapsed = (perf_counter() - call_started) * 1000
                     timing.llm_ms += elapsed
 
-                    status_code = exc.response.status_code
-
                     # Повторяем только временную ошибку Cloud.ru.
-                    if status_code != 502:
+                    if not isinstance(exc, httpx.HTTPStatusError) or exc.response.status_code != 502:
                         raise
 
                     if attempt == MAX_LLM_RETRIES:
@@ -318,10 +316,19 @@ class AgentRuntime:
                 # Защита от неожиданного выхода без результата.
                 raise IncompleteModelOutput(step, results)
 
-            answer_parts.clear()
-            # logger.info(response.finish_reason)
+            if response.finish_reason == "length":
+                if response.tool_calls or step == self.max_steps:
+                    raise IncompleteModelOutput(step, results)
+                answer_parts.append(response.content)
+                messages.append(LLMMessage(role="assistant", content=response.content))
+                messages.append(LLMMessage(role="user", content="Продолжи ответ точно с места обрыва, без повторения уже написанного."))
+                continue
+            if response.finish_reason not in (None, "stop", "tool_calls"):
+                raise IncompleteModelOutput(step, results)
 
-            if response.finish_reason == "stop":
+            if not response.tool_calls:
+                if response.finish_reason == "tool_calls" or not response.content.strip():
+                    raise IncompleteModelOutput(step, results)
                 answer = ("".join(answer_parts) + response.content).strip()
 
                 logger.info("Агент вернул итоговый ответ")
@@ -333,6 +340,7 @@ class AgentRuntime:
                     tool_results=results,
                 )
 
+            answer_parts.clear()
             raw_calls = response.raw_tool_calls
 
             # Если провайдер не возвращает сырой формат вызовов, создаём совместимое представление
