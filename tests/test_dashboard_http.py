@@ -81,6 +81,10 @@ async def test_saved_dashboard_can_be_listed_reopened_and_built(tmp_path, monkey
 async def test_dashboard_context_is_forwarded_only_when_requested(monkeypatch):
     module = importlib.import_module("app.main")
 
+    class Dashboards:
+        def get_by_id(self, dashboard_id):
+            return DashboardModel(id=dashboard_id, title="Saved")
+
     class RecordingAgent:
         def __init__(self):
             self.calls = []
@@ -91,6 +95,7 @@ async def test_dashboard_context_is_forwarded_only_when_requested(monkeypatch):
 
     agent = RecordingAgent()
     monkeypatch.setattr(module, "agent", agent)
+    monkeypatch.setattr(module, "dashboard_repository", Dashboards())
     async with AsyncClient(transport=ASGITransport(app=module.app), base_url="http://test") as client:
         plain = await client.post("/agent/ask", json={"question": "Что есть?"})
         attached = await client.post("/agent/ask", json={
@@ -102,6 +107,26 @@ async def test_dashboard_context_is_forwarded_only_when_requested(monkeypatch):
     assert attached.status_code == 200
     assert "dashboard_id" not in agent.calls[0]
     assert agent.calls[1]["dashboard_id"] == "dashboard-123"
+
+
+@pytest.mark.asyncio
+async def test_unknown_attached_dashboard_is_rejected_before_model_call(monkeypatch):
+    module = importlib.import_module("app.main")
+
+    class Dashboards:
+        def get_by_id(self, _dashboard_id): return None
+
+    class Agent:
+        async def ask(self, **_kwargs):
+            raise AssertionError("Missing dashboard must not reach the model")
+
+    monkeypatch.setattr(module, "dashboard_repository", Dashboards())
+    monkeypatch.setattr(module, "agent", Agent())
+    async with AsyncClient(transport=ASGITransport(app=module.app), base_url="http://test") as client:
+        response = await client.post("/agent/ask", json={
+            "question": "Покажи его", "dashboard_id": "does-not-exist",
+        })
+    assert response.status_code == 404
 
 
 @pytest.mark.asyncio
