@@ -37,6 +37,22 @@ class ModelPlan(BaseModel):
         return self
 
 
+def _parse_model_plan(content: str) -> ModelPlan:
+    """Accept a complete JSON fence and preserve SQL for a filtered preview."""
+    candidate = content.strip()
+    fence = re.fullmatch(r"```(?:json)?[ \t]*\r?\n(.*?)\r?\n```", candidate,
+                         flags=re.IGNORECASE | re.DOTALL)
+    if fence is not None:
+        candidate = fence.group(1)
+    data = json.loads(candidate)
+    if (isinstance(data, dict) and data.get("intent") == "preview"
+            and isinstance(data.get("sql"), str) and data["sql"].strip()):
+        # Cloud.ru sometimes calls a filtered SELECT a preview. It still goes
+        # through the normal read-only SQL guard and source-column checks.
+        data = {**data, "intent": "filter"}
+    return ModelPlan.model_validate(data)
+
+
 def _answer_from_result(result) -> str:
     if not result.rows:
         return "Запрос выполнен, но в результате нет строк."
@@ -113,6 +129,21 @@ def _normalize_numeric_casts(sql: str, field_types: dict[str, str]) -> str:
                 read="duckdb",
             )
             cast.replace(normalized)
+        for comparison in list(statement.find_all(exp.GT, exp.GTE, exp.LT, exp.LTE)):
+            for column, other in ((comparison.this, comparison.expression),
+                                  (comparison.expression, comparison.this)):
+                if (not isinstance(column, exp.Column)
+                        or not isinstance(other, exp.Literal) or not other.is_number
+                        or field_types.get(column.name) not in {"integer", "number"}):
+                    continue
+                # CSV cells are stored as text even when the inferred type is
+                # numeric. A strict cast rejects bad values rather than silently
+                # dropping them from the filtered result.
+                normalized = parse_one(
+                    f"CAST(NULLIF(REPLACE(TRIM({column.sql(dialect='duckdb')}), ',', '.'), '') AS DOUBLE)",
+                    read="duckdb",
+                )
+                column.replace(normalized)
         return statement.sql(dialect="duckdb")
     except SafeQueryError:
         raise
@@ -311,7 +342,7 @@ class CSVQueryAgent:
             if response.finish_reason not in (None, "stop"):
                 return self._error(request_id, timing, attempt + 1, trace, "MODEL_OUTPUT_INCOMPLETE", last_plan)
             try:
-                plan = ModelPlan.model_validate(json.loads(response.content))
+                plan = _parse_model_plan(response.content)
             except (ValueError, ValidationError):
                 if attempt == 0:
                     messages.append(LLMMessage(role="assistant", content=response.content))

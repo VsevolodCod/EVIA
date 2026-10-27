@@ -168,6 +168,77 @@ async def test_empty_result_does_not_invent_a_number(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_fenced_filtered_preview_plan_returns_a_genuine_empty_result(tmp_path):
+    """Cloud.ru may label filtered SQL as preview and wrap its JSON in a fence."""
+    class FencedProvider:
+        calls = 0
+
+        async def chat(self, messages, tools=None):
+            self.calls += 1
+            return LLMResponse(content=(
+                "```json\n"
+                '{"intent":"preview","sql":"SELECT * FROM source WHERE revenue > 1000 LIMIT 10",'
+                '"explanation":"Filtered rows","columns":[]}\n'
+                "```"
+            ))
+
+    provider = FencedProvider()
+    agent, source, catalog = agent_with_csv(tmp_path, provider)
+    try:
+        answer = await agent.ask("Покажи строки, где revenue больше 1000", [source.source_id])
+        assert answer.status == "answered"
+        assert answer.analysis.intent == "filter"
+        assert answer.results[0].rows == []
+        assert "нет строк" in answer.answer.lower()
+        assert [tool.ok for tool in answer.tool_results] == [True]
+        assert provider.calls == 1
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
+async def test_numeric_csv_filter_compares_values_not_raw_text(tmp_path):
+    plan = {
+        "intent": "filter",
+        "sql": "SELECT * FROM source WHERE revenue > 1000 LIMIT 10",
+        "explanation": "Filtered rows",
+    }
+    provider = ScriptedProvider(plan, plan)
+    agent, source, catalog = agent_with_csv(tmp_path, provider)
+    try:
+        answer = await agent.ask("Покажи строки, где revenue больше 1000", [source.source_id])
+        assert answer.status == "answered"
+        assert answer.results[0].rows == []
+        assert "нет строк" in answer.answer.lower()
+        assert "CAST" in answer.analysis.sql
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
+async def test_fenced_preview_plan_cannot_execute_a_write(tmp_path):
+    class UnsafeProvider:
+        async def chat(self, messages, tools=None):
+            return LLMResponse(content=(
+                '```json\n{"intent":"preview","sql":"DELETE FROM source",'
+                '"explanation":"","columns":[]}\n```'
+            ))
+
+    agent, source, catalog = agent_with_csv(tmp_path, UnsafeProvider())
+    try:
+        answer = await agent.ask("Покажи строки", [source.source_id])
+        assert answer.status == "error"
+        assert answer.results == []
+        assert all(not tool.ok for tool in answer.tool_results)
+        assert agent.sources.preview(source.source_id, limit=10) == [
+            {"month": "2026-01", "revenue": "120"},
+            {"month": "2026-02", "revenue": "180"},
+        ]
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
 async def test_invalid_model_plan_never_runs_sql(tmp_path):
     provider = ScriptedProvider(
         {"intent": "count", "sql": "SELECT 1"},
