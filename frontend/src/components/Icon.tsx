@@ -13,7 +13,8 @@ type IconName =
   | "close"
   | "home"
   | "user"
-  | "back";
+  | "back"
+  | "settings";
 const paths: Record<IconName, ReactNode> = {
   plus: <path d="M12 5v14M5 12h14" />,
   file: (
@@ -46,6 +47,7 @@ const paths: Record<IconName, ReactNode> = {
   home: <path d="m3 10 9-7 9 7v10h-6v-6H9v6H3z" />,
   user: <><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>,
   back: <path d="m15 18-6-6 6-6" />,
+  settings: <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l-1.86 1.86A1.7 1.7 0 0 0 16 18.4a1.7 1.7 0 0 0-1.5.89L13.6 21h-3.2l-.9-1.71A1.7 1.7 0 0 0 8 18.4a1.7 1.7 0 0 0-1.88.34l-1.86-1.86A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.89-1.5L2 12.6V11.4l1.71-.9A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.88l1.86-1.86A1.7 1.7 0 0 0 8 5.6a1.7 1.7 0 0 0 1.5-.89L10.4 3h3.2l.9 1.71A1.7 1.7 0 0 0 16 5.6a1.7 1.7 0 0 0 1.88-.34l1.86 1.86A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 .89 1.5l1.71.9v1.2l-1.71.9A1.7 1.7 0 0 0 19.4 15Z" /></>,
 };
 export function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
   return (

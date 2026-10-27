@@ -92,7 +92,7 @@ function scalarText(value: unknown, type: string) {
   return String(value);
 }
 
-export function AnalysisResult({ entry }: { entry?: Entry }) {
+export function AnalysisResult({ entry, onOpenChat }: { entry?: Entry; onOpenChat?: () => void }) {
   const generated = entry?.answer?.tool_results.map(generatedDashboardFrom).filter((item) => item !== null).at(-1);
   const savedId = entry?.answer?.tool_results.filter((item) => item.ok).map((item) =>
     item.tool_name === "compose_dashboard" || item.tool_name === "add_charts_to_dashboard"
@@ -107,6 +107,7 @@ export function AnalysisResult({ entry }: { entry?: Entry }) {
     : null;
   const scalarLabel = scalar?.type === "datetime" && /\bAVG\s*\(/i.test(entry?.answer?.analysis?.sql ?? "")
     ? "Средняя дата/время" : scalar?.name.replaceAll("_", " ");
+  const hasVisualResult = Boolean(result || generated || savedId || generatedCharts.length);
   return (
     <div className="analytics-section analysis-result">
       {(!result && !generated && !savedId && !generatedCharts.length || scalar) && <div className="analytics-title">
@@ -141,10 +142,9 @@ export function AnalysisResult({ entry }: { entry?: Entry }) {
             context="result"
           />}
           <p className="analysis-question">{entry.question}</p>
-          <details className="analysis-answer" aria-label="Вывод EVIA" open={!result && !generated && !savedId && !generatedCharts.length}>
-            <summary>Вывод EVIA <span>{result || generated || savedId || generatedCharts.length ? "Полный ответ также есть в чате" : ""}</span></summary>
+          {hasVisualResult ? onOpenChat && <button className="result-open-chat" type="button" onClick={onOpenChat}>Открыть ответ в чате</button> : <div className="analysis-answer" aria-label="Вывод EVIA">
             <SafeMarkdown>{entry.answer.answer || "Модель вернула пустой ответ."}</SafeMarkdown>
-          </details>
+          </div>}
           {entry.answer.analysis?.sql && <details className="analysis-sql">
             <summary>Показать SQL</summary>
             <code>{entry.answer.analysis.sql}</code>

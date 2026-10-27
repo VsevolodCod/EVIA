@@ -98,8 +98,8 @@ export default function App() {
   const [postgresLoading, setPostgresLoading] = useState(false);
   const [postgresError, setPostgresError] = useState("");
   const [sourceSetup, setSourceSetup] = useState<"csv" | "postgres">("csv");
-  const [mobilePanel, setMobilePanel] = useState<"home" | "analytics" | "chat" | "profile">("home");
-  const [mobileOverlay, setMobileOverlay] = useState<"wizard" | "upload" | "settings" | null>(null);
+  const [mobilePanel, setMobilePanel] = useState<"home" | "analytics" | "chat">("home");
+  const [mobileOverlay, setMobileOverlay] = useState<"upload" | "settings" | null>(null);
   const [theme, setTheme] = useState<"light" | "dark" | "system">(() => {
     const saved = localStorage.getItem("evia.theme");
     return saved === "dark" || saved === "system" ? saved : "light";
@@ -423,8 +423,7 @@ export default function App() {
   }
   function newAnalysis() {
     if (window.matchMedia?.("(max-width: 640px)").matches) {
-      setMobilePanel("home");
-      setMobileOverlay("wizard");
+      openMobileUpload();
       return;
     }
     resetAnalysis();
@@ -615,7 +614,7 @@ export default function App() {
         >
           EVIA
         </a>
-        <button className="mobile-profile-entry" aria-label="Открыть профиль" onClick={() => setMobilePanel("profile")}><Icon name="user" size={18} /></button>
+        <button className="mobile-settings-entry" aria-label="Открыть настройки" onClick={() => setMobileOverlay("settings")}><Icon name="settings" size={18} /></button>
       </header>
       <div className="workspace">
         <aside className="sidebar" aria-label="Навигация рабочего пространства">
@@ -833,6 +832,7 @@ export default function App() {
               entry={activeEntry}
               view={view}
               setView={setView}
+              onOpenChat={() => setMobilePanel("chat")}
               onReimport={(file, id) => void upload(file, id)}
             />
           ) : sourceSetup === "postgres" ? (
@@ -1130,35 +1130,6 @@ export default function App() {
           </div>
         </aside>
       </div>
-      <section className="mobile-profile" aria-label="Профиль и настройки">
-        <header className="mobile-page-header">
-          <button aria-label="Назад к источникам" onClick={() => setMobilePanel("home")}>
-            <Icon name="back" size={22} />
-          </button>
-          <strong>Профиль</strong>
-          <span aria-hidden="true" />
-        </header>
-        <div className="mobile-profile-card">
-          <span className="mobile-profile-avatar"><Icon name="user" size={24} /></span>
-          <div><strong>Гостевой доступ</strong><small>Ваши источники доступны в этом рабочем пространстве</small></div>
-        </div>
-        <div className="mobile-profile-list">
-          <button type="button" onClick={() => setMobileOverlay("settings")} aria-label="Открыть настройки"><strong>Настройки</strong><Icon name="chevron" size={16} /></button>
-          <div><strong>Язык</strong><span>Русский</span></div>
-          <div><strong>О приложении</strong><span>EVIA</span></div>
-        </div>
-      </section>
-      {mobileOverlay === "wizard" && <section className="mobile-fullscreen mobile-wizard" role="dialog" aria-label="Новый анализ" aria-modal="true">
-        <header><h2>Новый анализ</h2><button aria-label="Закрыть новый анализ" onClick={() => setMobileOverlay(null)}><Icon name="close" size={19} /></button></header>
-        <ol className="wizard-steps">
-          <li className="active"><b>1</b><span>Загрузка данных</span></li>
-          <li><b>2</b><span>Настройка</span></li>
-          <li><b>3</b><span>Анализ</span></li>
-          <li><b>4</b><span>Результат</span></li>
-        </ol>
-        {sources.length > 0 && <div className="wizard-existing"><h3>Или выберите источник</h3>{sources.slice(0, 3).map((item) => <button key={item.source_id} aria-label={`Использовать ${item.name}`} onClick={() => { resetAnalysis(); selectSource(item.source_id); }}><Icon name="file" size={18} /><span><strong>{item.name}</strong><small>{item.source_type.toUpperCase()}</small></span><Icon name="chevron" size={15} /></button>)}</div>}
-        <div className="wizard-bottom"><button className="primary" aria-label="Загрузить CSV в новом анализе" onClick={openMobileUpload}>Загрузить CSV <Icon name="arrow" size={17} /></button><button className="wizard-postgres" onClick={() => { setMobileOverlay(null); openPostgresSetup(); }}>Подключить PostgreSQL</button></div>
-      </section>}
       {mobileOverlay === "settings" && <section className="mobile-fullscreen mobile-settings" role="dialog" aria-label="Настройки" aria-modal="true">
         <header><h2>Настройки</h2><button aria-label="Закрыть настройки" onClick={() => setMobileOverlay(null)}><Icon name="close" size={19} /></button></header>
         <h3>Тема</h3>
@@ -1169,20 +1140,20 @@ export default function App() {
       </section>}
       <nav className="mobile-nav" aria-label="Мобильная навигация">
         <button
-          aria-label="Главная"
+          aria-label="Источники"
           aria-pressed={mobilePanel === "home"}
           onClick={() => setMobilePanel("home")}
         >
           <Icon name="home" size={18} />
-          <span>Главная</span>
+          <span>Источники</span>
         </button>
         <button
-          aria-label="Аналитика"
+          aria-label="Данные"
           aria-pressed={mobilePanel === "analytics"}
           onClick={() => setMobilePanel("analytics")}
         >
           <Icon name="file" size={18} />
-          <span>Аналитика</span>
+          <span>Данные</span>
         </button>
         <button
           aria-label="Чат"
@@ -1191,14 +1162,6 @@ export default function App() {
         >
           <Icon name="chat" size={18} />
           <span>Чат</span>
-        </button>
-        <button
-          aria-label="Профиль"
-          aria-pressed={mobilePanel === "profile"}
-          onClick={() => setMobilePanel("profile")}
-        >
-          <Icon name="user" size={18} />
-          <span>Профиль</span>
         </button>
       </nav>
     </div>

@@ -508,16 +508,16 @@ it("provides mobile navigation for sources, analytics, and chat", async () => {
   render(<App />);
 
   expect(await screen.findByRole("navigation", { name: "Мобильная навигация" })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Главная" })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("button", { name: "Источники" })).toHaveAttribute("aria-pressed", "true");
 
-  fireEvent.click(screen.getByRole("button", { name: "Аналитика" }));
-  expect(screen.getByRole("button", { name: "Аналитика" })).toHaveAttribute("aria-pressed", "true");
+  fireEvent.click(screen.getByRole("button", { name: "Данные" }));
+  expect(screen.getByRole("button", { name: "Данные" })).toHaveAttribute("aria-pressed", "true");
 
   fireEvent.click(screen.getByRole("button", { name: "Чат" }));
   expect(screen.getByRole("button", { name: "Чат" })).toHaveAttribute("aria-pressed", "true");
 
-  fireEvent.click(screen.getByRole("button", { name: "Профиль" }));
-  expect(screen.getByRole("button", { name: "Профиль" })).toHaveAttribute("aria-pressed", "true");
+  fireEvent.click(screen.getByRole("button", { name: "Источники" }));
+  expect(screen.getByRole("button", { name: "Источники" })).toHaveAttribute("aria-pressed", "true");
 });
 
 it("opens the analysis from a source and returns to the mobile home", async () => {
@@ -525,9 +525,9 @@ it("opens the analysis from a source and returns to the mobile home", async () =
   render(<App />);
 
   await select("A");
-  expect(screen.getByRole("button", { name: "Аналитика" })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("button", { name: "Данные" })).toHaveAttribute("aria-pressed", "true");
   fireEvent.click(within(screen.getByRole("main")).getByRole("button", { name: "Назад к источникам" }));
-  expect(screen.getByRole("button", { name: "Главная" })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("button", { name: "Источники" })).toHaveAttribute("aria-pressed", "true");
   expect(screen.getByRole("button", { name: "Источник A" })).toBeInTheDocument();
 });
 
@@ -536,7 +536,7 @@ it("opens a separate CSV upload screen from the home action", async () => {
   render(<App />);
   fireEvent.click(screen.getByRole("button", { name: "Добавить источник" }));
 
-  expect(screen.getByRole("button", { name: "Аналитика" })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("button", { name: "Данные" })).toHaveAttribute("aria-pressed", "true");
   expect(screen.getByRole("heading", { name: "Добавьте CSV" })).toBeInTheDocument();
 });
 
@@ -545,7 +545,6 @@ it("previews a selected mobile CSV before uploading it", async () => {
   vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true }));
   render(<App />);
   fireEvent.click(screen.getByRole("button", { name: "Добавить источник" }));
-  fireEvent.click(screen.getByRole("button", { name: "Загрузить CSV в новом анализе" }));
 
   fireEvent.change(screen.getByLabelText("Загрузить CSV"), {
     target: { files: [new File(["id\n1"], "orders.csv", { type: "text/csv" })] },
@@ -557,34 +556,32 @@ it("previews a selected mobile CSV before uploading it", async () => {
   await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url]) => url === "/sources/csv")).toBe(true));
 });
 
-it("shows the mobile analysis steps and opens a dismissible CSV sheet", async () => {
+it("opens a dismissible CSV sheet without fictitious analysis steps", async () => {
   setup();
   vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true }));
   render(<App />);
   fireEvent.click(screen.getByRole("button", { name: "Добавить источник" }));
-  expect(screen.getByRole("dialog", { name: "Новый анализ" })).toBeInTheDocument();
-  expect(screen.getByText("Загрузка данных")).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Загрузить CSV в новом анализе" }));
+  expect(screen.queryByRole("dialog", { name: "Новый анализ" })).not.toBeInTheDocument();
   expect(screen.getByRole("dialog", { name: "Загрузка CSV" })).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Закрыть загрузку CSV" }));
   expect(screen.queryByRole("dialog", { name: "Загрузка CSV" })).not.toBeInTheDocument();
 });
 
-it("can continue a mobile analysis from an existing source", async () => {
+it("can return from mobile import and open an existing source", async () => {
   setup();
   vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true }));
   render(<App />);
   await screen.findByRole("button", { name: "Источник A" });
   fireEvent.click(screen.getByRole("button", { name: "Добавить источник" }));
-  fireEvent.click(screen.getByRole("button", { name: "Использовать Источник A" }));
+  fireEvent.click(screen.getByRole("button", { name: "Закрыть загрузку CSV" }));
+  fireEvent.click(screen.getByRole("button", { name: "Источник A" }));
   expect(screen.queryByRole("dialog", { name: "Новый анализ" })).not.toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Аналитика" })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("button", { name: "Данные" })).toHaveAttribute("aria-pressed", "true");
 });
 
 it("opens mobile settings and applies a selected theme", async () => {
   setup();
   render(<App />);
-  fireEvent.click(screen.getByRole("button", { name: "Профиль" }));
   fireEvent.click(screen.getByRole("button", { name: "Открыть настройки" }));
   expect(screen.getByRole("dialog", { name: "Настройки" })).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Тёмная тема" }));
@@ -597,7 +594,6 @@ it("system theme follows a dark device preference", async () => {
   setup();
   vi.stubGlobal("matchMedia", vi.fn((query: string) => ({ matches: query.includes("prefers-color-scheme"), addEventListener: vi.fn(), removeEventListener: vi.fn() })));
   render(<App />);
-  fireEvent.click(screen.getByRole("button", { name: "Профиль" }));
   fireEvent.click(screen.getByRole("button", { name: "Открыть настройки" }));
   fireEvent.click(screen.getByRole("button", { name: "Системная тема" }));
   expect(screen.getByTestId("app-shell")).toHaveAttribute("data-theme", "dark");
