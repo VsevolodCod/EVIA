@@ -510,8 +510,8 @@ it("provides mobile navigation for sources, analytics, and chat", async () => {
   expect(await screen.findByRole("navigation", { name: "Мобильная навигация" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Источники" })).toHaveAttribute("aria-pressed", "true");
 
-  fireEvent.click(screen.getByRole("button", { name: "Данные" }));
-  expect(screen.getByRole("button", { name: "Данные" })).toHaveAttribute("aria-pressed", "true");
+  fireEvent.click(screen.getByRole("button", { name: "Рабочее пространство" }));
+  expect(screen.getByRole("button", { name: "Рабочее пространство" })).toHaveAttribute("aria-pressed", "true");
 
   fireEvent.click(screen.getByRole("button", { name: "Чат" }));
   expect(screen.getByRole("button", { name: "Чат" })).toHaveAttribute("aria-pressed", "true");
@@ -525,7 +525,7 @@ it("opens the analysis from a source and returns to the mobile home", async () =
   render(<App />);
 
   await select("A");
-  expect(screen.getByRole("button", { name: "Данные" })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("button", { name: "Рабочее пространство" })).toHaveAttribute("aria-pressed", "true");
   fireEvent.click(within(screen.getByRole("main")).getByRole("button", { name: "Назад к источникам" }));
   expect(screen.getByRole("button", { name: "Источники" })).toHaveAttribute("aria-pressed", "true");
   expect(screen.getByRole("button", { name: "Источник A" })).toBeInTheDocument();
@@ -536,7 +536,7 @@ it("opens a separate CSV upload screen from the home action", async () => {
   render(<App />);
   fireEvent.click(screen.getByRole("button", { name: "Добавить источник" }));
 
-  expect(screen.getByRole("button", { name: "Данные" })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("button", { name: "Рабочее пространство" })).toHaveAttribute("aria-pressed", "true");
   expect(screen.getByRole("heading", { name: "Добавьте CSV" })).toBeInTheDocument();
 });
 
@@ -576,7 +576,7 @@ it("can return from mobile import and open an existing source", async () => {
   fireEvent.click(screen.getByRole("button", { name: "Закрыть загрузку CSV" }));
   fireEvent.click(screen.getByRole("button", { name: "Источник A" }));
   expect(screen.queryByRole("dialog", { name: "Новый анализ" })).not.toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Данные" })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("button", { name: "Рабочее пространство" })).toHaveAttribute("aria-pressed", "true");
 });
 
 it("opens mobile settings and applies a selected theme", async () => {

@@ -1148,7 +1148,7 @@ export default function App() {
           <span>Источники</span>
         </button>
         <button
-          aria-label="Данные"
+          aria-label="Рабочее пространство"
           aria-pressed={mobilePanel === "analytics"}
           onClick={() => setMobilePanel("analytics")}
         >

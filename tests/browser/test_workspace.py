@@ -180,7 +180,7 @@ def test_profile_overview_drilldown_search_and_responsive_layout(server):
             for width in [1280, 1024, 768, 390]:
                 page.set_viewport_size({'width': width, 'height': 844})
                 assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), f'Overflow at {width}px'
-            page.get_by_role('button', name='Данные').click()
+            page.get_by_role('button', name='Рабочее пространство').click()
             expect(page.get_by_role('navigation', name='Разделы источника')).to_be_visible()
             page.screenshot(path=str(artifacts / 'analytics-overview-mobile.png'), full_page=True)
             page.set_viewport_size({'width': 1440, 'height': 1000})
