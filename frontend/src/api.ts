@@ -225,6 +225,25 @@ const chatHistorySchema = z.object({
   next_before: z.number().int().nonnegative().nullable(),
   has_more: z.boolean(),
 });
+const savedDashboardBuildSchema = z.object({
+  success: z.boolean(),
+  dashboard: z.object({
+    id: z.string().min(1),
+    title: z.string(),
+    summary: z.string().nullable().optional(),
+    version: z.number().int(),
+    charts: z.array(z.object({ chart_id: z.string(), position: z.number().int() })),
+  }),
+  charts: z.array(z.object({
+    chart_id: z.string(),
+    position: z.number().int(),
+    success: z.boolean(),
+    chart_type: z.string().optional(),
+    definition: z.unknown().optional(),
+    result: z.unknown().optional(),
+    error: z.object({ code: z.string(), message: z.string() }).optional(),
+  })),
+});
 export type Source = z.infer<typeof sourceSchema>;
 export type ImportReport = z.infer<typeof importReportSchema>;
 export type SourceSchema = z.infer<typeof schemaSchema>;
@@ -240,6 +259,7 @@ export type StoredAnalysis =
   | { kind: "legacy" | "unsupported" | "invalid" };
 export type ToolResult = Answer["tool_results"][number];
 export type Row = Record<string, unknown>;
+export type SavedDashboardBuild = z.infer<typeof savedDashboardBuildSchema>;
 
 export function storedAnalysis(message: ChatMessage): StoredAnalysis {
   const payload = message.analysis_payload;
@@ -363,6 +383,8 @@ async function request<T>(
 }
 const path = (id: string) => `/sources/${encodeURIComponent(id)}`;
 export const api = {
+  dashboardBuild: (id: string, signal?: AbortSignal) =>
+    request(`/dashboards/${encodeURIComponent(id)}/build`, savedDashboardBuildSchema, { signal }),
   createChat: (title: string) => request("/chats", chatSummarySchema, {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title }),
   }),

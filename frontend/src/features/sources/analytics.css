@@ -1107,6 +1107,26 @@
 }
 .analysis-answer summary span { color: #73837a; font-size: 12px; font-weight: 500; }
 .analysis-answer .markdown { padding: 0 20px 18px; }
+.saved-dashboard { display: grid; gap: 15px; }
+.saved-dashboard-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #247553;
+  font-size: 13px;
+  font-weight: 750;
+}
+.saved-dashboard-toolbar button {
+  min-height: 37px;
+  padding: 8px 12px;
+  border: 1px solid #cfe4d5;
+  border-radius: 10px;
+  background: #f3faf5;
+  color: #176a49;
+  font-size: 12px;
+  font-weight: 700;
+}
 
 @media (max-width: 640px) {
   .source-workspace-heading { order: 0; align-items: flex-start; padding: 0 2px; }

@@ -51,6 +51,21 @@ it("builds a dashboard from the QueryResult container returned by query_data", (
   expect(screen.getByRole("img", { name: /Распределение поля revenue/ })).toBeInTheDocument();
 });
 
+it("shows a chart returned by the current build_chart tool", () => {
+  render(<AnalysisResult entry={{
+    id: "chart-answer", question: "Построй график", state: "success",
+    answer: { answer: "График готов.", steps: 1, tool_results: [{
+      tool_name: "build_chart", ok: true,
+      data: { success: true, chart_id: "chart-1", chart_type: "kpi",
+        definition: { type: "kpi", title: "Выручка", field: { source_id: "sales", field: "revenue" }, aggregate: "sum" },
+        result: { value: 30 } },
+    }] },
+  }} />);
+  expect(screen.getAllByRole("heading", { name: "Выручка" })).toHaveLength(2);
+  expect(screen.getByText("30")).toBeInTheDocument();
+  expect(screen.queryByText("chart_id", { exact: false })).not.toBeInTheDocument();
+});
+
 it("distinguishes computed SQL from a demo answer", () => {
   const entry = {
     id: "computed", question: "Сколько заказов?", state: "success" as const,
