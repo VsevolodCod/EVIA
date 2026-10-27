@@ -13,6 +13,7 @@ export type Entry = {
   startedAt?: number;
   elapsedMs?: number;
   conversationId?: string;
+  dashboardId?: string;
 };
 export type View =
   | "overview"

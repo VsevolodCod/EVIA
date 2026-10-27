@@ -12,6 +12,7 @@ import {
 } from "./api";
 import { ErrorNotice, Evia, Icon, SafeMarkdown } from "./components";
 import { SourceInspector } from "./features/sources/SourceInspector";
+import { DashboardGallery } from "./features/results/DashboardGallery";
 import { PostgresSetup } from "./features/sources/PostgresSetup";
 import type { Entry, View } from "./features/chat/types";
 import { ResponseTiming } from "./features/chat/ResponseTiming";
@@ -117,6 +118,8 @@ export default function App() {
   >({});
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [view, setView] = useState<View>("overview");
+  const [showDashboardGallery, setShowDashboardGallery] = useState(false);
+  const [attachedDashboard, setAttachedDashboard] = useState<{ id: string; title: string } | null>(null);
   const [uploadedId, setUploadedId] = useState<string | null>(null);
   const [uploadFailure, setUploadFailure] = useState<EviaState | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -354,6 +357,8 @@ export default function App() {
   }, [selectedId, chatSummaries, chatSources, historyListLoading]);
 
   function selectSource(id: string) {
+    setShowDashboardGallery(false);
+    if (id !== selectedId) setAttachedDashboard(null);
     if (archivedChat && (archivedChat.source_id === null || archivedChat.source_id === undefined)) {
       const archivedKey = `archive:${archivedChat.chat_id}`;
       const existingEntries = histories[archivedKey] ?? [];
@@ -381,6 +386,8 @@ export default function App() {
       setDrafts((previous) => ({ ...previous, [selectedId]: value }));
   }
   function resetAnalysis() {
+    setShowDashboardGallery(false);
+    setAttachedDashboard(null);
     if (selectedId) {
       setActiveIds((previous) => ({ ...previous, [selectedId]: undefined }));
       activeConversations.current.delete(selectedId);
@@ -400,6 +407,8 @@ export default function App() {
     setView("overview");
   }
   function openArchivedChat(chat: ChatSummary) {
+    setShowDashboardGallery(false);
+    setAttachedDashboard(null);
     const key = `archive:${chat.chat_id}`;
     setSelectedId(null);
     setArchivedChatId(chat.chat_id);
@@ -425,6 +434,7 @@ export default function App() {
     activeConversations.current.delete(selectedId);
     setDrafts((previous) => ({ ...previous, [selectedId]: "" }));
     setView("overview");
+    setShowDashboardGallery(false);
     setMobilePanel("chat");
   }
   function openMobileUpload() {
@@ -493,6 +503,7 @@ export default function App() {
     setUploadError("");
     const sourceId = selectedId;
     const retried = retryId ? histories[sourceId]?.find((item) => item.id === retryId) : undefined;
+    const dashboardId = retried?.dashboardId ?? attachedDashboard?.id;
     const existingConversationId = retried?.conversationId ?? activeConversations.current.get(sourceId);
     const conversationId = existingConversationId ?? crypto.randomUUID();
     if (askControllers.current.has(conversationId)) return;
@@ -505,6 +516,7 @@ export default function App() {
       state: "pending",
       startedAt: performance.now(),
       mascotState: retryId ? "retrying" : "thinking",
+      dashboardId,
     };
     const controller = new AbortController();
     askControllers.current.set(conversationId, controller);
@@ -549,7 +561,7 @@ export default function App() {
       }
       const chatId = await waitForChat(chat, controller.signal);
       controller.signal.throwIfAborted();
-      const answer = await api.chat(entry.question, sourceId, chatId, controller.signal);
+      const answer = await api.chat(entry.question, sourceId, chatId, controller.signal, dashboardId);
       if (controller.signal.aborted)
         finish({
           state: "error",
@@ -708,6 +720,9 @@ export default function App() {
               />
             )}
           </section>
+          <button className={`reports-nav ${showDashboardGallery ? "selected" : ""}`} type="button" aria-pressed={showDashboardGallery} onClick={() => { setShowDashboardGallery(true); setMobilePanel("analytics"); }}>
+            <Icon name="grid" size={17} /> Сохранённые отчёты <Icon name="chevron" size={15} />
+          </button>
           <section className="nav-section history-section">
             <div className="nav-heading">
               <h2>История диалогов</h2>
@@ -747,6 +762,7 @@ export default function App() {
                         }));
                       }
                       setView("results");
+                      setShowDashboardGallery(false);
                       setMobilePanel("analytics");
                     }}
                   >
@@ -810,10 +826,16 @@ export default function App() {
             <button aria-label={mobileOverlay === "upload" ? "Закрыть загрузку CSV" : "Назад к источникам"} onClick={() => { setMobileOverlay(null); setMobilePanel("home"); }}>
               <Icon name="back" size={22} />
             </button>
-            <strong>{source ? "Анализ данных" : sourceSetup === "postgres" ? "PostgreSQL" : "Загрузка CSV"}</strong>
+            <strong>{showDashboardGallery ? "Отчёты" : source ? "Анализ данных" : sourceSetup === "postgres" ? "PostgreSQL" : "Загрузка CSV"}</strong>
             <span aria-hidden="true" />
           </div>
-          {source ? (
+          {showDashboardGallery ? (
+            <DashboardGallery onClose={() => setShowDashboardGallery(false)} onAttach={source ? (id, title) => {
+              setAttachedDashboard({ id, title });
+              setShowDashboardGallery(false);
+              setMobilePanel("chat");
+            } : undefined} />
+          ) : source ? (
             <SourceInspector
               source={source}
               entry={activeEntry}
@@ -977,6 +999,7 @@ export default function App() {
                         onClick={() => {
                           if (historyKey) setActiveIds((previous) => ({ ...previous, [historyKey]: message.id }));
                           setView("results");
+                          setShowDashboardGallery(false);
                           setMobilePanel("analytics");
                         }}
                       >
@@ -1027,6 +1050,7 @@ export default function App() {
             )}
           </div>
           <div className="chat-bottom">
+            {attachedDashboard && source && <div className="attached-report" aria-label="Прикреплённый отчёт"><span>Отчёт: <strong>{attachedDashboard.title}</strong></span><button type="button" aria-label="Открепить отчёт" onClick={() => setAttachedDashboard(null)}><Icon name="close" size={14} /></button></div>}
             {activeEntry && <div className="helper" role="status"><Evia state={mascotState} />{activeEntry.state === "pending" && <strong>{eviaStatus(mascotState)}</strong>}</div>}
             {archivedChat && !archivedChat.source_id && (
               <p className="history-details-notice">

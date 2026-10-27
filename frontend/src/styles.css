@@ -2074,6 +2074,23 @@ summary {
   white-space: nowrap;
 }
 .new-dialog:hover { background: #e4f5eb; }
+.reports-nav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 47px;
+  padding: 10px 12px;
+  border: 1px solid #cfe5d8;
+  border-radius: 11px;
+  background: #f1faf4;
+  color: #176b49;
+  font-size: 13px;
+  font-weight: 750;
+  text-align: left;
+}
+.reports-nav svg:last-child { margin-left: auto; }
+.reports-nav:hover,.reports-nav.selected { background: #e2f5e8; border-color: #8ed0a6; }
 .chat-welcome { max-width: 340px; margin: auto; padding: 30px 0; }
 .chat-welcome h3 { margin-top: 12px; color: #153e2b; font-size: 20px; font-weight: 750; }
 .chat-welcome .mobile-chat-intro { max-width: 290px; margin-top: 8px; color: #667b6e; font-size: 13px; line-height: 1.5; }
@@ -2086,6 +2103,11 @@ summary {
 .composer-hint { font-size: 11px; }
 .helper { padding: 4px 0 10px; }
 .helper strong { font-size: 12px; }
+.attached-report { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; padding: 9px 10px; border: 1px solid #cce8d7; border-radius: 10px; background: #eaf8ef; color: #255b3f; font-size: 12px; }
+.attached-report span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.attached-report strong { font-weight: 750; }
+.attached-report button { display: grid; place-items: center; width: 26px; height: 26px; flex: none; border-radius: 7px; }
+.attached-report button:hover { background: #d5eddd; }
 
 @media (max-width: 640px) {
   .topbar { min-height: 60px; }
@@ -2099,6 +2121,8 @@ summary {
 
 .app[data-theme="dark"] :is(.source-workspace-heading h1,.dashboard-section-heading h3,.chat-header h2,.chat-welcome h3) { color: #e7f2eb; }
 .app[data-theme="dark"] :is(.source-refresh,.new-dialog,.dashboard-preview) { background: #192a31; color: #e7f2eb; border-color: #315057; }
+.app[data-theme="dark"] .reports-nav { background: #1c3530; color: #d7eee1; border-color: #31594a; }
+.app[data-theme="dark"] .attached-report { background: #1c4032; color: #d7eee1; border-color: #31594a; }
 .app[data-theme="dark"] :is(.source-workspace-heading p,.source-workspace-eyebrow,.dashboard-section-heading p,.chat-welcome .mobile-chat-intro) { color: #b4c4c4; }
 }
 @media (max-width: 640px) and (prefers-color-scheme: dark) {
