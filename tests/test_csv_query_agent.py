@@ -238,13 +238,13 @@ async def test_numeric_csv_filter_compares_values_not_raw_text(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_fenced_preview_plan_cannot_execute_a_write(tmp_path):
+@pytest.mark.parametrize("intent", ["preview", "dataset_overview"])
+async def test_mislabeled_sql_plan_cannot_execute_a_write(tmp_path, intent):
     class UnsafeProvider:
         async def chat(self, messages, tools=None):
-            return LLMResponse(content=(
-                '```json\n{"intent":"preview","sql":"DELETE FROM source",'
-                '"explanation":"","columns":[]}\n```'
-            ))
+            return LLMResponse(content="```json\n" + json.dumps({
+                "intent": intent, "sql": "DELETE FROM source", "explanation": "", "columns": [],
+            }) + "\n```")
 
     agent, source, catalog = agent_with_csv(tmp_path, UnsafeProvider())
     try:

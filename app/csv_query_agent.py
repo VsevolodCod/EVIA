@@ -38,18 +38,22 @@ class ModelPlan(BaseModel):
 
 
 def _parse_model_plan(content: str) -> ModelPlan:
-    """Accept a complete JSON fence and preserve SQL for a filtered preview."""
+    """Accept fenced JSON and send mislabeled SQL through the query guard."""
     candidate = content.strip()
     fence = re.fullmatch(r"```(?:json)?[ \t]*\r?\n(.*?)\r?\n```", candidate,
                          flags=re.IGNORECASE | re.DOTALL)
     if fence is not None:
         candidate = fence.group(1)
     data = json.loads(candidate)
-    if (isinstance(data, dict) and data.get("intent") == "preview"
-            and isinstance(data.get("sql"), str) and data["sql"].strip()):
-        # Cloud.ru sometimes calls a filtered SELECT a preview. It still goes
-        # through the normal read-only SQL guard and source-column checks.
-        data = {**data, "intent": "filter"}
+    if (isinstance(data, dict) and isinstance(data.get("sql"), str)
+            and data["sql"].strip()):
+        if data.get("intent") == "preview":
+            # A filtered preview must execute its SQL, not return the default rows.
+            data = {**data, "intent": "filter"}
+        elif data.get("intent") == "dataset_overview":
+            # Cloud.ru 120b has labeled COUNT(*) as an overview. Execute only
+            # after the usual source-column and read-only SQL validation.
+            data = {**data, "intent": "sql_query"}
     return ModelPlan.model_validate(data)
 
 
