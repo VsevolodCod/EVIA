@@ -204,8 +204,9 @@ def test_profile_overview_drilldown_search_and_responsive_layout(server):
             page.get_by_role('button', name='Отправить вопрос').click()
             page.get_by_role('button', name='Открыть результат', exact=True).click()
             expect(page.get_by_role('heading', name='Результат анализа')).to_be_visible()
-            page.get_by_role('group', name='Вывод EVIA').locator('summary').click()
-            expect(page.get_by_role('group', name='Вывод EVIA')).to_contain_text('Тестовый режим')
+            expect(page.get_by_role('main').get_by_text('Тестовый режим', exact=False)).to_have_count(0)
+            page.get_by_role('button', name='Открыть ответ в чате').click()
+            expect(page.get_by_role('region', name='Ответ EVIA')).to_contain_text('Тестовый режим')
             page.screenshot(path=str(artifacts / 'analytics-result-desktop.png'), full_page=True)
             # Reload and choose the same persisted source: the overview uses the same real profile.
             page.reload()
