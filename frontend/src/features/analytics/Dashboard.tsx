@@ -63,20 +63,6 @@ function MissingBars({ values, color }: { values: ChartValue[]; color: string })
   </div>;
 }
 
-function previewRowsText(count: number) {
-  const remainder = Math.abs(count) % 100;
-  const lastDigit = remainder % 10;
-  const noun = remainder > 10 && remainder < 20 ? "строк" : lastDigit === 1 ? "строка" : lastDigit > 1 && lastDigit < 5 ? "строки" : "строк";
-  return `${numberText(count)} ${noun} в предпросмотре источника`;
-}
-
-function rowsText(count: number) {
-  const remainder = Math.abs(count) % 100;
-  const lastDigit = remainder % 10;
-  const noun = remainder > 10 && remainder < 20 ? "строк" : lastDigit === 1 ? "строка" : lastDigit > 1 && lastDigit < 5 ? "строки" : "строк";
-  return `${numberText(count)} ${noun}`;
-}
-
 function fieldsText(count: number) {
   const remainder = Math.abs(count) % 100;
   const lastDigit = remainder % 10;
@@ -128,12 +114,6 @@ export function Dashboard({
     ? Math.sqrt(model.numeric.values.reduce((sum, value) => sum + (value - model.numeric!.mean) ** 2, 0) / model.numeric.values.length)
     : 0;
   const fullProfile = profile?.coverage === "full";
-  const profiledRows = profile
-    ? fullProfile
-      ? profile.processed_rows
-      : profile.sample_size
-    : 0;
-  const profileLimit = profile?.sample_limit ?? 0;
   const missingFields = Object.values(profile?.columns ?? {}).filter(
     (column) => fullProfile && hasExactStats(column)
       ? column.null_count > 0
@@ -173,15 +153,8 @@ export function Dashboard({
     : model.completeness;
   const hasSourceTotal = context === "source" && fullSourceRows != null;
   const profileReady = Boolean(
-    profile && profiledRows > 0 && Object.keys(profile.columns).length > 0,
+    profile && (fullProfile ? (profile.processed_rows ?? 0) : profile.sample_size) > 0 && Object.keys(profile.columns).length > 0,
   );
-  const scopeDescription = context === "result"
-    ? model.rowCount
-      ? `В ответе инструмента: ${rowsText(model.rowCount)}`
-      : "Инструмент не вернул строк"
-    : model.rowCount
-      ? previewRowsText(model.rowCount)
-      : "В предпросмотре нет строк";
   const exportPdf = () => {
     setShowMobileExport(false);
     const previousTitle = document.title;
@@ -204,7 +177,7 @@ export function Dashboard({
 
   return <div className="dashboard" data-testid="print-report" data-print-report="true" style={{ "--dashboard-primary": primary, "--dashboard-secondary": secondary } as React.CSSProperties}>
     <div className="dashboard-top">
-      <div><h2>{title}</h2><p>{context === "source" ? "Ключевые показатели и первые строки данных" : sourceLabel}</p></div>
+      <div><h2>{title}</h2>{context === "result" && <p>{sourceLabel}</p>}</div>
       <div className="dashboard-actions"><button onClick={exportCsv}>{context === "source" ? "Скачать предпросмотр" : "Скачать результат"}</button><button className="desktop-export" onClick={exportPdf}>Печать / PDF</button><button className="mobile-export-trigger" onClick={() => setShowMobileExport(true)}>Ещё</button></div>
     </div>
     {showMobileExport && <div className="mobile-export-backdrop" onClick={() => setShowMobileExport(false)}>
@@ -216,18 +189,18 @@ export function Dashboard({
       </section>
     </div>}
     {showPalette && <PaletteEditor colors={colors} gradient={gradient} onChange={updateColors} onClose={() => setShowPalette(false)} />}
-    <p className="dashboard-scope">{scopeDescription}</p>
+    {!rows.length && <p className="dashboard-empty-state">{context === "source" ? "В предпросмотре нет строк" : "Инструмент не вернул строк"}</p>}
     <div className="kpi-grid" aria-label="Ключевые показатели">
       <section className="dashboard-card"><span>{context === "result" ? "Строк в результате" : hasSourceTotal ? "Строк в источнике" : "Строк в предпросмотре"}</span><strong>{numberText(hasSourceTotal ? fullSourceRows : model.rowCount)}</strong><small>{context === "result" ? "Ответ инструмента" : hasSourceTotal ? "Полный датасет" : "Полный объём неизвестен"}</small></section>
       <section className="dashboard-card"><span>Столбцов</span><strong>{numberText(model.columnCount)}</strong></section>
-      <section className="dashboard-card"><span>{profile ? (fullProfile ? "Профиль покрывает весь датасет" : "Профиль покрывает") : "Заполнено ячеек"}</span><strong>{profile ? (profileReady ? fullProfile ? `${rowsText(profiledRows)} обработано` : rowsText(profiledRows) : "Нет данных") : percentText(model.completeness)}</strong><small>{profile ? (profileReady ? fullProfile ? "Точная статистика" : `выборка до ${numberText(profileLimit)} строк` : "Нет строк для анализа") : "доступных ячеек"}</small></section>
+      {!profile && <section className="dashboard-card"><span>Заполнено ячеек</span><strong>{percentText(model.completeness)}</strong></section>}
       {profile && <section className={`dashboard-card quality-kpi ${profileReady && missingFields ? "needs-attention" : ""}`}><span>Заполненность {fullProfile ? "источника" : "выборки"}</span><strong>{!profileReady ? "Нет профиля" : percentText(profileCompleteness)}</strong><small>{!profileReady ? "Нет строк для проверки" : missingFields ? `${fieldsText(missingFields)} с пропусками` : fullProfile ? "Пропусков не найдено" : "В выборке пропусков нет"}</small></section>}
     </div>
     {rows.length > 0 && <section className="dashboard-preview" aria-label={context === "source" ? "Первые строки источника" : "Таблица результата"}>
-      <div className="dashboard-section-heading"><div><h3>{context === "source" ? "Первые строки" : "Таблица результата"}</h3><p>{context === "source" ? `Показано ${rowsText(rows.length)} из предпросмотра · полный объём ${hasSourceTotal ? rowsText(fullSourceRows!) : "неизвестен"}` : rowsText(rows.length)}</p></div>{onOpenData && <button type="button" onClick={onOpenData}>Открыть данные →</button>}</div>
+      <div className="dashboard-section-heading"><h3>{context === "source" ? "Первые строки" : "Таблица результата"}</h3>{onOpenData && <button type="button" onClick={onOpenData}>Открыть данные →</button>}</div>
       <DataTable rows={rows} columns={schema.objects.flatMap((object) => object.fields.map((field) => field.name))} label={context === "source" ? "Таблица первых строк" : "Данные результата"} />
     </section>}
-    {hasCharts && <div className="dashboard-section-heading dashboard-charts-heading"><div><h3>Что видно в данных</h3><p>{context === "source" ? "Графики построены по строкам предпросмотра" : "Графики построены по строкам ответа"}</p></div><button type="button" onClick={() => setShowPalette((open) => !open)} aria-expanded={showPalette}>Цвета графиков</button></div>}
+    {hasCharts && <div className="dashboard-section-heading dashboard-charts-heading"><div><h3>Что видно в данных</h3><span className="dashboard-scope-badge">{context === "source" ? "По предпросмотру" : "По результату"}</span></div><button type="button" onClick={() => setShowPalette((open) => !open)} aria-expanded={showPalette}>Цвета графиков</button></div>}
     {hasCharts || missingColumns.length > 0 ? <div className="dashboard-grid">
       {model.timeline && <ChartCard title={`Динамика по полю ${model.timeline.field}`} unit="строки"><LineChart values={model.timeline.values} color={primary} gradient={gradient} label={`Динамика по полю ${model.timeline.field}`} /><p className="visually-hidden">{model.timeline.values.map((point) => `${point.label}: ${numberText(point.value)}`).join("; ")}</p></ChartCard>}
       {model.category && <ChartCard title={`Частые значения: ${model.category.field}`} unit="строки"><HorizontalBars values={model.category.values} color={model.timeline ? secondary : primary} label={`Частые значения поля ${model.category.field}`} /></ChartCard>}

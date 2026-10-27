@@ -35,7 +35,6 @@ export function ProfileColumns({
     <div className="analytics-section">
       <div className="analytics-title">
         <div>
-          <span className="analytics-kicker">ИССЛЕДУЙТЕ ДЕТАЛИ</span>
           <h2>Столбцы данных</h2>
         </div>
         <span className="count-badge">
@@ -61,10 +60,6 @@ export function ProfileColumns({
           С пропусками
         </button>
       </div>
-      <p className="analytics-caption">
-        Точные показатели доступны для полных профилей; частые значения всегда
-        строятся по выборке. Нажмите на столбец, чтобы раскрыть детали.
-      </p>
       {candidateGrainKeys.length > 0 && (
         <aside className="profile-grain-candidates" aria-label="Гипотезы о ключе строк">
           <h3>Гипотезы о ключе строк</h3>

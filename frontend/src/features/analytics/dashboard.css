@@ -43,12 +43,7 @@
   font-size: 18px;
   letter-spacing: -.35px;
 }
-.dashboard-section-heading p {
-  margin: 5px 0 0;
-  color: #677b70;
-  font-size: 13px;
-  line-height: 1.4;
-}
+.dashboard-scope-badge { display: inline-block; margin-top: 6px; color: #567b65; font-size: 12px; font-weight: 650; }
 .dashboard-section-heading button {
   flex: none;
   min-height: 38px;
@@ -64,8 +59,7 @@
 .dashboard-preview .data-table { margin: 0 14px 14px; }
 .dashboard-charts-heading { padding: 12px 0 0; }
 
-.dashboard-top p,
-.dashboard-scope {
+.dashboard-top p {
   margin: 6px 0 0;
   color: #747c87;
   font-size: 12px;
@@ -73,7 +67,7 @@
 
 .dashboard-actions { display: flex; gap: 8px; }
 .mobile-export-trigger, .chart-expand, .mobile-export-backdrop { display: none; }
-.dashboard-scope { margin: 0; }
+.dashboard-empty-state { margin: 0; color: #64786b; font-size: 13px; }
 
 .kpi-grid {
   display: grid;
@@ -302,7 +296,7 @@
 @media (max-width: 640px) {
   .dashboard { gap: 13px; padding: 0 0 24px; }
   .dashboard-top { order: 0; justify-content: flex-end; }
-  .dashboard-top > div:first-child, .dashboard-scope { display: none; }
+  .dashboard-top > div:first-child { display: none; }
   .dashboard-actions { flex-direction: row; justify-content: flex-end; }
   .dashboard-actions button { min-height: 34px; padding: 6px 10px; border-radius: 8px; font-size: 10px; }
   .dashboard-actions .desktop-export { display: none; }
@@ -378,7 +372,7 @@
 }
 
 .dashboard { color: #183d2e; }
-.dashboard-top p,.dashboard-scope { color: #687c70; font-size: 13px; }
+.dashboard-top p { color: #687c70; font-size: 13px; }
 .dashboard-card { border-color: #dce9e1; border-radius: 16px; box-shadow: 0 8px 24px #14382a08; }
 .kpi-grid .dashboard-card:first-child { background: linear-gradient(145deg, #e8f7ed, #f7fcf8); border-color: #cce7d5; }
 .kpi-grid span { color: #536f60; font-size: 13px; }
@@ -399,7 +393,7 @@
   .dashboard-preview { order: 2; border-radius: 13px; }
   .dashboard-section-heading { align-items: flex-start; padding: 15px 14px 11px; }
   .dashboard-section-heading h3 { font-size: 16px; }
-  .dashboard-section-heading p { font-size: 11px; }
+  .dashboard-scope-badge { font-size: 11px; }
   .dashboard-section-heading button { min-height: 36px; padding: 6px 9px; font-size: 11px; }
   .dashboard-preview .data-table { margin: 0 8px 8px; }
   .dashboard-charts-heading { order: 3; padding: 10px 0 0; }

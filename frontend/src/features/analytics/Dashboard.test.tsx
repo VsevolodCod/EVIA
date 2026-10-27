@@ -82,7 +82,11 @@ it("shows compact factual metrics and charts from source rows", () => {
   expect(screen.getByRole("img", { name: /Динамика по полю day/ })).toBeInTheDocument();
   expect(screen.getByRole("img", { name: /Распределение поля distance/ })).toBeInTheDocument();
   expect(screen.getByRole("img", { name: /Частые значения поля city/ })).toBeInTheDocument();
-  expect(screen.getByText(/3 строки в предпросмотре источника/)).toBeInTheDocument();
+  expect(screen.queryByText(/строки в предпросмотре источника/)).not.toBeInTheDocument();
+  expect(screen.queryByText("Ключевые показатели и первые строки данных")).not.toBeInTheDocument();
+  expect(screen.queryByText(/Показано 3 строки из предпросмотра/)).not.toBeInTheDocument();
+  expect(screen.queryByText("Графики построены по строкам предпросмотра")).not.toBeInTheDocument();
+  expect(screen.getByText("По предпросмотру")).toBeInTheDocument();
 });
 
 it("opens a numerical distribution detail with statistics and a way back", () => {
@@ -128,8 +132,8 @@ it("separates the full source from profile coverage and highlights data quality"
 
   expect(screen.getByText("Строк в источнике")).toBeInTheDocument();
   expect(screen.getByText("2 000")).toBeInTheDocument();
-  expect(screen.getByText("Профиль покрывает весь датасет")).toBeInTheDocument();
-  expect(screen.getByText("2 000 строк обработано")).toBeInTheDocument();
+  expect(screen.queryByText("Профиль покрывает весь датасет")).not.toBeInTheDocument();
+  expect(screen.queryByText("2 000 строк обработано")).not.toBeInTheDocument();
   expect(screen.queryByText("выборка до 500 строк")).not.toBeInTheDocument();
   expect(screen.getByText("Заполненность источника")).toBeInTheDocument();
   expect(screen.getByText("1 поле с пропусками")).toBeInTheDocument();
@@ -165,9 +169,8 @@ it("retains sample counts for PostgreSQL profiles without exact coverage", () =>
     />,
   );
 
-  expect(screen.getByText("Профиль покрывает")).toBeInTheDocument();
-  expect(screen.getByText("3 строки")).toBeInTheDocument();
-  expect(screen.getByText("выборка до 500 строк")).toBeInTheDocument();
+  expect(screen.getByText("Заполненность выборки")).toBeInTheDocument();
+  expect(screen.queryByText("выборка до 500 строк")).not.toBeInTheDocument();
   expect(
     screen.getByRole("img", { name: /Пропуски по столбцам: city: 33,3%/ }),
   ).toBeInTheDocument();

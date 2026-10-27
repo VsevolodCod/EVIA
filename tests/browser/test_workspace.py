@@ -173,8 +173,8 @@ def test_profile_overview_drilldown_search_and_responsive_layout(server):
                            'Север,1500,Сайт\n,600,Магазин\nЗапад,900,Сайт\nВосток,1100,\n').encode(),
             })
             expect(page.get_by_role('heading', name='retail-demo')).to_be_visible()
-            expect(page.get_by_text('6 строк обработано', exact=True)).to_be_visible()
-            expect(page.get_by_text('Профиль покрывает весь датасет', exact=True)).to_be_visible()
+            expect(page.locator('.kpi-grid .dashboard-card').first).to_contain_text('6')
+            expect(page.get_by_text('Заполненность источника', exact=True)).to_be_visible()
             expect(page.get_by_role('textbox', name='Ваш вопрос')).to_be_in_viewport()
             page.screenshot(path=str(artifacts / 'analytics-overview-desktop.png'), full_page=True)
             for width in [1280, 1024, 768, 390]:
@@ -210,12 +210,12 @@ def test_profile_overview_drilldown_search_and_responsive_layout(server):
             # Reload and choose the same persisted source: the overview uses the same real profile.
             page.reload()
             page.get_by_role('button', name='retail-demo', exact=True).click()
-            expect(page.get_by_text('6 строк обработано', exact=True)).to_be_visible()
+            expect(page.locator('.kpi-grid .dashboard-card').first).to_contain_text('6')
             # New data must clear both search context and old profile immediately.
             page.get_by_label('Загрузить CSV').set_input_files({
                 'name': 'second.csv', 'mimeType': 'text/csv', 'buffer': b'id\n1\n2\n',
             })
-            expect(page.get_by_text('2 строки обработано', exact=True)).to_be_visible()
+            expect(page.locator('.kpi-grid .dashboard-card').first).to_contain_text('2')
             page.get_by_role('button', name='Столбцы', exact=True).click()
             expect(page.get_by_role('searchbox', name='Поиск столбца')).to_have_value('')
             expect(page.get_by_role('region', name='Столбец id')).to_be_visible()

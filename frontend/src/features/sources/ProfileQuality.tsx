@@ -18,15 +18,9 @@ export function ProfileQuality({
     <div className="analytics-section">
       <div className="analytics-title">
         <div>
-          <span className="analytics-kicker">{model.coverage === "full" ? "ПРОВЕРКА ВСЕГО ДАТАСЕТА" : "ПРОВЕРКА ВЫБОРКИ"}</span>
           <h2>Качество данных</h2>
         </div>
       </div>
-      <p className="analytics-caption">
-        {model.coverage === "full"
-          ? "Точные NULL по всему датасету. Полнота данных не гарантирует корректность значений."
-          : "Пропуски в доступном профиле. Полнота данных не гарантирует корректность значений."}
-      </p>
       <div className="quality-summary">
         <div>
           <strong>{numberText(model.missing)}</strong>

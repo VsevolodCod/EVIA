@@ -162,6 +162,7 @@ export default function App() {
     Boolean(chat.source_id) && !sources.some((source) => source.source_id === chat.source_id));
   const unboundChats = chatSummaries.filter((chat) =>
     !chat.source_id && !chatSources[chat.chat_id]);
+  const historyCount = (selectedId ? conversations.length : 0) + archivedChats.length + unboundChats.length;
   const failedServerChat = selectedServerChats.find(
     (chat) => historyPages[chat.chat_id]?.error,
   );
@@ -726,8 +727,8 @@ export default function App() {
           <section className="nav-section history-section">
             <div className="nav-heading">
               <h2>История диалогов</h2>
-              {conversations.length > 0 && (
-                <span className="nav-count">{conversations.length}</span>
+              {historyCount > 0 && (
+                <span className="nav-count">{historyCount}</span>
               )}
             </div>
             {historyListLoading ? (
@@ -738,15 +739,18 @@ export default function App() {
                 onRetry={() => void loadChatList()}
                 label="Повторить загрузку диалогов"
               />
-            ) : failedServerChat && !history.length ? (
-              <ErrorNotice
-                message={historyPages[failedServerChat.chat_id]?.error ?? "Не удалось загрузить историю."}
-                onRetry={() => historyKey && void loadChatHistory(historyKey, failedServerChat.chat_id)}
-                label="Повторить загрузку истории"
-              />
-            ) : history.length ? (
+            ) : (
+              <>
+                {failedServerChat && !history.length && (
+                  <ErrorNotice
+                    message={historyPages[failedServerChat.chat_id]?.error ?? "Не удалось загрузить историю."}
+                    onRetry={() => historyKey && void loadChatHistory(historyKey, failedServerChat.chat_id)}
+                    label="Повторить загрузку истории"
+                  />
+                )}
+                {historyCount > 0 ? (
               <div className="history-list">
-                {[...conversations].reverse().map((entry) => (
+                {selectedId && [...conversations].reverse().map((entry) => (
                   <button
                     key={entry.id}
                     className={`history-item ${activeEntry?.conversationId === entry.conversationId ? "active" : ""}`}
@@ -773,40 +777,24 @@ export default function App() {
                     )}
                   </button>
                 ))}
-              </div>
-            ) : (
-              <p className="sidebar-note">Нет диалогов</p>
-            )}
-          </section>
-          {archivedChats.length > 0 && (
-            <section className="nav-section history-section" aria-label="Архивные диалоги">
-              <div className="nav-heading"><h2>Архивные диалоги</h2></div>
-              <p className="sidebar-note">Источник больше недоступен. Сохранённые ответы можно открыть, но новый расчёт невозможен.</p>
-              <div className="history-list">
                 {archivedChats.map((chat) => (
                   <button
                     key={chat.chat_id}
                     className={`history-item ${archivedChatId === chat.chat_id ? "active" : ""}`}
                     aria-label={`Архив: ${chat.title}`}
+                    title={`Источник недоступен · ${chat.title}`}
                     onClick={() => openArchivedChat(chat)}
                   >
                     <Icon name="chat" size={16} />
                     <span>{chat.title}</span>
                   </button>
                 ))}
-              </div>
-            </section>
-          )}
-          {unboundChats.length > 0 && (
-            <section className="nav-section history-section" aria-label="Диалоги без источника">
-              <div className="nav-heading"><h2>Диалоги без источника</h2></div>
-              <p className="sidebar-note">Старые записи можно прочитать. Для продолжения выберите источник после открытия чата.</p>
-              <div className="history-list">
                 {unboundChats.map((chat) => (
                   <button
                     key={chat.chat_id}
                     className={`history-item ${archivedChatId === chat.chat_id ? "active" : ""}`}
                     aria-label={`Без источника: ${chat.title}`}
+                    title={`Без источника · ${chat.title}`}
                     onClick={() => openArchivedChat(chat)}
                   >
                     <Icon name="chat" size={16} />
@@ -814,8 +802,12 @@ export default function App() {
                   </button>
                 ))}
               </div>
-            </section>
-          )}
+                ) : !failedServerChat && (
+                  <p className="sidebar-note">Нет диалогов</p>
+                )}
+              </>
+            )}
+          </section>
         </aside>
         <main
           className={`analysis ${source ? "" : "analysis-empty"}`}

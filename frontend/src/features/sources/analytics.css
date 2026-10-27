@@ -163,18 +163,18 @@
   cursor: not-allowed;
 }
 .profile-scope {
-  display: flex;
-  gap: 9px;
-  align-items: flex-start;
-  padding: 18px 2px 0;
+  display: inline-flex;
+  justify-self: start;
+  gap: 7px;
+  align-items: center;
+  padding: 6px 10px;
+  border: 1px solid #d6e9da;
+  border-radius: 999px;
+  background: #f1faf3;
   color: #4f6e60;
-  font-size: 11px;
-  line-height: 1.6;
-}
-.profile-scope small {
-  display: block;
-  color: #75877d;
-  font-size: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
 }
 .scope-dot {
   width: 6px;
@@ -182,7 +182,7 @@
   background: #83b39b;
   border-radius: 50%;
   flex: none;
-  margin-top: 6px;
+  margin-top: 0;
 }
 .analytics-section {
   display: grid;
@@ -974,14 +974,8 @@
   .analytics-tabs button[aria-pressed="true"] { background: #176d51; box-shadow: 0 2px 0 #0c4c39; }
   .analytics-workspace .analysis-heading, .analytics-metrics { display: none; }
   .profile-scope {
-    display: flex;
-    gap: 7px;
-    padding: 1px 2px 0;
-    font-size: 10px;
-    line-height: 1.45;
+    font-size: 11px;
   }
-  .profile-scope small { font-size: 9px; line-height: 1.45; }
-  .scope-dot { margin-top: 4px; }
   .analytics-section { padding-top: 4px; gap: 12px; }
   .analytics-title h2 { font-size: 17px; }
   .analytics-kicker, .analytics-section > .analytics-caption { display: none; }
@@ -1050,14 +1044,6 @@
   padding: 1px 0 2px;
 }
 .source-workspace-identity { min-width: 0; }
-.source-workspace-eyebrow {
-  display: block;
-  margin-bottom: 6px;
-  color: #418166;
-  font-size: 12px;
-  font-weight: 750;
-  letter-spacing: .03em;
-}
 .source-workspace-heading h1 {
   overflow: hidden;
   color: #123b2c;
@@ -1066,11 +1052,6 @@
   letter-spacing: -.035em;
   line-height: 1.1;
   overflow-wrap: anywhere;
-}
-.source-workspace-heading p {
-  margin-top: 8px;
-  color: #6b7e73;
-  font-size: 14px;
 }
 .source-refresh {
   display: inline-flex;
@@ -1130,16 +1111,12 @@
 
 @media (max-width: 640px) {
   .source-workspace-heading { order: 0; align-items: flex-start; padding: 0 2px; }
-  .source-workspace-eyebrow { font-size: 11px; }
   .source-workspace-heading h1 { font-size: 22px; }
-  .source-workspace-heading p { margin-top: 5px; font-size: 12px; }
   .source-refresh { min-width: 42px; min-height: 42px; padding: 9px; font-size: 0; }
   .source-refresh svg { width: 18px; height: 18px; }
   .analytics-tabs { order: 1; gap: 5px; padding: 8px 16px 10px; }
   .analytics-tabs button { min-height: 39px; font-size: 12px; }
   .analytics-report { order: 2; }
-  .profile-scope { font-size: 12px; }
-  .profile-scope small { font-size: 11px; }
   .analytics-title h2 { font-size: 20px; }
   .column-type-icon { display: none; }
   .column-card-title strong { font-size: 13px; }

@@ -36,13 +36,6 @@ const views: [View, string][] = [
   ["schema", "Схема"],
 ];
 
-function previewLabel(type: string, count: number) {
-  const remainder = Math.abs(count) % 100;
-  const lastDigit = remainder % 10;
-  const noun = remainder > 10 && remainder < 20 ? "строк" : lastDigit === 1 ? "строка" : lastDigit > 1 && lastDigit < 5 ? "строки" : "строк";
-  return `${type.toUpperCase()} · ${numberText(count)} ${noun}`;
-}
-
 function sourceRowCount(schema: SourceSchema) {
   return schema.objects.reduce<number | null>((total, object) =>
     total === null || object.row_count === null ? null : total + object.row_count,
@@ -137,11 +130,7 @@ export function SourceInspector({
     <div className="analytics-workspace">
       <div className="source-workspace-heading">
         <div className="source-workspace-identity">
-          <span className="source-workspace-eyebrow">Источник данных</span>
           <h1>{source.name}</h1>
-          <p>{source.source_type.toUpperCase()} · {current && sourceRowCount(current.schema) !== null
-            ? `${numberText(sourceRowCount(current.schema)!)} строк в источнике`
-            : "Объём источника уточняется"}</p>
         </div>
         <button className="source-refresh" type="button" onClick={() => setRevision((value) => value + 1)}>
           <Icon name="refresh" size={16} /> Обновить
@@ -186,22 +175,13 @@ export function SourceInspector({
             {current.profile && model && ["profile", "quality"].includes(view) && (
               <div className="profile-scope">
                 <span className="scope-dot" aria-hidden="true" />
-                <p>
-                  {current.profile.coverage === "full"
-                    ? "Статистика по всему датасету"
-                    : sampleDescription(current.profile)}
-                  <small>
-                    {current.profile.coverage === "full"
-                      ? <><span>Обработано {numberText(current.profile.processed_rows)} строк</span>. Точные показатели рассчитаны по всем строкам; частые значения — по выборке из {numberText(current.profile.sample_size)} строк.</>
-                      : "Статистика относится к выборке, а не ко всему источнику."}
-                  </small>
-                </p>
+                <span>{current.profile.coverage === "full" ? "Весь источник" : sampleDescription(current.profile)}</span>
               </div>
             )}
             {view === "overview" ? (
               <Dashboard
                 title="Обзор источника"
-                sourceLabel={previewLabel(source.source_type, current.rows.length)}
+                sourceLabel={source.name}
                 scope={source.source_id}
                 schema={current.schema}
                 rows={current.rows}
@@ -256,10 +236,6 @@ export function SourceInspector({
                 <div className="pane-heading">
                   <div>
                     <h2>Предпросмотр данных</h2>
-                    <p>
-                      Первые {numberText(current.rows.length)} строк · максимум
-                      100
-                    </p>
                   </div>
                   <Icon name="grid" />
                 </div>
@@ -275,17 +251,9 @@ export function SourceInspector({
               <div className="analytics-section">
                 <div className="analytics-title">
                   <div>
-                    <span className="analytics-kicker">
-                      УСТРОЙСТВО ДАТАСЕТА
-                    </span>
                     <h2>Структура источника</h2>
                   </div>
                 </div>
-                <p className="analytics-caption">
-                  {source.import_report
-                    ? "Типы определены по всему файлу. Исходные значения сохранены."
-                    : "Типы определены автоматически по выборке."}
-                </p>
                 {source.import_report && <details className="csv-import-details">
                   <summary>Отчёт об импорте</summary>
                   <p>Принято {numberText(source.import_report.accepted_rows)} из {numberText(source.import_report.rows_read)} строк · отклонено {numberText(source.import_report.rejected_rows)}</p>
