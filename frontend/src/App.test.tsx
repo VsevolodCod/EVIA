@@ -307,7 +307,11 @@ it("continues an unbound legacy chat only after the user explicitly chooses a so
   });
   vi.stubGlobal("fetch", fetcher);
   render(<App />);
-  fireEvent.click(await screen.findByRole("button", { name: "Без источника: Старый диалог" }));
+  const oldChat = await screen.findByRole("button", { name: "Без источника: Старый диалог" });
+  expect(screen.getAllByRole("heading", { name: "История диалогов" })).toHaveLength(1);
+  expect(screen.queryByRole("heading", { name: "Диалоги без источника" })).not.toBeInTheDocument();
+  expect(screen.queryByText("Нет диалогов")).not.toBeInTheDocument();
+  fireEvent.click(oldChat);
   expect(await screen.findByText("Только текст")).toBeInTheDocument();
   expect(screen.getByText("Для продолжения этого старого диалога выберите источник в левой панели.")).toBeInTheDocument();
   expect(screen.getByRole("textbox", { name: "Ваш вопрос" })).toBeDisabled();

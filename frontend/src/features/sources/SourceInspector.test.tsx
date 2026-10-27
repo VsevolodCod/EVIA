@@ -227,6 +227,7 @@ it("drills down from missing cells to a column and searches columns", async () =
   render(<Workspace />);
   await screen.findByRole("heading", { name: "Обзор источника" });
   fireEvent.click(screen.getByRole("button", { name: "Качество" }));
+  expect(screen.queryByText(/Точные NULL по всему датасету/)).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Изучить region" }));
   const column = await screen.findByRole("region", { name: "Столбец region" });
   expect(within(column).getAllByText("5%")).toHaveLength(1);
@@ -250,8 +251,10 @@ it("labels full CSV statistics as exact while keeping top values scoped to the s
   setup();
   render(<Workspace initial="profile" />);
 
-  expect(await screen.findByText("Статистика по всему датасету")).toBeInTheDocument();
-  expect(screen.getByText("Обработано 2 000 строк")).toBeInTheDocument();
+  expect(await screen.findByText("Весь источник")).toBeInTheDocument();
+  expect(screen.queryByText("Статистика по всему датасету")).not.toBeInTheDocument();
+  expect(screen.queryByText("ИССЛЕДУЙТЕ ДЕТАЛИ")).not.toBeInTheDocument();
+  expect(screen.queryByText(/строк в источнике/)).not.toBeInTheDocument();
 
   const revenue = screen.getByRole("region", { name: "Столбец revenue" });
   fireEvent.click(revenue.querySelector("summary")!);
@@ -289,8 +292,8 @@ it("keeps PostgreSQL sample profiles visibly limited to sampled statistics", asy
   setup(sampledProfile);
   render(<Workspace initial="profile" />);
 
-  expect(await screen.findByText(/Выборка: 4 строки/)).toBeInTheDocument();
-  expect(screen.getByText("Статистика относится к выборке, а не ко всему источнику.")).toBeInTheDocument();
+  expect(await screen.findByText("Выборка: 4 строки")).toBeInTheDocument();
+  expect(screen.queryByText("Статистика относится к выборке, а не ко всему источнику.")).not.toBeInTheDocument();
   expect(screen.queryByText("Статистика по всему датасету")).not.toBeInTheDocument();
   const region = screen.getByRole("region", { name: "Столбец region" });
   fireEvent.click(region.querySelector("summary")!);
@@ -324,7 +327,7 @@ it("keeps source dashboard calculations tied to preview rather than profile cove
   expect(
     await screen.findByRole("heading", { name: "Обзор источника" }),
   ).toBeInTheDocument();
-  expect(screen.getByText(/1 строка в предпросмотре источника/)).toBeInTheDocument();
+  expect(screen.queryByText(/1 строка в предпросмотре источника/)).not.toBeInTheDocument();
 });
 
 it("keeps the overview available when the profile request fails", async () => {

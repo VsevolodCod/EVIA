@@ -82,7 +82,11 @@ it("shows compact factual metrics and charts from source rows", () => {
   expect(screen.getByRole("img", { name: /Динамика по полю day/ })).toBeInTheDocument();
   expect(screen.getByRole("img", { name: /Распределение поля distance/ })).toBeInTheDocument();
   expect(screen.getByRole("img", { name: /Частые значения поля city/ })).toBeInTheDocument();
-  expect(screen.getByText(/3 строки в предпросмотре источника/)).toBeInTheDocument();
+  expect(screen.queryByText(/строки в предпросмотре источника/)).not.toBeInTheDocument();
+  expect(screen.queryByText("Ключевые показатели и первые строки данных")).not.toBeInTheDocument();
+  expect(screen.queryByText(/Показано 3 строки из предпросмотра/)).not.toBeInTheDocument();
+  expect(screen.queryByText("Графики построены по строкам предпросмотра")).not.toBeInTheDocument();
+  expect(screen.getByText("По предпросмотру")).toBeInTheDocument();
 });
 
 it("opens a numerical distribution detail with statistics and a way back", () => {
