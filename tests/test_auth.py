@@ -7,6 +7,30 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 
+def test_brevo_recovery_delivery_without_custom_domain(monkeypatch):
+    from app import auth_routes
+
+    calls = []
+
+    class Response:
+        def raise_for_status(self):
+            pass
+
+    monkeypatch.setenv("BREVO_API_KEY", "test-brevo-key")
+    monkeypatch.setenv("BREVO_SENDER_EMAIL", "owner@mail.ru")
+    monkeypatch.delenv("RESEND_API_KEY", raising=False)
+    monkeypatch.setattr(auth_routes.httpx, "post", lambda *args, **kwargs: (calls.append((args, kwargs)), Response())[1])
+
+    assert auth_routes.mail_configured()
+    auth_routes.send_reset_code("user@example.com", "12345678")
+    args, kwargs = calls[0]
+    assert args[0] == "https://api.brevo.com/v3/smtp/email"
+    assert kwargs["headers"] == {"api-key": "test-brevo-key"}
+    assert kwargs["json"]["sender"]["email"] == "owner@mail.ru"
+    assert kwargs["json"]["to"] == [{"email": "user@example.com"}]
+    assert "12345678" in kwargs["json"]["textContent"]
+
+
 @pytest.fixture
 def auth_module(tmp_path, monkeypatch):
     monkeypatch.setenv("AUTH_DATABASE_URL", f"sqlite:///{tmp_path / 'auth.db'}")
