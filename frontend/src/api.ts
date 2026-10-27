@@ -225,6 +225,30 @@ const chatHistorySchema = z.object({
   next_before: z.number().int().nonnegative().nullable(),
   has_more: z.boolean(),
 });
+const savedDashboardDefinitionSchema = z.object({
+    id: z.string().min(1),
+    title: z.string(),
+    summary: z.string().nullable().optional(),
+    version: z.number().int(),
+    charts: z.array(z.object({ chart_id: z.string(), position: z.number().int() })),
+});
+const savedDashboardInfoSchema = z.object({
+  success: z.boolean(),
+  dashboard: savedDashboardDefinitionSchema,
+});
+const savedDashboardBuildSchema = z.object({
+  success: z.boolean(),
+  dashboard: savedDashboardDefinitionSchema,
+  charts: z.array(z.object({
+    chart_id: z.string(),
+    position: z.number().int(),
+    success: z.boolean(),
+    chart_type: z.string().optional(),
+    definition: z.unknown().optional(),
+    result: z.unknown().optional(),
+    error: z.object({ code: z.string(), message: z.string() }).optional(),
+  })),
+});
 export type Source = z.infer<typeof sourceSchema>;
 export type ImportReport = z.infer<typeof importReportSchema>;
 export type SourceSchema = z.infer<typeof schemaSchema>;
@@ -240,6 +264,8 @@ export type StoredAnalysis =
   | { kind: "legacy" | "unsupported" | "invalid" };
 export type ToolResult = Answer["tool_results"][number];
 export type Row = Record<string, unknown>;
+export type SavedDashboardBuild = z.infer<typeof savedDashboardBuildSchema>;
+export type SavedDashboardInfo = z.infer<typeof savedDashboardInfoSchema>;
 
 export function storedAnalysis(message: ChatMessage): StoredAnalysis {
   const payload = message.analysis_payload;
@@ -363,6 +389,12 @@ async function request<T>(
 }
 const path = (id: string) => `/sources/${encodeURIComponent(id)}`;
 export const api = {
+  dashboardIds: (signal?: AbortSignal, offset = 0) =>
+    request(`/dashboards/ids?limit=100&offset=${offset}`, z.object({ dashboard_ids: z.array(z.string()) }), { signal }),
+  dashboardInfo: (id: string, signal?: AbortSignal) =>
+    request(`/dashboards/${encodeURIComponent(id)}`, savedDashboardInfoSchema, { signal }),
+  dashboardBuild: (id: string, signal?: AbortSignal) =>
+    request(`/dashboards/${encodeURIComponent(id)}/build`, savedDashboardBuildSchema, { signal }),
   createChat: (title: string) => request("/chats", chatSummarySchema, {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title }),
   }),
@@ -372,10 +404,10 @@ export const api = {
     if (before !== undefined) query.set("before", String(before));
     return request(`/chats/${encodeURIComponent(chatId)}?${query}`, chatHistorySchema, { signal });
   },
-  chat: async (question: string, id: string, chatId: string, signal?: AbortSignal) => {
+  chat: async (question: string, id: string, chatId: string, signal?: AbortSignal, dashboardId?: string) => {
     const result = await request(`/agent/chat?chat_id=${encodeURIComponent(chatId)}`, answerSchema, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question, source_ids: [id] }), signal,
+      body: JSON.stringify({ question, source_ids: [id], ...(dashboardId ? { dashboard_id: dashboardId } : {}) }), signal,
     });
     if (result.chat_id !== chatId) throw new Error("Сервер вернул ответ другого диалога. Повторите запрос.");
     return result;

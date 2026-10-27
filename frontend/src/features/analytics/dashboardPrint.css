@@ -47,9 +47,22 @@
     display: none !important;
   }
 
+  .dashboard-gallery-heading,
+  .dashboard-gallery-list,
+  .dashboard-gallery-attach,
+  .dashboard-gallery-status,
+  .dashboard-gallery-empty,
+  .saved-dashboard-toolbar {
+    display: none !important;
+  }
+
   .workspace,
+  .analysis,
   .analytics-workspace,
-  .analytics-report {
+  .analytics-report,
+  .dashboard-gallery,
+  .dashboard-gallery-open,
+  .saved-dashboard {
     display: block !important;
     width: auto !important;
     min-width: 0 !important;

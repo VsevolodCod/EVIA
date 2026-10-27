@@ -487,11 +487,12 @@ async def delete_chat(
 @app.get("/dashboards/ids")
 def list_dashboard_ids(
     limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
 ):
     """Возвращает ID сохранённых дашбордов."""
 
     try:
-        dashboards = dashboard_repository.list_all(limit=limit)
+        dashboards = dashboard_repository.list_all(limit=limit, offset=offset)
         return {
             "dashboard_ids": [dashboard.id for dashboard in dashboards],
         }

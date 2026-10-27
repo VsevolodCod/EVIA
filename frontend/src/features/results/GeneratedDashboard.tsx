@@ -7,7 +7,7 @@ import "../analytics/dashboardPrint.css";
 import "./generatedDashboard.css";
 
 type Card = { id: string; type: "kpi" | "line"; title: string; status: "success" | "error"; definition?: unknown; data?: unknown; error?: { code?: string; message?: string } };
-type Dashboard = { version: 1; title: string; palette?: string[] | null; cards: Card[] };
+export type Dashboard = { version: 1; title: string; palette?: string[] | null; cards: Card[] };
 type Point = { x: string | number | null; y: string | number | null; series?: string | null };
 
 function object(value: unknown): value is Record<string, unknown> {
@@ -22,6 +22,19 @@ export function generatedDashboardFrom(result: ToolResult): Dashboard | null {
     typeof card.title === "string" && ["kpi", "line"].includes(String(card.type)) &&
     ["success", "error"].includes(String(card.status)))) return null;
   return data as Dashboard;
+}
+
+export function generatedChartFrom(result: ToolResult): Dashboard | null {
+  if (!result.ok || result.tool_name !== "build_chart" || !object(result.data)) return null;
+  const data = result.data;
+  if (data.success !== true || typeof data.chart_id !== "string" || !object(data.definition) ||
+    typeof data.definition.title !== "string" || !["kpi", "line"].includes(String(data.definition.type))) return null;
+  return {
+    version: 1,
+    title: data.definition.title,
+    cards: [{ id: data.chart_id, type: data.definition.type as "kpi" | "line", title: data.definition.title,
+      status: "success", definition: data.definition, data: data.result }],
+  };
 }
 
 function numeric(value: unknown): number | null {
@@ -118,7 +131,7 @@ function ResultLine({ card, colors, gradient }: { card: Card; colors: string[]; 
   </>;
 }
 
-export function GeneratedDashboard({ dashboard, scope }: { dashboard: Dashboard; scope: string }) {
+export function GeneratedDashboard({ dashboard, scope, sourceLabel = "Результат рассчитан по выбранному источнику" }: { dashboard: Dashboard; scope: string; sourceLabel?: string }) {
   const [showPalette, setShowPalette] = useState(false);
   const supplied = (() => { try { return dashboard.palette ? validatePalette(dashboard.palette) : defaultPalette.colors; } catch { return defaultPalette.colors; } })();
   const [preference, setPreference] = useState<PalettePreference>(() => loadPalette(scope) ?? { colors: supplied, gradient: false });
@@ -135,8 +148,8 @@ export function GeneratedDashboard({ dashboard, scope }: { dashboard: Dashboard;
     window.print();
   };
   return <div className="dashboard generated-dashboard" data-print-report="true" style={{ "--dashboard-primary": preference.colors[0], "--dashboard-secondary": preference.colors[1] } as React.CSSProperties}>
-    <div className="dashboard-top"><div><h2>{dashboard.title}</h2><p>Результат рассчитан по выбранному источнику</p></div>
-      <div className="dashboard-actions"><button type="button" aria-expanded={showPalette} onClick={() => setShowPalette(!showPalette)}>Цвета</button><button type="button" onClick={exportPdf}>Экспорт PDF</button></div>
+    <div className="dashboard-top"><div><h2>{dashboard.title}</h2><p>{sourceLabel}</p></div>
+      <div className="dashboard-actions"><button type="button" aria-expanded={showPalette} onClick={() => setShowPalette(!showPalette)}>Цвета</button><button type="button" onClick={exportPdf}>Печать / PDF</button></div>
     </div>
     {showPalette && <PaletteEditor colors={preference.colors} gradient={preference.gradient} onChange={changePalette} onClose={() => setShowPalette(false)} />}
     <div className="generated-grid">

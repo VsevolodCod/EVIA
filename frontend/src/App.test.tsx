@@ -114,6 +114,36 @@ it("shows an incomplete model response as a retryable error", async () => {
   expect(screen.getByRole("button", { name: "Повторить вопрос" })).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: /Результаты инструментов/ })).not.toBeInTheDocument();
 });
+
+it("attaches a selected saved report to one source conversation and clears it on source change", async () => {
+  setup(() => Promise.resolve(Response.json({ answer: "Готово", steps: 1, tool_results: [] })));
+  const original = vi.mocked(fetch).getMockImplementation()!;
+  vi.mocked(fetch).mockImplementation((url: string | URL | Request, init?: RequestInit) => {
+    if (String(url).startsWith("/dashboards/ids")) return Promise.resolve(Response.json({ dashboard_ids: ["report-1"] }));
+    if (url === "/dashboards/report-1") return Promise.resolve(Response.json({ success: true, dashboard: {
+      id: "report-1", title: "Отчёт продаж", version: 1, charts: [{ chart_id: "total", position: 0 }],
+    } }));
+    if (url === "/dashboards/report-1/build") return Promise.resolve(Response.json({ success: true,
+      dashboard: { id: "report-1", title: "Отчёт продаж", version: 1, charts: [{ chart_id: "total", position: 0 }] },
+      charts: [{ chart_id: "total", position: 0, success: true, chart_type: "kpi", definition: { type: "kpi", title: "Выручка" }, result: { value: 30 } }],
+    }));
+    return original(url, init);
+  });
+  render(<App />);
+  await select("A");
+  fireEvent.click(screen.getByRole("button", { name: /Сохранённые отчёты/ }));
+  fireEvent.click(await screen.findByRole("button", { name: /Отчёт продаж/ }));
+  fireEvent.click(screen.getByRole("button", { name: /Обсудить этот отчёт/ }));
+  expect(screen.getByLabelText("Прикреплённый отчёт")).toHaveTextContent("Отчёт продаж");
+  await ask("Поясни отчёт");
+  const calls = vi.mocked(fetch).mock.calls.filter(([url]) => String(url).startsWith("/agent/chat?"));
+  expect(JSON.parse(String(calls.at(-1)![1]?.body))).toMatchObject({ dashboard_id: "report-1", source_ids: ["A"] });
+  await select("B");
+  expect(screen.queryByLabelText("Прикреплённый отчёт")).not.toBeInTheDocument();
+  await ask("Вопрос по B");
+  const next = vi.mocked(fetch).mock.calls.filter(([url]) => String(url).startsWith("/agent/chat?"));
+  expect(JSON.parse(String(next.at(-1)![1]?.body))).toEqual({ question: "Вопрос по B", source_ids: ["B"] });
+});
 it("keeps late answers and history bound to their source", async () => {
   let now = 1000;
   vi.spyOn(performance, "now").mockImplementation(() => now);
@@ -193,7 +223,7 @@ it("reopens a server conversation after reload without mixing it into another so
   ).toBeInTheDocument();
   expect(await screen.findByText("Сохранённый дашборд")).toBeInTheDocument();
   expect(screen.getByText("Ответ за 1,2 с")).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Результаты инструментов" }));
+  fireEvent.click(screen.getByRole("button", { name: "Открыть результат" }));
   expect(await screen.findByText("SELECT SUM(revenue) FROM sales")).toBeInTheDocument();
   await select("B");
   expect(screen.queryByText("Продажи выросли.")).not.toBeInTheDocument();
@@ -404,7 +434,7 @@ it("continues one conversation, resumes an older one, and isolates sources", asy
   await screen.findByText("Ответ: Уточнение");
   expect(screen.getByText("Ответ: Первый")).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Уточнение" })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Новый анализ" }));
+  fireEvent.click(screen.getByRole("button", { name: "Добавить источник" }));
   await select("A");
   await ask("Другой диалог");
   await screen.findByText("Ответ: Другой диалог");
@@ -430,7 +460,7 @@ it("returns to the CSV start screen without removing connected sources", async (
   render(<App />);
   await select("A");
 
-  fireEvent.click(screen.getByRole("button", { name: "Новый анализ" }));
+  fireEvent.click(screen.getByRole("button", { name: "Добавить источник" }));
 
   expect(
     await screen.findByRole("heading", { name: "Добавьте CSV" }),
@@ -470,7 +500,7 @@ it("opens the analysis from a source and returns to the mobile home", async () =
 it("opens a separate CSV upload screen from the home action", async () => {
   setup();
   render(<App />);
-  fireEvent.click(screen.getByRole("button", { name: "Новый анализ" }));
+  fireEvent.click(screen.getByRole("button", { name: "Добавить источник" }));
 
   expect(screen.getByRole("button", { name: "Аналитика" })).toHaveAttribute("aria-pressed", "true");
   expect(screen.getByRole("heading", { name: "Добавьте CSV" })).toBeInTheDocument();
@@ -480,7 +510,7 @@ it("previews a selected mobile CSV before uploading it", async () => {
   setup();
   vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true }));
   render(<App />);
-  fireEvent.click(screen.getByRole("button", { name: "Новый анализ" }));
+  fireEvent.click(screen.getByRole("button", { name: "Добавить источник" }));
   fireEvent.click(screen.getByRole("button", { name: "Загрузить CSV в новом анализе" }));
 
   fireEvent.change(screen.getByLabelText("Загрузить CSV"), {
@@ -497,7 +527,7 @@ it("shows the mobile analysis steps and opens a dismissible CSV sheet", async ()
   setup();
   vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true }));
   render(<App />);
-  fireEvent.click(screen.getByRole("button", { name: "Новый анализ" }));
+  fireEvent.click(screen.getByRole("button", { name: "Добавить источник" }));
   expect(screen.getByRole("dialog", { name: "Новый анализ" })).toBeInTheDocument();
   expect(screen.getByText("Загрузка данных")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Загрузить CSV в новом анализе" }));
@@ -511,7 +541,7 @@ it("can continue a mobile analysis from an existing source", async () => {
   vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true }));
   render(<App />);
   await screen.findByRole("button", { name: "Источник A" });
-  fireEvent.click(screen.getByRole("button", { name: "Новый анализ" }));
+  fireEvent.click(screen.getByRole("button", { name: "Добавить источник" }));
   fireEvent.click(screen.getByRole("button", { name: "Использовать Источник A" }));
   expect(screen.queryByRole("dialog", { name: "Новый анализ" })).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Аналитика" })).toHaveAttribute("aria-pressed", "true");
@@ -625,7 +655,7 @@ it("does not switch back to an older conversation when its answer arrives late",
   render(<App />);
   await select("A");
   await ask("Старый");
-  fireEvent.click(screen.getByRole("button", { name: "Новый анализ" }));
+  fireEvent.click(screen.getByRole("button", { name: "Добавить источник" }));
   await select("A");
   await ask("Новый");
   await act(async () => finish[0](Response.json({ answer: "Старый ответ", steps: 1, tool_results: [] })));

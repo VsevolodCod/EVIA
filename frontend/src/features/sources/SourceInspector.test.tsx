@@ -176,22 +176,25 @@ function Workspace({
 it("distinguishes the full source from its preview in the dashboard", async () => {
   setup();
   render(<Workspace />);
-  expect(
-    await screen.findByRole("heading", { name: "Продажи" }),
-  ).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "Обзор источника" })).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Продажи" })).toBeInTheDocument();
   expect(screen.getByText("Строк в источнике")).toBeInTheDocument();
   expect(screen.getByText("2 000")).toBeInTheDocument();
   expect(screen.getByText(/1 строка в предпросмотре источника/)).toBeInTheDocument();
   expect(screen.getByText("Полный датасет")).toBeInTheDocument();
+  expect(screen.getByRole("region", { name: "Первые строки источника" })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: /Открыть данные/ }));
+  expect(await screen.findByRole("heading", { name: "Предпросмотр данных" })).toBeInTheDocument();
 });
 
-it("keeps the section navigation above every analytics view", async () => {
+it("places the source identity above its sections and keeps results contextual", async () => {
   setup();
   const { container } = render(<Workspace initial="profile" />);
   const title = await screen.findByRole("heading", { name: "Продажи" });
   const navigation = container.querySelector(".analytics-tabs");
   expect(navigation).not.toBeNull();
-  expect(navigation!.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(title.compareDocumentPosition(navigation!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Результат анализа" })).not.toBeInTheDocument();
 });
 
 it("keeps the profile scope disclosure visible at mobile widths", () => {
@@ -222,7 +225,7 @@ it("shows import accounting and allows replacing a CSV with a new snapshot", asy
 it("drills down from missing cells to a column and searches columns", async () => {
   setup();
   render(<Workspace />);
-  await screen.findByRole("heading", { name: "Продажи" });
+  await screen.findByRole("heading", { name: "Обзор источника" });
   fireEvent.click(screen.getByRole("button", { name: "Качество" }));
   fireEvent.click(screen.getByRole("button", { name: "Изучить region" }));
   const column = await screen.findByRole("region", { name: "Столбец region" });
@@ -319,7 +322,7 @@ it("keeps source dashboard calculations tied to preview rather than profile cove
   setup({ ...profile, columns: { region: profile.columns.region } });
   render(<Workspace />);
   expect(
-    await screen.findByRole("heading", { name: "Продажи" }),
+    await screen.findByRole("heading", { name: "Обзор источника" }),
   ).toBeInTheDocument();
   expect(screen.getByText(/1 строка в предпросмотре источника/)).toBeInTheDocument();
 });
@@ -329,7 +332,7 @@ it("keeps the overview available when the profile request fails", async () => {
   vi.mocked(api.profile).mockRejectedValueOnce(new Error("Профиль временно недоступен"));
   render(<Workspace />);
 
-  expect(await screen.findByRole("heading", { name: "Продажи" })).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "Обзор источника" })).toBeInTheDocument();
   expect(screen.getByText("Строк в источнике")).toBeInTheDocument();
   expect(screen.getByText("Полный датасет")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Данные" }));
@@ -339,7 +342,7 @@ it("keeps the overview available when the profile request fails", async () => {
 it("clears old analytics while a different source is loading", async () => {
   setup();
   const { rerender } = render(<Workspace />);
-  await screen.findByRole("heading", { name: "Продажи" });
+  await screen.findByRole("heading", { name: "Обзор источника" });
   let finish!: (value: Profile) => void;
   vi.mocked(api.profile).mockImplementation(
     () =>
@@ -384,9 +387,8 @@ it("shows the actual answer safely in the analysis pane with its table", async (
     await screen.findByRole("heading", { name: "Результат анализа" }),
   ).toBeInTheDocument();
   expect(screen.getByText("Север", { selector: "strong" })).toBeInTheDocument();
-  expect(
-    screen.getByRole("region", { name: "Результат execute_sql" }),
-  ).toBeInTheDocument();
+  fireEvent.click(screen.getByText("Таблица и детали расчёта"));
+  expect(screen.getByRole("region", { name: "Результат execute_sql" })).toBeInTheDocument();
   expect(
     screen.getByRole("img", { name: "Распределение поля revenue" }),
   ).toBeInTheDocument();

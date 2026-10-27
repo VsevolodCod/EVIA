@@ -10,7 +10,7 @@ export type PalettePreference = {
 };
 
 export const palettes: Palette[] = [
-  { id: "calm", label: "Спокойная", colors: ["#518ed5", "#ddaa65", "#8873bb", "#679b9a"] },
+  { id: "calm", label: "EVIA", colors: ["#13845d", "#67b89a", "#d7a358", "#627fa1"] },
   { id: "contrast", label: "Контрастная", colors: ["#3166b5", "#c96653", "#7b63a8", "#55846a"] },
   { id: "lavender", label: "Лавандовая", colors: ["#8873bb", "#6b9fb4", "#c78d9a", "#bd9b61"] },
   { id: "marine", label: "Морская", colors: ["#377d97", "#6eafa7", "#b38e62", "#7d80a7"] },
