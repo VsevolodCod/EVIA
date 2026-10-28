@@ -3,7 +3,7 @@ import pytest
 from app.agent import AgentRuntime
 from app.charts.models import ChartModel
 from app.charts.repositories import ChartRepository, DashboardRepository
-from app.models import LLMResponse, ToolCall
+from app.models import ChatMessage, LLMResponse, ToolCall
 from app.schema_catalog import SchemaCatalog
 from app.source_service import SourceService
 from app.tools import build_tool_registry
@@ -75,6 +75,23 @@ def test_chart_id_accepts_legacy_input_and_keeps_current_wire_contract():
     assert old.id == old.chart_id == "chart-1"
     assert old.model_dump()["chart_id"] == "chart-1"
     assert "id" not in old.model_dump()
+
+
+@pytest.mark.asyncio
+async def test_saved_history_sends_only_message_contract_to_model(tmp_path, scripted_llm):
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    sources = SourceService(tmp_path / "data", catalog)
+    llm = scripted_llm([LLMResponse(content="Продолжаю анализ.")])
+    history = [ChatMessage(role="assistant", content="Сумма 10.", response={"private": "CANARY"})]
+    try:
+        await AgentRuntime(llm, build_tool_registry(catalog, sources)).ask("А по месяцам?", history=history)
+        sent = llm.messages[0][1].model_dump()
+        assert sent["content"] == "Сумма 10."
+        assert "analysis_payload" not in sent and "response" not in sent
+        assert "message_id" not in sent
+        assert history[0].response == {"private": "CANARY"}
+    finally:
+        catalog.close()
 
 
 def test_factory_allows_explicit_dependency_injection(tmp_path):

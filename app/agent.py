@@ -249,7 +249,8 @@ class AgentRuntime:
 
         messages = (
                 [LLMMessage(role="system", content=SYSTEM_PROMPT, )] +
-                (history or []) +
+                [LLMMessage.model_validate(item.model_dump(include=set(LLMMessage.model_fields)))
+                 for item in (history or [])] +
                 [LLMMessage(role="user", content=question + context, )]
         )
 
