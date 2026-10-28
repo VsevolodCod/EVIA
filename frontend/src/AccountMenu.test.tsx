@@ -15,6 +15,9 @@ it("opens a modal profile and uploads the owner's photo", async () => {
   render(<AccountMenu account={{ id: "owner", email: "owner@example.com", name: "Owner", created_at: "2026-10-28T00:00:00Z", avatar_url: null }} onChange={onChange} onLogout={onLogout} />);
   fireEvent.click(screen.getByRole("button", { name: "Открыть профиль" }));
   expect(screen.getByRole("dialog", { name: "Профиль" })).toHaveAttribute("aria-modal", "true");
+  screen.getByRole("button", { name: "Открыть профиль" }).focus();
+  fireEvent.keyDown(document, { key: "Tab" });
+  expect(screen.getByRole("button", { name: "Закрыть профиль" })).toHaveFocus();
   const file = new File(["photo"], "photo.png", { type: "image/png" });
   fireEvent.change(screen.getByLabelText("Фотография профиля"), { target: { files: [file] } });
   await waitFor(() => expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ avatar_url: "/auth/avatar?v=1" })));

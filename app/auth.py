@@ -219,6 +219,8 @@ class AuthStore:
             with Image.open(BytesIO(raw)) as original:
                 if original.format not in {"PNG", "JPEG", "WEBP"}:
                     raise ValueError("Only PNG, JPEG and WebP images are supported")
+                if original.width > 4096 or original.height > 4096 or original.width * original.height > 4_000_000:
+                    raise ValueError("Image dimensions are too large")
                 image = ImageOps.exif_transpose(original)
                 image.thumbnail((256, 256))
                 image = image.convert("RGBA" if "A" in image.getbands() else "RGB")

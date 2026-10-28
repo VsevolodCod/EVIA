@@ -34,7 +34,10 @@ export function AccountMenu({ account, onChange, onLogout, theme = "light" }: {
       const focusable = Array.from(dialog.current.querySelectorAll<HTMLElement>("button:not([disabled]), input:not([disabled])"));
       const first = focusable[0];
       const last = focusable.at(-1);
-      if (event.shiftKey && document.activeElement === first) {
+      if (!dialog.current.contains(document.activeElement)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first)?.focus();
+      } else if (event.shiftKey && document.activeElement === first) {
         event.preventDefault();
         last?.focus();
       } else if (!event.shiftKey && document.activeElement === last) {

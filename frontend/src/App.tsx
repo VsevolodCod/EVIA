@@ -668,6 +668,7 @@ export default function App({ account, onAccountChange, onLogout }: {
             <Icon name="plus" />
             Добавить источник
           </button>
+          {!sourcesLoading && <div className="mobile-home-greeting"><WelcomeGreeting greeting={welcomeGreeting} activeState={mascotState} /></div>}
           <section className="nav-section">
             <div className="nav-heading">
               <h2>Источники</h2>

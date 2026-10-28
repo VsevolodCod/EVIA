@@ -39,6 +39,11 @@ async def test_avatar_upload_is_private_and_can_be_removed(auth_module):
             assert (await stranger.get("/auth/avatar")).status_code == 404
             rejected = await owner.put("/auth/avatar", files={"file": ("avatar.svg", b"<svg/>", "image/svg+xml")})
             assert rejected.status_code == 400
+            compressed_large = BytesIO()
+            Image.new("RGB", (2500, 2500), "#147d50").save(compressed_large, format="PNG")
+            assert len(compressed_large.getvalue()) < 1_048_576
+            too_many_pixels = await owner.put("/auth/avatar", files={"file": ("large.png", compressed_large.getvalue(), "image/png")})
+            assert too_many_pixels.status_code == 400
             assert (await owner.delete("/auth/avatar")).status_code == 204
             assert (await owner.get("/auth/me")).json()["avatar_url"] is None
 

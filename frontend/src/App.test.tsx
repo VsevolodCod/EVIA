@@ -104,7 +104,8 @@ async function ask(question: string) {
 it("greets visitors and highlights PostgreSQL selection without a marker dot", async () => {
   setup();
   render(<App />);
-  expect(await screen.findByLabelText("Приветствие EVIA")).toBeInTheDocument();
+  expect((await screen.findAllByLabelText("Приветствие EVIA")).length).toBeGreaterThan(0);
+  expect(document.querySelector(".mobile-home-greeting .evia-greeting-block")).toBeInTheDocument();
   await select("A");
   expect(document.querySelector(".selection-dot")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Подключить PostgreSQL" }));

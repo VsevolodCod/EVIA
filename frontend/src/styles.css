@@ -2101,7 +2101,13 @@ summary {
   box-shadow: inset 3px 0 0 #1d9c6e, inset 0 0 0 1px #cce9d8;
   color: #17633f;
 }
-.app[data-theme="dark"] .postgres-nav.selected { background: #164b40; color: #effff8; }
+.app[data-theme="dark"] .postgres-nav:hover,.app[data-theme="dark"] .postgres-nav.selected { background: #164b40; color: #effff8; }
+.mobile-home-greeting { display: none; }
+@media (max-width: 640px) {
+  .mobile-panel-home .mobile-home-greeting { display: block; }
+  .mobile-home-greeting .evia-greeting-block { min-height: 145px; }
+  .mobile-home-greeting .evia-mascot { width: 85px !important; height: 85px !important; }
+}
 .app :is(.dashboard-actions button,.dashboard-section-heading button,.new-dialog,.reports-nav,.result-open-chat,.saved-dashboard-toolbar button) {
   min-height: 40px;
   padding: 9px 13px;
