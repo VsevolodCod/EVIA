@@ -19,7 +19,7 @@ it("renders bounded bars, duplicate scatter points and an accessible table from 
   render(<GeneratedDashboard dashboard={{ version: 1, title: "Панель", cards }} scope="variety-test" />);
   expect(screen.getByRole("img", { name: /По категориям/ }).querySelectorAll("rect[data-bar]")).toHaveLength(2);
   expect(screen.getByRole("img", { name: /Связь показателей/ }).querySelectorAll("circle[data-point]")).toHaveLength(2);
-  expect(screen.getByRole("table", { name: "Строки" })).toBeInTheDocument();
+  expect(screen.getByRole("region", { name: "Строки" })).toBeInTheDocument();
   expect(screen.getByText("ok")).toBeInTheDocument();
   expect(screen.getByText(/Достигнут лимит выдачи/)).toBeInTheDocument();
 });

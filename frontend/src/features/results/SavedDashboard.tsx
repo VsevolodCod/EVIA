@@ -19,7 +19,7 @@ export function dashboardFromBuild(build: SavedDashboardBuild): Dashboard {
     cards: [...build.charts].sort((left, right) => left.position - right.position).map((chart): Dashboard["cards"][number] => {
       const definition = record(chart.definition) ? chart.definition : null;
       const type = definition?.type;
-      if (!definition || (type !== "kpi" && type !== "line")) return {
+      if (!definition || !["kpi", "line", "bar", "scatter", "table"].includes(String(type))) return {
         id: chart.chart_id,
         type: "kpi" as const,
         title: "Недоступный график",
@@ -28,7 +28,7 @@ export function dashboardFromBuild(build: SavedDashboardBuild): Dashboard {
       };
       return {
         id: chart.chart_id,
-        type,
+        type: type as Dashboard["cards"][number]["type"],
         title: typeof definition.title === "string" ? definition.title : "График",
         status: chart.success ? "success" as const : "error" as const,
         definition: chart.definition,
