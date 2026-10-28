@@ -9,19 +9,19 @@ from app.charts.aggregation import (
     where_clause,
 )
 from app.charts.implementations.base import ChartImplementation
-from app.charts.models import ChartDefinition, DashboardFilter, LineCard
+from app.charts.models import BarCard, ChartDefinition, DashboardFilter, LineCard
 
 
 class LineImplementation(ChartImplementation):
     def supports(self, card: ChartDefinition) -> bool:
-        return isinstance(card, LineCard)
+        return isinstance(card, LineCard) and card.type == "line"
 
     def execute(
         self,
         card: ChartDefinition,
         filters: list[DashboardFilter],
     ) -> dict[str, Any]:
-        if not isinstance(card, LineCard):
+        if not isinstance(card, (LineCard, BarCard)):
             raise TypeError("LineImplementation only supports line cards")
 
         plan = self.planner.plan(card, filters)
