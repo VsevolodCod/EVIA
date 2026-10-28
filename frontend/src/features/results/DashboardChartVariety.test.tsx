@@ -118,3 +118,16 @@ it("keeps an unnamed series identifiable after switching bars to a line", () => 
   expect(screen.getByText("Нет значения")).toBeInTheDocument();
   expect(screen.getByRole("img", { name: /По категориям/ }).querySelector('circle[aria-label*="Нет значения"]')).not.toBeNull();
 });
+
+it("does not merge NULL with a literal series named Нет значения", () => {
+  const bar = { ...cards[0], definition: { ...cards[0].definition, series: { source_id: "sales", field: "region" } },
+    data: { ...cards[0].data, points: [
+      { x: "A", y: 10, series: null }, { x: "A", y: 20, series: "Нет значения" },
+    ] } };
+  render(<GeneratedDashboard dashboard={{ version: 1, title: "Панель", cards: [bar] }} scope="literal-null-series-test" />);
+  const bars = screen.getByRole("img", { name: /По категориям/ }).querySelectorAll("rect[data-bar]");
+  expect(bars[0].getAttribute("fill")).not.toBe(bars[1].getAttribute("fill"));
+  fireEvent.click(screen.getByRole("button", { name: "Линия" }));
+  expect(screen.getByRole("img", { name: /По категориям/ }).querySelectorAll("polyline[data-testid^='generated-series-']"))
+    .toHaveLength(2);
+});
