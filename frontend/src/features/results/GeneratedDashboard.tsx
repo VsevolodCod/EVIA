@@ -108,6 +108,9 @@ function ResultLine({ card, colors, gradient }: { card: Card; colors: string[]; 
     points: chart.points.filter((point) => (point.series ?? "") === name && numeric(point.y) !== null),
   }));
   return <>
+    {object(card.data) && card.data.limit_reached === true && <p className="generated-limit-note">
+      Показано точек: {chart.points.length}. Достигнут лимит выдачи; в источнике могут быть другие группы. Уточните период или фильтры.
+    </p>}
     <svg className="generated-line-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${card.title}: ${chart.yLabel} по ${chart.xLabel}`}>
       <defs><linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1"><stop stopColor={colors[0]} stopOpacity=".2" /><stop offset="1" stopColor={colors[0]} stopOpacity="0" /></linearGradient></defs>
       {[0, .5, 1].map((step) => {

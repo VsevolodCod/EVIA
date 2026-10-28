@@ -3,6 +3,20 @@
   gap: 12px;
 }
 
+.result-chart-fields, .result-chart-pages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.result-chart-fields label { display: grid; gap: 4px; min-width: 0; flex: 1 1 140px; font-size: 12px; }
+.result-chart-fields select { width: 100%; min-width: 0; padding: 7px; font: inherit; border: 1px solid var(--line); border-radius: 7px; background: var(--surface, #fff); color: inherit; }
+.result-chart-pages button { padding: 8px; border: 1px solid var(--line); border-radius: 7px; font: inherit; }
+.result-chart-pages button:disabled { opacity: .5; }
+.result-chart rect:focus, .result-chart circle:focus { outline: 2px solid #104b35; outline-offset: 2px; }
+.result-chart .result-zero-line { stroke: #718178; }
+
 .result-view-toggle {
   display: inline-flex;
   width: fit-content;
@@ -32,6 +46,7 @@
 .result-visualization-note,
 .result-chart-meta {
   margin: 0;
+  overflow-wrap: anywhere;
   color: var(--muted);
   font-size: 11px;
 }
