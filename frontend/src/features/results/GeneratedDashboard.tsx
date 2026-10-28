@@ -159,7 +159,7 @@ function LimitNote({ data, count, unit = "точек" }: { data: unknown; count:
   </p> : null;
 }
 
-function ResultBar({ card, color }: { card: Card; color: string }) {
+function ResultBar({ card, colors }: { card: Card; colors: string[] }) {
   const chart = lineData(card.data);
   if (!chart || !chart.points.length) return <p className="generated-empty">Нет столбцов для графика.</p>;
   const values = chart.points.map(point => numeric(point.y)).filter((value): value is number => value !== null);
@@ -174,6 +174,7 @@ function ResultBar({ card, color }: { card: Card; color: string }) {
   const x = (index: number) => left + (width - left - right) * ((index + .5) / chart.points.length);
   const barWidth = Math.min(24, (width - left - right) / chart.points.length * .7);
   const stride = Math.max(1, Math.ceil(chart.points.length / 10));
+  const series = [...new Set(chart.points.map(point => point.series).filter((name): name is string => typeof name === "string" && !!name))];
   return <>
     <LimitNote data={card.data} count={chart.points.length} />
     <div className="generated-chart-scroll" role="region" aria-label={`Прокрутка графика ${card.title}`} tabIndex={0}>
@@ -183,15 +184,20 @@ function ResultBar({ card, color }: { card: Card; color: string }) {
           const value = numeric(point.y);
           if (value === null) return null;
           const topY = Math.min(y(value), baseline);
+          const name = point.series ? `${point.x} · ${point.series}` : String(point.x);
+          const seriesIndex = point.series ? series.indexOf(point.series) : 0;
           return <rect key={index} data-bar="true" x={x(index) - barWidth / 2} y={topY} width={barWidth}
-            height={Math.abs(y(value) - baseline)} fill={color} rx="2" tabIndex={0}
-            aria-label={`${point.x}: ${point.y}`}><title>{`${point.x}: ${point.y}`}</title></rect>;
+            height={Math.abs(y(value) - baseline)} fill={colors[Math.max(seriesIndex, 0) % colors.length]} rx="2" tabIndex={0}
+            aria-label={`${name}: ${point.y}`}><title>{`${name}: ${point.y}`}</title></rect>;
         })}
         {chart.points.map((point, index) => index % stride === 0 && <text key={index} x={x(index)} y={height - 13} textAnchor="middle">
           {String(point.x ?? "—").slice(0, 12)}
         </text>)}
       </svg>
     </div>
+    {series.length > 1 && <div className="generated-legend">{series.map((name, index) =>
+      <span key={name}><i style={{ backgroundColor: colors[index % colors.length] }} />{name}</span>
+    )}</div>}
     <div className="generated-axis-label">{chart.xLabel} · {chart.yLabel}</div>
   </>;
 }
@@ -265,7 +271,7 @@ export function GeneratedDashboard({ dashboard, scope, sourceLabel }: { dashboar
         {card.status === "error" ? <p className="generated-empty">Не удалось рассчитать эту карточку.</p>
           : card.type === "kpi" && object(card.data) ? <strong className="generated-value">{displayValue(card.data.value)}</strong>
             : card.type === "line" ? <ResultLine card={card} colors={preference.colors} gradient={preference.gradient} />
-              : card.type === "bar" ? <ResultBar card={card} color={preference.colors[0]} />
+              : card.type === "bar" ? <ResultBar card={card} colors={preference.colors} />
                 : card.type === "scatter" ? <ResultScatter card={card} color={preference.colors[0]} />
                   : card.type === "table" ? <ResultTable card={card} /> : null}
         {card.status === "success" && (() => {

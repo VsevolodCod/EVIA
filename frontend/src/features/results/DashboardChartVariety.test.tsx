@@ -40,3 +40,15 @@ it("accepts generated and saved chart payloads without dropping new types", () =
   };
   expect(dashboardFromBuild(build).cards.map(card => card.type)).toEqual(["bar", "scatter", "table"]);
 });
+
+it("labels separate bar series instead of making duplicate categories ambiguous", () => {
+  const bar = { ...cards[0], data: { ...cards[0].data, points: [
+    { x: "A", y: 10, series: "Восток" }, { x: "A", y: 20, series: "Запад" },
+  ] } };
+  render(<GeneratedDashboard dashboard={{ version: 1, title: "Панель", cards: [bar] }} scope="series-test" />);
+  const chart = screen.getByRole("img", { name: /По категориям/ });
+  expect(chart.querySelector('rect[aria-label="A · Восток: 10"]')).not.toBeNull();
+  expect(chart.querySelector('rect[aria-label="A · Запад: 20"]')).not.toBeNull();
+  expect(screen.getByText("Восток")).toBeInTheDocument();
+  expect(screen.getByText("Запад")).toBeInTheDocument();
+});

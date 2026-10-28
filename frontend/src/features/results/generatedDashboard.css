@@ -21,7 +21,7 @@
 .generated-line-chart text { fill: #7a838e; font: 11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
 .generated-line-chart circle:focus { stroke: #28323a; stroke-width: 2; outline: none; }
 .generated-line-chart circle { cursor: default; }
-.generated-line-chart + .generated-legend { display: flex; flex-wrap: wrap; gap: 12px; }
+.generated-legend { display: flex; flex-wrap: wrap; gap: 12px; }
 .generated-legend span { display: inline-flex; align-items: center; gap: 6px; color: #606975; font-size: 11px; }
 .generated-legend i { width: 9px; height: 9px; border-radius: 50%; }
 .generated-axis-label { margin-top: 8px; color: #89919d; font-size: 11px; }
