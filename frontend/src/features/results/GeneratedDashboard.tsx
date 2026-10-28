@@ -10,7 +10,7 @@ import "./generatedDashboard.css";
 type ChartType = "kpi" | "line" | "bar" | "scatter" | "table";
 type Card = { id: string; type: ChartType; title: string; status: "success" | "error"; definition?: unknown; data?: unknown; error?: { code?: string; message?: string } };
 export type Dashboard = { version: 1; title: string; palette?: string[] | null; cards: Card[] };
-type Point = { x: string | number | null; y: string | number | null; series?: string | null };
+type Point = { x: string | number | null; y: string | number | null; series?: string | number | null };
 const chartTypes: ChartType[] = ["kpi", "line", "bar", "scatter", "table"];
 
 function object(value: unknown): value is Record<string, unknown> {
@@ -111,6 +111,17 @@ function formattedNumber(value: unknown, format: unknown): string {
   catch { return displayValue(value); }
 }
 
+function seriesKey(point: Point): string {
+  return point.series == null ? "null" : `${typeof point.series}:${JSON.stringify(point.series)}`;
+}
+
+function seriesLabel(point: Point): string {
+  if (point.series == null) return "Нет значения";
+  if (point.series === "") return "Пустая строка";
+  const label = String(point.series);
+  return label === "Нет значения" || label === "Пустая строка" ? `«${label}»` : label;
+}
+
 function lineData(value: unknown): { points: Point[]; xLabel: string; yLabel: string } | null {
   if (!object(value) || !Array.isArray(value.points)) return null;
   const points = value.points.filter((item): item is Point =>
@@ -169,8 +180,7 @@ function ResultLine({ card, colors, gradient }: { card: Card; colors: string[]; 
   if (!chart || !chart.points.length) return <p className="generated-empty">Нет точек для графика.</p>;
   const labels = [...new Set(chart.points.map((point) => String(point.x ?? "—")))];
   const hasSeries = object(card.definition) && object(card.definition.series);
-  const seriesName = (point: Point) => point.series == null || point.series === "" ? "Нет значения" : String(point.series);
-  const series = hasSeries ? [...new Set(chart.points.map(seriesName))] : [""];
+  const series = hasSeries ? [...new Map(chart.points.map((point) => [seriesKey(point), seriesLabel(point)])).entries()] : [["", ""]];
   const values = chart.points.map((point) => numeric(point.y)).filter((value): value is number => value !== null);
   if (!values.length) return <p className="generated-empty">Нет числовых значений для графика.</p>;
   const width = 720; const height = 260; const left = 54; const right = 16; const top = 18; const bottom = 42;
@@ -178,9 +188,9 @@ function ResultLine({ card, colors, gradient }: { card: Card; colors: string[]; 
   const span = maximum - minimum || 1;
   const x = (label: string) => left + ((width - left - right) * labels.indexOf(label)) / Math.max(labels.length - 1, 1);
   const y = (value: number) => top + ((height - top - bottom) * (maximum - value)) / span;
-  const plotted = series.map((name, index) => ({
-    name, color: colors[index % colors.length],
-    points: chart.points.filter((point) => (!hasSeries || seriesName(point) === name) && numeric(point.y) !== null),
+  const plotted = series.map(([key, name], index) => ({
+    key, name, color: colors[index % colors.length],
+    points: chart.points.filter((point) => (!hasSeries || seriesKey(point) === key) && numeric(point.y) !== null),
   }));
   return <>
     {object(card.data) && card.data.limit_reached === true && <p className="generated-limit-note">
@@ -192,19 +202,19 @@ function ResultLine({ card, colors, gradient }: { card: Card; colors: string[]; 
         const value = minimum + step * span;
         return <g key={step}><line x1={left} x2={width - right} y1={y(value)} y2={y(value)} /><text x={left - 10} y={y(value) + 4} textAnchor="end">{formattedNumber(value, format)}</text></g>;
       })}
-      {plotted.map(({ name, color, points }, index) => {
+      {plotted.map(({ key, color, points }, index) => {
         const positions = points.map((point) => [x(String(point.x ?? "—")), y(numeric(point.y) ?? 0)]);
         const line = positions.map(([px, py]) => `${px},${py}`).join(" ");
         const baseline = y(0);
-        return <g key={name}>
+        return <g key={key}>
           {gradient && series.length === 1 && positions.length > 1 && <path d={`M ${positions[0][0]} ${baseline} L ${positions.map(([px, py]) => `${px} ${py}`).join(" L ")} L ${positions.at(-1)![0]} ${baseline} Z`} fill={`url(#${gradientId})`} />}
           <polyline points={line} fill="none" stroke={color} strokeWidth="3" strokeLinejoin="round" data-testid={`generated-series-${index}`} />
-          {points.map((point, pointIndex) => <circle key={`${point.x}-${pointIndex}`} cx={x(String(point.x ?? "—"))} cy={y(numeric(point.y) ?? 0)} r="4" fill={color} tabIndex={0} aria-label={`${point.x}${hasSeries ? ` · ${seriesName(point)}` : ""}: ${formattedNumber(point.y, format)}`}><title>{`${point.x}${hasSeries ? ` · ${seriesName(point)}` : ""}: ${formattedNumber(point.y, format)}`}</title></circle>)}
+          {points.map((point, pointIndex) => <circle key={`${point.x}-${pointIndex}`} cx={x(String(point.x ?? "—"))} cy={y(numeric(point.y) ?? 0)} r="4" fill={color} tabIndex={0} aria-label={`${point.x}${hasSeries ? ` · ${seriesLabel(point)}` : ""}: ${formattedNumber(point.y, format)}`}><title>{`${point.x}${hasSeries ? ` · ${seriesLabel(point)}` : ""}: ${formattedNumber(point.y, format)}`}</title></circle>)}
         </g>;
       })}
       {labels.filter((_, index) => index % Math.max(1, Math.ceil(labels.length / 6)) === 0).map((label) => <text key={label} x={x(label)} y={height - 13} textAnchor="middle">{label.length > 12 ? `${label.slice(0, 10)}…` : label}</text>)}
     </svg>
-    {series.length > 1 && <div className="generated-legend">{plotted.map(({ name, color }) => <span key={name}><i style={{ backgroundColor: color }} />{name}</span>)}</div>}
+    {series.length > 1 && <div className="generated-legend">{plotted.map(({ key, name, color }) => <span key={key}><i style={{ backgroundColor: color }} />{name}</span>)}</div>}
     <div className="generated-axis-label">{chart.xLabel} · {chart.yLabel}</div>
   </>;
 }
@@ -232,8 +242,7 @@ function ResultBar({ card, colors }: { card: Card; colors: string[] }) {
   const barWidth = Math.min(24, (width - left - right) / chart.points.length * .7);
   const stride = Math.max(1, Math.ceil(chart.points.length / 10));
   const hasSeries = object(card.definition) && object(card.definition.series);
-  const seriesName = (point: Point) => point.series == null || point.series === "" ? "Нет значения" : String(point.series);
-  const series = hasSeries ? [...new Set(chart.points.map(seriesName))] : [];
+  const series = hasSeries ? [...new Map(chart.points.map((point) => [seriesKey(point), seriesLabel(point)])).entries()] : [];
   return <>
     <LimitNote data={card.data} count={chart.points.length} />
     <div className="generated-chart-scroll" role="region" aria-label={`Прокрутка графика ${card.title}`} tabIndex={0}>
@@ -243,8 +252,8 @@ function ResultBar({ card, colors }: { card: Card; colors: string[] }) {
           const value = numeric(point.y);
           if (value === null) return null;
           const topY = Math.min(y(value), baseline);
-          const name = hasSeries ? `${point.x} · ${seriesName(point)}` : String(point.x);
-          const seriesIndex = hasSeries ? series.indexOf(seriesName(point)) : 0;
+          const name = hasSeries ? `${point.x} · ${seriesLabel(point)}` : String(point.x);
+          const seriesIndex = hasSeries ? series.findIndex(([key]) => key === seriesKey(point)) : 0;
           return <rect key={index} data-bar="true" x={x(index) - barWidth / 2} y={topY} width={barWidth}
             height={Math.abs(y(value) - baseline)} fill={colors[Math.max(seriesIndex, 0) % colors.length]} rx="2" tabIndex={0}
             aria-label={`${name}: ${formattedNumber(point.y, format)}`}><title>{`${name}: ${formattedNumber(point.y, format)}`}</title></rect>;
@@ -254,8 +263,8 @@ function ResultBar({ card, colors }: { card: Card; colors: string[] }) {
         </text>)}
       </svg>
     </div>
-    {series.length > 1 && <div className="generated-legend">{series.map((name, index) =>
-      <span key={name}><i style={{ backgroundColor: colors[index % colors.length] }} />{name}</span>
+    {series.length > 1 && <div className="generated-legend">{series.map(([key, name], index) =>
+      <span key={key}><i style={{ backgroundColor: colors[index % colors.length] }} />{name}</span>
     )}</div>}
     <div className="generated-axis-label">{chart.xLabel} · {chart.yLabel}</div>
   </>;
