@@ -96,9 +96,7 @@ class DashboardFilter(StrictModel):
 # ---------------------------------------------------------------------------
 
 class ChartBase(StrictModel):
-    # Legacy dashboard cards had stable IDs. Persisted charts receive a second,
-    # independent ID in ChartModel, so this remains optional for new requests.
-    id: Identifier | None = None
+    # id: Identifier
     title: str = Field(min_length=1, max_length=200)
     description: str | None = Field(default=None, max_length=1000)
     filters: list[DashboardFilter] = Field(default_factory=list)
@@ -181,9 +179,9 @@ class DashboardSpec(StrictModel):
 
     @model_validator(mode="after")
     def validate_dashboard(self):
-        ids = [card.id for card in self.cards]
-        if any(identifier is None for identifier in ids) or len(ids) != len(set(ids)):
-            raise ValueError("Card IDs must be present and unique")
+        # ids = [card.id for card in self.cards]
+        # if any(identifier is None for identifier in ids) or len(ids) != len(set(ids)):
+        #     raise ValueError("Card IDs must be present and unique")
         if self.palette:
             for color in self.palette:
                 if len(color) != 7 or not color.startswith("#") or any(c not in "0123456789abcdefABCDEF" for c in color[1:]):
@@ -194,7 +192,7 @@ class DashboardSpec(StrictModel):
 class ChartModel(StrictModel):
     """Чарт, сохранённый в БД. Его ID независим от ID внутри definition."""
 
-    id: Identifier
+    chart_id: Identifier
     definition: ChartDefinition
     version: int = Field(default=1, ge=1)
 
@@ -259,10 +257,10 @@ class AddChartToDashboardArgs(StrictModel):
 
 
 class RemoveChartFromDashboardArgs(StrictModel):
-    """Аргументы удаления чарта из дашборда."""
+    """Аргументы удаления чарта из дашборда по позиции."""
 
     dashboard_id: Identifier
-    chart_id: Identifier
+    position: int = Field(ge=0)
 
 
 class GetDashboardArgs(StrictModel):

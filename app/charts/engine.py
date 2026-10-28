@@ -45,21 +45,9 @@ class DashboardEngine:
     отдельно на SQLAlchemy.
     """
 
-    def __init__(self, charts: ChartRepository | SchemaCatalog, dashboards: DashboardRepository | SourceService) -> None:
-        # The persisted-artifact API uses repositories. Keep the older
-        # create_dashboard API alive while existing clients migrate.
-        self.charts = charts if isinstance(charts, ChartRepository) else None
-        self.dashboards = dashboards if isinstance(dashboards, DashboardRepository) else None
-        self._legacy_executor = None
-        if self.charts is None and self.dashboards is None:
-            planner = QueryPlanner(charts)
-            self._legacy_executor = [
-                KPIImplementation(dashboards, planner),
-                LineImplementation(dashboards, planner),
-                BarImplementation(dashboards, planner),
-                ScatterImplementation(dashboards, planner),
-                TableImplementation(dashboards, planner),
-            ]
+    def __init__(self, charts: ChartRepository, dashboards: DashboardRepository) -> None:
+        self.charts = charts
+        self.dashboards = dashboards
 
     @staticmethod
     def _parse(
@@ -146,7 +134,7 @@ class DashboardEngine:
                 title=args.title,
                 summary=args.summary,
                 charts=[
-                    ChartReference(chart_id=chart.id, position=position)
+                    ChartReference(chart_id=chart.chart_id, position=position)
                     for position, chart in enumerate(chart_models)
                 ],
                 version=1,
@@ -201,7 +189,7 @@ class DashboardEngine:
                     error=self._error("chart_not_found", "Chart not found")
                 )
 
-            if any(ref.chart_id == chart.id for ref in dashboard.charts):
+            if any(ref.chart_id == chart.chart_id for ref in dashboard.charts):
                 return self._dashboard_result(
                     error=self._error(
                         "chart_already_added",
@@ -222,7 +210,7 @@ class DashboardEngine:
 
             refs.insert(
                 position,
-                ChartReference(chart_id=chart.id, position=position),
+                ChartReference(chart_id=chart.chart_id, position=position),
             )
             normalized_refs = [
                 ChartReference(chart_id=ref.chart_id, position=index)
@@ -251,7 +239,7 @@ class DashboardEngine:
         self,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
-        """Удаляет ссылку на чарт из дашборда и уплотняет позиции."""
+        """Удаляет чарт из дашборда по позиции и перенумеровывает остальные."""
 
         try:
             if self.dashboards is None:
@@ -273,24 +261,35 @@ class DashboardEngine:
             dashboard = self.dashboards.get_by_id(args.dashboard_id)
             if dashboard is None:
                 return self._dashboard_result(
-                    error=self._error("dashboard_not_found", "Dashboard not found")
-                )
-
-            if not any(ref.chart_id == args.chart_id for ref in dashboard.charts):
-                return self._dashboard_result(
                     error=self._error(
-                        "chart_not_on_dashboard",
-                        "The chart is not on this dashboard",
+                        "dashboard_not_found",
+                        "Dashboard not found",
                     )
                 )
 
             refs = sorted(
-                (ref for ref in dashboard.charts if ref.chart_id != args.chart_id),
+                dashboard.charts,
                 key=lambda ref: ref.position,
             )
+
+            target = next(
+                (ref for ref in refs if ref.position == args.position),
+                None,
+            )
+
+            if target is None:
+                return self._dashboard_result(
+                    error=self._error(
+                        "chart_position_not_found",
+                        f"No chart at position {args.position}",
+                    )
+                )
+
             normalized_refs = [
                 ChartReference(chart_id=ref.chart_id, position=index)
-                for index, ref in enumerate(refs)
+                for index, ref in enumerate(
+                    ref for ref in refs if ref.position != args.position
+                )
             ]
 
             updated = dashboard.model_copy(
@@ -299,6 +298,7 @@ class DashboardEngine:
                     "version": dashboard.version + 1,
                 }
             )
+
             saved = self.dashboards.update(updated)
             return self._dashboard_result(dashboard=saved)
 
@@ -363,7 +363,7 @@ class DashboardEngine:
                     continue
 
                 chart_items.append({
-                    "chart_id": chart.id,
+                    "chart_id": chart.chart_id,
                     "position": ref.position,
                     "status": "success",
                     "chart": chart.model_dump(mode="json"),
@@ -419,7 +419,10 @@ class DashboardEngine:
             )
 
     def create_dashboard(self, payload: dict[str, Any]) -> dict[str, Any]:
-        """Compute a transient dashboard for clients using the v1 contract."""
+        """
+        Compute a transient dashboard for clients using the v1 contract.
+        !!! Не использовать, не должно работать
+        """
         if self._legacy_executor is None:
             raise InvalidDashboardError("Transient dashboard execution is not configured")
         try:

@@ -253,13 +253,13 @@ def register_chart_tools(
 
         try:
             result = executor.execute(
-                chart_id=chart.id,
+                chart_id=chart.chart_id,
             )
         except Exception:
             # A failed attempt must not leave an artifact that a retry can add
             # to a dashboard. Error details can contain schema names, so keep
             # the public response stable and log-free of source internals.
-            charts.delete(chart.id)
+            charts.delete(chart.chart_id)
             return {
                 "success": False,
                 "chart_type": parsed_definition.type,
@@ -268,7 +268,7 @@ def register_chart_tools(
 
         return {
             "success": True,
-            "chart_id": chart.id,
+            "chart_id": chart.chart_id,
             "chart_type": parsed_definition.type,
             "definition": parsed_definition.model_dump(mode="json"),
             "result": result,

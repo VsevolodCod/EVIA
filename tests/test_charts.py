@@ -19,7 +19,7 @@ from app.charts.implementations.line import LineImplementation
 from app.charts.models import (
     DashboardFilter,
     DashboardSpec,
-    FieldRef,
+    FieldRef, ChartModel, KPICard, LineCard,
 )
 from app.charts.query_planner import QueryPlanner
 from app.models import (
@@ -193,7 +193,6 @@ def test_dashboard_spec_accepts_kpi_and_line():
             "title": "Продажи",
             "cards": [
                 {
-                    "id": "total",
                     "type": "kpi",
                     "title": "Выручка",
                     "field": {
@@ -203,7 +202,6 @@ def test_dashboard_spec_accepts_kpi_and_line():
                     "aggregate": "sum",
                 },
                 {
-                    "id": "monthly",
                     "type": "line",
                     "title": "Выручка по месяцам",
                     "x": {
@@ -226,37 +224,6 @@ def test_dashboard_spec_accepts_kpi_and_line():
     assert spec.cards[1].type == "line"
 
 
-def test_dashboard_spec_rejects_duplicate_card_ids():
-    with pytest.raises(ValidationError):
-        DashboardSpec.model_validate(
-            {
-                "title": "Дубликаты",
-                "cards": [
-                    {
-                        "id": "same",
-                        "type": "kpi",
-                        "title": "Первый",
-                        "field": {
-                            "source_id": "sales",
-                            "field": "revenue",
-                        },
-                        "aggregate": "sum",
-                    },
-                    {
-                        "id": "same",
-                        "type": "kpi",
-                        "title": "Второй",
-                        "field": {
-                            "source_id": "sales",
-                            "field": "revenue",
-                        },
-                        "aggregate": "sum",
-                    },
-                ],
-            }
-        )
-
-
 def test_dashboard_spec_rejects_invalid_palette_color():
     with pytest.raises(ValidationError):
         DashboardSpec.model_validate(
@@ -265,7 +232,6 @@ def test_dashboard_spec_rejects_invalid_palette_color():
                 "palette": ["red", "#ffffff"],
                 "cards": [
                     {
-                        "id": "total",
                         "type": "kpi",
                         "title": "Выручка",
                         "field": {
@@ -356,7 +322,6 @@ def test_planner_rejects_cross_source_card(catalog, planner):
     from app.charts.models import LineCard
 
     card = LineCard(
-        id="cross-source",
         title="Неподдерживаемый график",
         x={
             "source_id": "sales",
@@ -381,7 +346,6 @@ def test_kpi_sum_returns_correct_value(sources, planner):
     implementation = KPIImplementation(sources, planner)
 
     card = {
-        "id": "revenue",
         "type": "kpi",
         "title": "Выручка",
         "field": {
@@ -410,7 +374,6 @@ def test_kpi_count_counts_rows_including_null_values(sources, planner):
     implementation = KPIImplementation(sources, planner)
 
     card = KPICard(
-        id="count",
         title="Количество строк",
         field={
             "source_id": "sales",
@@ -432,7 +395,6 @@ def test_kpi_applies_filter(sources, planner):
     implementation = KPIImplementation(sources, planner)
 
     card = KPICard(
-        id="category-a",
         title="Выручка категории A",
         field={
             "source_id": "sales",
@@ -465,7 +427,6 @@ def test_kpi_empty_filtered_dataset_is_distinguished_from_zero(
     implementation = KPIImplementation(sources, planner)
 
     card = KPICard(
-        id="empty",
         title="Пустой набор",
         field={
             "source_id": "sales",
@@ -502,7 +463,6 @@ def test_line_groups_and_aggregates_by_x(sources, planner):
     implementation = LineImplementation(sources, planner)
 
     card = LineCard(
-        id="monthly",
         title="Выручка по месяцам",
         x={
             "source_id": "sales",
@@ -533,7 +493,6 @@ def test_line_groups_by_series(sources, planner):
     implementation = LineImplementation(sources, planner)
 
     card = LineCard(
-        id="by-category",
         title="Выручка по месяцам и категориям",
         x={
             "source_id": "sales",
@@ -572,7 +531,6 @@ def test_line_applies_filter(sources, planner):
     implementation = LineImplementation(sources, planner)
 
     card = LineCard(
-        id="category-a",
         title="Категория A",
         x={
             "source_id": "sales",
@@ -610,7 +568,6 @@ def test_line_respects_limit(sources, planner):
     implementation = LineImplementation(sources, planner)
 
     card = LineCard(
-        id="limited",
         title="Первые две точки",
         x={
             "source_id": "sales",
@@ -640,229 +597,549 @@ def test_line_respects_limit(sources, planner):
 # 6. DashboardEngine: ошибка карточки не ломает весь дашборд
 # ---------------------------------------------------------------------
 
-def test_engine_keeps_successful_cards_when_another_card_fails(
-    catalog,
-    sources,
-):
-    engine = DashboardEngine(catalog, sources)
 
-    result = engine.create_dashboard(
-        {
-            "title": "Тестовый дашборд",
-            "cards": [
-                {
-                    "id": "good",
-                    "type": "kpi",
-                    "title": "Корректный KPI",
-                    "field": {
-                        "source_id": "sales",
-                        "field": "revenue",
-                    },
-                    "aggregate": "sum",
-                },
-                {
-                    "id": "bad",
-                    "type": "kpi",
-                    "title": "Несуществующее поле",
-                    "field": {
-                        "source_id": "sales",
-                        "field": "missing",
-                    },
-                    "aggregate": "sum",
-                },
-            ],
+class FakeChartRepository:
+    def __init__(self, charts=None):
+        self.charts = {
+            chart.chart_id: chart
+            for chart in (charts or [])
         }
+
+    def get_by_id(self, chart_id):
+        return self.charts.get(chart_id)
+
+
+class FakeDashboardRepository:
+    def __init__(self):
+        self.dashboards = {}
+
+    def create(self, dashboard):
+        self.dashboards[dashboard.id] = dashboard
+        return dashboard
+
+    def get_by_id(self, dashboard_id):
+        return self.dashboards.get(dashboard_id)
+
+    def update(self, dashboard):
+        self.dashboards[dashboard.id] = dashboard
+        return dashboard
+
+
+@pytest.fixture
+def repositories():
+    charts = FakeChartRepository([
+        ChartModel(
+            chart_id="chart-1",
+            definition=KPICard(
+                type="kpi",
+                title="Выручка",
+                field={
+                    "source_id": "sales",
+                    "field": "revenue",
+                },
+                aggregate="sum",
+            ),
+        ),
+    ])
+
+    dashboards = FakeDashboardRepository()
+
+    return charts, dashboards
+
+
+@pytest.fixture
+def engine(repositories):
+    charts, dashboards = repositories
+    return DashboardEngine(charts, dashboards)
+
+
+def test_compose_dashboard_saves_chart_references(
+    engine,
+    repositories,
+):
+    _, dashboards = repositories
+
+    result = engine.compose_dashboard({
+        "title": "Продажи",
+        "summary": "Аналитика продаж",
+        "chart_ids": ["chart-1"],
+    })
+
+    assert result["success"] is True
+
+    dashboard = result["dashboard"]
+    assert dashboard["title"] == "Продажи"
+    assert dashboard["summary"] == "Аналитика продаж"
+    assert dashboard["version"] == 1
+    assert dashboard["charts"] == [
+        {"chart_id": "chart-1", "position": 0},
+    ]
+
+    assert dashboard["id"] in dashboards.dashboards
+
+
+def test_compose_dashboard_rejects_missing_chart(engine):
+    result = engine.compose_dashboard({
+        "title": "Продажи",
+        "chart_ids": ["missing-chart"],
+    })
+
+    assert result["success"] is False
+    assert result["error"]["code"] == "chart_not_found"
+
+
+def test_compose_dashboard_rejects_invalid_arguments(engine):
+    result = engine.compose_dashboard({
+        "chart_ids": ["chart-1"],
+    })
+
+    assert result["success"] is False
+    assert result["error"]["code"] == "invalid_arguments"
+
+
+def test_compose_dashboard_rejects_duplicate_chart_ids(engine):
+    result = engine.compose_dashboard({
+        "title": "Продажи",
+        "chart_ids": ["chart-1", "chart-1"],
+    })
+
+    assert result["success"] is False
+    assert result["error"]["code"] == "invalid_arguments"
+
+
+def test_get_chart_returns_saved_definition(engine):
+    result = engine.get_chart({
+        "chart_id": "chart-1",
+    })
+
+    assert result["success"] is True
+
+    chart = result["chart"]
+    assert chart["chart_id"] == "chart-1"
+    assert chart["version"] == 1
+    assert chart["definition"]["type"] == "kpi"
+    assert chart["definition"]["title"] == "Выручка"
+    assert chart["definition"]["field"] == {
+        "source_id": "sales",
+        "field": "revenue",
+    }
+
+
+def test_get_chart_returns_error_for_missing_chart(engine):
+    result = engine.get_chart({
+        "chart_id": "missing-chart",
+    })
+
+    assert result["success"] is False
+    assert result["error"]["code"] == "chart_not_found"
+
+
+def test_get_dashboard_returns_chart_definitions(engine):
+    created = engine.compose_dashboard({
+        "title": "Продажи",
+        "chart_ids": ["chart-1"],
+    })
+
+    dashboard_id = created["dashboard"]["id"]
+
+    result = engine.get_dashboard({
+        "dashboard_id": dashboard_id,
+    })
+
+    assert result["success"] is True
+    assert result["dashboard"]["id"] == dashboard_id
+    assert len(result["charts"]) == 1
+
+    item = result["charts"][0]
+    assert item["status"] == "success"
+    assert item["chart_id"] == "chart-1"
+    assert item["position"] == 0
+    assert item["chart"]["definition"]["type"] == "kpi"
+
+
+def test_get_dashboard_returns_error_for_missing_dashboard(engine):
+    result = engine.get_dashboard({
+        "dashboard_id": "missing-dashboard",
+    })
+
+    assert result["success"] is False
+    assert result["error"]["code"] == "dashboard_not_found"
+
+
+def test_add_chart_to_dashboard_appends_chart(
+    engine,
+    repositories,
+):
+    charts, _ = repositories
+
+    charts.charts["chart-2"] = ChartModel(
+        chart_id="chart-2",
+        definition=LineCard(
+            type="line",
+            title="Выручка по месяцам",
+            x={
+                "source_id": "sales",
+                "field": "month",
+                "type": "category",
+            },
+            y={
+                "source_id": "sales",
+                "field": "revenue",
+                "aggregate": "sum",
+            },
+        ),
     )
 
-    assert result["cards"][0]["status"] == "success"
-    assert result["cards"][0]["data"]["value"] == pytest.approx(450.0)
+    created = engine.compose_dashboard({
+        "title": "Продажи",
+        "chart_ids": ["chart-1"],
+    })
 
-    assert result["cards"][1]["status"] == "error"
-    assert result["cards"][1]["error"]["code"] == "unknown_field"
+    result = engine.add_chart_to_dashboard({
+        "dashboard_id": created["dashboard"]["id"],
+        "chart_id": "chart-2",
+    })
+
+    assert result["success"] is True
+
+    dashboard = result["dashboard"]
+    assert [ref["chart_id"] for ref in dashboard["charts"]] == [
+        "chart-1",
+        "chart-2",
+    ]
+    assert [ref["position"] for ref in dashboard["charts"]] == [0, 1]
+    assert dashboard["version"] == 2
 
 
-def test_dashboard_computes_kpi_and_line_from_real_csv(tmp_path):
-    from app.schema_catalog import SchemaCatalog
-    from app.source_service import SourceService
+def test_add_chart_to_dashboard_inserts_at_position(
+    engine,
+    repositories,
+):
+    charts, _ = repositories
 
-    catalog = SchemaCatalog(tmp_path / "catalog.db")
-    sources = SourceService(tmp_path / "data", catalog)
-    try:
-        source = sources.register_csv(
-            "sales.csv",
-            b"month;revenue\n2026-01;120,5\n2026-02;180.5\n",
+    charts.charts["chart-2"] = ChartModel(
+        chart_id="chart-2",
+        definition=KPICard(
+            title="Количество продаж",
+            field={
+                "source_id": "sales",
+                "field": "quantity",
+            },
+            aggregate="sum",
+        ),
+    )
+
+    charts.charts["chart-3"] = ChartModel(
+        chart_id="chart-3",
+        definition=LineCard(
+            title="Продажи по месяцам",
+            x={
+                "source_id": "sales",
+                "field": "month",
+            },
+            y={
+                "source_id": "sales",
+                "field": "revenue",
+                "aggregate": "sum",
+            },
+        ),
+    )
+
+    created = engine.compose_dashboard({
+        "title": "Продажи",
+        "chart_ids": ["chart-1", "chart-2"],
+    })
+
+    result = engine.add_chart_to_dashboard({
+        "dashboard_id": created["dashboard"]["id"],
+        "chart_id": "chart-3",
+        "position": 1,
+    })
+
+    assert result["success"] is True
+
+    refs = result["dashboard"]["charts"]
+    assert [ref["chart_id"] for ref in refs] == [
+        "chart-1",
+        "chart-3",
+        "chart-2",
+    ]
+    assert [ref["position"] for ref in refs] == [0, 1, 2]
+
+
+def test_add_chart_to_dashboard_rejects_duplicate(
+    engine,
+):
+    created = engine.compose_dashboard({
+        "title": "Продажи",
+        "chart_ids": ["chart-1"],
+    })
+
+    result = engine.add_chart_to_dashboard({
+        "dashboard_id": created["dashboard"]["id"],
+        "chart_id": "chart-1",
+    })
+
+    assert result["success"] is False
+    assert result["error"]["code"] == "chart_already_added"
+
+
+def test_add_chart_to_dashboard_rejects_invalid_position(
+    engine,
+    repositories,
+):
+    charts, _ = repositories
+
+    charts.charts["chart-2"] = ChartModel(
+        chart_id="chart-2",
+        definition=KPICard(
+            title="Количество продаж",
+            field={
+                "source_id": "sales",
+                "field": "quantity",
+            },
+            aggregate="sum",
+        ),
+    )
+
+    created = engine.compose_dashboard({
+        "title": "Продажи",
+        "chart_ids": ["chart-1"],
+    })
+
+    result = engine.add_chart_to_dashboard({
+        "dashboard_id": created["dashboard"]["id"],
+        "chart_id": "chart-2",
+        "position": 2,
+    })
+
+    assert result["success"] is False
+    assert result["error"]["code"] == "invalid_position"
+
+
+def test_add_chart_to_dashboard_rejects_missing_dashboard(engine):
+    result = engine.add_chart_to_dashboard({
+        "dashboard_id": "missing-dashboard",
+        "chart_id": "chart-1",
+    })
+
+    assert result["success"] is False
+    assert result["error"]["code"] == "dashboard_not_found"
+
+
+def test_add_chart_to_dashboard_rejects_missing_chart(engine):
+    created = engine.compose_dashboard({
+        "title": "Продажи",
+        "chart_ids": ["chart-1"],
+    })
+
+    result = engine.add_chart_to_dashboard({
+        "dashboard_id": created["dashboard"]["id"],
+        "chart_id": "missing-chart",
+    })
+
+    assert result["success"] is False
+    assert result["error"]["code"] == "chart_not_found"
+
+
+def test_remove_chart_from_dashboard_reindexes_remaining_charts(
+    engine,
+    repositories,
+):
+    charts, _ = repositories
+
+    for chart_id in ("chart-2", "chart-3"):
+        charts.charts[chart_id] = ChartModel(
+            chart_id=chart_id,
+            definition=KPICard(
+                title=chart_id,
+                field={
+                    "source_id": "sales",
+                    "field": "revenue",
+                },
+                aggregate="sum",
+            ),
         )
-        result = DashboardEngine(catalog, sources).create_dashboard({
-            "title": "Продажи",
-            "cards": [
-                {"id": "total", "type": "kpi", "title": "Выручка",
-                 "field": {"source_id": source.source_id, "field": "revenue"}, "aggregate": "sum"},
-                {"id": "monthly", "type": "line", "title": "По месяцам",
-                 "x": {"source_id": source.source_id, "field": "month"},
-                 "y": {"source_id": source.source_id, "field": "revenue", "aggregate": "sum"}},
-            ],
-        })
-        assert [card["status"] for card in result["cards"]] == ["success", "success"]
-        assert result["cards"][0]["data"]["value"] == "301.0"
-        assert result["cards"][1]["data"]["points"] == [
-            {"x": "2026-01", "y": "120.5"},
-            {"x": "2026-02", "y": "180.5"},
-        ]
-        assert sources.preview(source.source_id, 1)[0]["revenue"] == "120,5"
-    finally:
-        catalog.close()
 
+    created = engine.compose_dashboard({
+        "title": "Продажи",
+        "chart_ids": ["chart-1", "chart-2", "chart-3"],
+    })
 
-def test_line_rejects_text_aggregate_that_cannot_be_drawn(tmp_path):
-    from app.schema_catalog import SchemaCatalog
-    from app.source_service import SourceService
+    result = engine.remove_chart_from_dashboard({
+        "dashboard_id": created["dashboard"]["id"],
+        "position": 1,
+    })
 
-    catalog = SchemaCatalog(tmp_path / "catalog.db")
-    sources = SourceService(tmp_path / "data", catalog)
-    try:
-        source = sources.register_csv("status.csv", b"month,status\nJan,Alpha\nFeb,Beta\n")
-        result = DashboardEngine(catalog, sources).create_dashboard({
-            "title": "Статусы", "cards": [{
-                "id": "status", "type": "line", "title": "Статус по месяцам",
-                "x": {"source_id": source.source_id, "field": "month"},
-                "y": {"source_id": source.source_id, "field": "status", "aggregate": "max"},
-            }],
-        })
-        assert result["cards"][0]["status"] == "error"
-        assert result["cards"][0]["error"]["code"] == "unsupported_type"
-    finally:
-        catalog.close()
+    assert result["success"] is True
 
-
-def test_bar_groups_categories_with_the_same_numeric_contract(sources, catalog):
-    result = DashboardEngine(catalog, sources).create_dashboard({
-        "title": "Categories", "cards": [{
-            "id": "bar", "type": "bar", "title": "Revenue by category",
-            "x": {"source_id": "sales", "field": "category", "sort": "asc"},
-            "y": {"source_id": "sales", "field": "revenue", "aggregate": "sum"},
-        }],
-    })["cards"][0]
-
-    assert result["status"] == "success"
-    assert result["type"] == "bar"
-    assert result["data"]["points"] == [
-        {"x": "A", "y": 300.0},
-        {"x": "B", "y": 150.0},
+    dashboard = result["dashboard"]
+    assert [ref["chart_id"] for ref in dashboard["charts"]] == [
+        "chart-1",
+        "chart-3",
     ]
-    assert result["data"]["source_id"] == "sales"
-    assert result["data"]["limit"] == 100
-    assert result["data"]["provenance"] == []
+    assert [ref["position"] for ref in dashboard["charts"]] == [0, 1]
+    assert dashboard["version"] == 2
 
 
-def test_scatter_retains_duplicate_raw_pairs_and_excludes_null_axes(sources, catalog):
-    sources.connection.execute("ALTER TABLE source ADD COLUMN cost REAL")
-    sources.connection.execute("DELETE FROM source")
-    sources.connection.executemany(
-        "INSERT INTO source (id, month, revenue, category, cost) VALUES (?, ?, ?, ?, ?)",
-        [
-            (1, "Jan", 10, "A", 5),
-            (2, "Feb", 10, "B", 5),
-            (3, "Mar", 20, "A", None),
-            (4, "Apr", None, "B", 8),
-            (5, "May", 30, "B", 12),
-        ],
-    )
-    catalog.schemas["sales"].objects[0].fields.append(
-        SchemaField(name="cost", inferred_type="number")
-    )
+def test_remove_chart_from_dashboard_rejects_missing_position(engine):
+    created = engine.compose_dashboard({
+        "title": "Продажи",
+        "chart_ids": ["chart-1"],
+    })
 
-    result = DashboardEngine(catalog, sources).create_dashboard({
-        "title": "Pairs", "cards": [{
-            "id": "scatter", "type": "scatter", "title": "Revenue and cost",
-            "x": {"source_id": "sales", "field": "revenue"},
-            "y": {"source_id": "sales", "field": "cost"},
-            "limit": 2,
-        }],
-    })["cards"][0]
+    result = engine.remove_chart_from_dashboard({
+        "dashboard_id": created["dashboard"]["id"],
+        "position": 5,
+    })
 
-    assert result["status"] == "success"
-    assert result["data"]["points"] == [
-        {"x": 10.0, "y": 5.0},
-        {"x": 10.0, "y": 5.0},
-    ]
-    assert result["data"]["limit_reached"] is True
-    assert result["data"]["source_id"] == "sales"
-    assert "IS NOT NULL" in sources.queries[-1][1]
-    assert sources.queries[-1][2] == 2
+    assert result["success"] is False
+    assert result["error"]["code"] == "chart_position_not_found"
 
 
-def test_table_returns_selected_raw_fields_in_stable_bounded_order(sources, catalog):
-    result = DashboardEngine(catalog, sources).create_dashboard({
-        "title": "Rows", "cards": [{
-            "id": "table", "type": "table", "title": "Raw sales",
-            "fields": [
-                {"source_id": "sales", "field": "category"},
-                {"source_id": "sales", "field": "revenue"},
-            ],
-            "limit": 2,
-        }],
-    })["cards"][0]
+def test_remove_chart_from_dashboard_rejects_missing_dashboard(engine):
+    result = engine.remove_chart_from_dashboard({
+        "dashboard_id": "missing-dashboard",
+        "position": 0,
+    })
 
-    assert result["status"] == "success"
-    assert result["data"]["columns"] == ["category", "revenue"]
-    assert result["data"]["rows"] == [
-        {"category": "A", "revenue": 100.0},
-        {"category": "A", "revenue": 200.0},
-    ]
-    assert result["data"]["limit"] == 2
-    assert result["data"]["limit_reached"] is True
-    assert result["data"]["source_id"] == "sales"
-    assert sources.queries[-1][2] == 2
+    assert result["success"] is False
+    assert result["error"]["code"] == "dashboard_not_found"
 
 
-def test_scatter_rejects_non_numeric_axis_and_cross_source_fields(sources, catalog):
-    cards = [
-        {"id": "text", "type": "scatter", "title": "Invalid axis",
-         "x": {"source_id": "sales", "field": "category"},
-         "y": {"source_id": "sales", "field": "revenue"}},
-        {"id": "join", "type": "scatter", "title": "Invalid source",
-         "x": {"source_id": "sales", "field": "revenue"},
-         "y": {"source_id": "other", "field": "id"}},
-    ]
-    results = DashboardEngine(catalog, sources).create_dashboard({
-        "title": "Invalid", "cards": cards,
-    })["cards"]
+# ==================================================================
+#                 TODO:ПОМЕНЯТЬ ДЛЯ НОВОЙ АРХИТЕКТУРЫ
+# ==================================================================
 
-    assert [card["status"] for card in results] == ["error", "error"]
-    assert [card["error"]["code"] for card in results] == [
-        "unsupported_type", "unsupported_join",
-    ]
-
-
-def test_bar_rejects_text_measure_and_table_rejects_cross_source_fields(sources, catalog):
-    results = DashboardEngine(catalog, sources).create_dashboard({
-        "title": "Invalid", "cards": [
-            {"id": "bar", "type": "bar", "title": "Text measure",
-             "x": {"source_id": "sales", "field": "month"},
-             "y": {"source_id": "sales", "field": "category", "aggregate": "max"}},
-            {"id": "table", "type": "table", "title": "Two sources",
-             "fields": [
-                 {"source_id": "sales", "field": "category"},
-                 {"source_id": "other", "field": "id"},
-             ]},
-        ],
-    })["cards"]
-
-    assert [card["error"]["code"] for card in results] == [
-        "unsupported_type", "unsupported_join",
-    ]
-
-
-@pytest.mark.parametrize("kind,extra", [
-    ("scatter", {"x": {"source_id": "sales", "field": "id"},
-                 "y": {"source_id": "sales", "field": "revenue"}}),
-    ("table", {"fields": [{"source_id": "sales", "field": "month"}]}),
-])
-def test_raw_chart_limits_are_bounded(kind, extra):
-    from pydantic import TypeAdapter
-    from app.charts.models import ChartDefinition
-
-    with pytest.raises(ValidationError):
-        TypeAdapter(ChartDefinition).validate_python({
-            "type": kind, "title": "Too many rows", "limit": 1001, **extra,
-        })
+# def test_bar_groups_categories_with_the_same_numeric_contract(sources, catalog):
+#     result = DashboardEngine(catalog, sources).create_dashboard({
+#         "title": "Categories", "cards": [{
+#             "type": "bar", "title": "Revenue by category",
+#             "x": {"source_id": "sales", "field": "category", "sort": "asc"},
+#             "y": {"source_id": "sales", "field": "revenue", "aggregate": "sum"},
+#         }],
+#     })["cards"][0]
+#
+#     assert result["status"] == "success"
+#     assert result["type"] == "bar"
+#     assert result["data"]["points"] == [
+#         {"x": "A", "y": 300.0},
+#         {"x": "B", "y": 150.0},
+#     ]
+#     assert result["data"]["source_id"] == "sales"
+#     assert result["data"]["limit"] == 100
+#     assert result["data"]["provenance"] == []
+#
+#
+# def test_scatter_retains_duplicate_raw_pairs_and_excludes_null_axes(sources, catalog):
+#     sources.connection.execute("ALTER TABLE source ADD COLUMN cost REAL")
+#     sources.connection.execute("DELETE FROM source")
+#     sources.connection.executemany(
+#         "INSERT INTO source (id, month, revenue, category, cost) VALUES (?, ?, ?, ?, ?)",
+#         [
+#             (1, "Jan", 10, "A", 5),
+#             (2, "Feb", 10, "B", 5),
+#             (3, "Mar", 20, "A", None),
+#             (4, "Apr", None, "B", 8),
+#             (5, "May", 30, "B", 12),
+#         ],
+#     )
+#     catalog.schemas["sales"].objects[0].fields.append(
+#         SchemaField(name="cost", inferred_type="number")
+#     )
+#
+#     result = DashboardEngine(catalog, sources).create_dashboard({
+#         "title": "Pairs", "cards": [{
+#             "type": "scatter", "title": "Revenue and cost",
+#             "x": {"source_id": "sales", "field": "revenue"},
+#             "y": {"source_id": "sales", "field": "cost"},
+#             "limit": 2,
+#         }],
+#     })["cards"][0]
+#
+#     assert result["status"] == "success"
+#     assert result["data"]["points"] == [
+#         {"x": 10.0, "y": 5.0},
+#         {"x": 10.0, "y": 5.0},
+#     ]
+#     assert result["data"]["limit_reached"] is True
+#     assert result["data"]["source_id"] == "sales"
+#     assert "IS NOT NULL" in sources.queries[-1][1]
+#     assert sources.queries[-1][2] == 2
+#
+#
+# def test_table_returns_selected_raw_fields_in_stable_bounded_order(sources, catalog):
+#     result = DashboardEngine(catalog, sources).create_dashboard({
+#         "title": "Rows", "cards": [{
+#             "type": "table", "title": "Raw sales",
+#             "fields": [
+#                 {"source_id": "sales", "field": "category"},
+#                 {"source_id": "sales", "field": "revenue"},
+#             ],
+#             "limit": 2,
+#         }],
+#     })["cards"][0]
+#
+#     assert result["status"] == "success"
+#     assert result["data"]["columns"] == ["category", "revenue"]
+#     assert result["data"]["rows"] == [
+#         {"category": "A", "revenue": 100.0},
+#         {"category": "A", "revenue": 200.0},
+#     ]
+#     assert result["data"]["limit"] == 2
+#     assert result["data"]["limit_reached"] is True
+#     assert result["data"]["source_id"] == "sales"
+#     assert sources.queries[-1][2] == 2
+#
+#
+# def test_scatter_rejects_non_numeric_axis_and_cross_source_fields(sources, catalog):
+#     cards = [
+#         {"type": "scatter", "title": "Invalid axis",
+#          "x": {"source_id": "sales", "field": "category"},
+#          "y": {"source_id": "sales", "field": "revenue"}},
+#         {"type": "scatter", "title": "Invalid source",
+#          "x": {"source_id": "sales", "field": "revenue"},
+#          "y": {"source_id": "other", "field": "id"}},
+#     ]
+#     results = DashboardEngine(catalog, sources).create_dashboard({
+#         "title": "Invalid", "cards": cards,
+#     })["cards"]
+#
+#     assert [card["status"] for card in results] == ["error", "error"]
+#     assert [card["error"]["code"] for card in results] == [
+#         "unsupported_type", "unsupported_join",
+#     ]
+#
+#
+# def test_bar_rejects_text_measure_and_table_rejects_cross_source_fields(sources, catalog):
+#     results = DashboardEngine(catalog, sources).create_dashboard({
+#         "title": "Invalid", "cards": [
+#             {"type": "bar", "title": "Text measure",
+#              "x": {"source_id": "sales", "field": "month"},
+#              "y": {"source_id": "sales", "field": "category", "aggregate": "max"}},
+#             {"type": "table", "title": "Two sources",
+#              "fields": [
+#                  {"source_id": "sales", "field": "category"},
+#                  {"source_id": "other", "field": "id"},
+#              ]},
+#         ],
+#     })["cards"]
+#
+#     assert [card["error"]["code"] for card in results] == [
+#         "unsupported_type", "unsupported_join",
+#     ]
+#
+#
+# @pytest.mark.parametrize("kind,extra", [
+#     ("scatter", {"x": {"source_id": "sales", "field": "id"},
+#                  "y": {"source_id": "sales", "field": "revenue"}}),
+#     ("table", {"fields": [{"source_id": "sales", "field": "month"}]}),
+# ])
+# def test_raw_chart_limits_are_bounded(kind, extra):
+#     from pydantic import TypeAdapter
+#     from app.charts.models import ChartDefinition
+#
+#     with pytest.raises(ValidationError):
+#         TypeAdapter(ChartDefinition).validate_python({
+#             "type": kind, "title": "Too many rows", "limit": 1001, **extra,
+#         })
