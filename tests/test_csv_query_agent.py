@@ -375,6 +375,21 @@ async def test_out_of_schema_question_returns_clarification_without_query(tmp_pa
 
 
 @pytest.mark.asyncio
+async def test_missing_aggregate_field_suggests_only_numeric_columns(tmp_path):
+    provider = ScriptedProvider({"intent": "clarification", "sql": None, "explanation": ""})
+    agent, source, catalog = agent_with_csv(tmp_path, provider)
+    try:
+        answer = await agent.ask("Покажи сумму profit", [source.source_id])
+        assert answer.status == "clarification"
+        assert answer.clarification is not None
+        assert answer.clarification.options == ["Сумма «revenue»"]
+        assert "запрошенное поле" in answer.clarification.reason.lower()
+        assert answer.results == []
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
 async def test_missing_profit_inputs_returns_resumable_clarification_without_model(tmp_path):
     provider = ScriptedProvider()
     agent, source, catalog = agent_with_csv(tmp_path, provider)
