@@ -419,7 +419,10 @@ class DashboardEngine:
             )
 
     def create_dashboard(self, payload: dict[str, Any]) -> dict[str, Any]:
-        """Compute a transient dashboard for clients using the v1 contract."""
+        """
+        Compute a transient dashboard for clients using the v1 contract.
+        !!! Не использовать, не должно работать
+        """
         if self._legacy_executor is None:
             raise InvalidDashboardError("Transient dashboard execution is not configured")
         try:
