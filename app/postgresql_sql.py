@@ -29,7 +29,7 @@ class PostgresQueryError(Exception):
 
 _SAFE_FUNCTIONS = {
     "ABS", "AVG", "CAST", "CEIL", "CEILING", "COALESCE", "CONCAT",
-    "COUNT", "DATE", "DATE_TRUNC", "EXTRACT", "FLOOR", "GREATEST",
+    "COUNT", "DATE", "DATE_TRUNC", "TIMESTAMP_TRUNC", "EXTRACT", "FLOOR", "GREATEST",
     "LEAST", "LENGTH", "LOWER", "LPAD", "LTRIM", "MAX", "MIN",
     "NULLIF", "ROUND", "RPAD", "RTRIM", "SUBSTRING", "SUM", "TRIM",
     "UPPER",

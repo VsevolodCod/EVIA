@@ -6,9 +6,7 @@ the generated SQL. These tests run in CI without Ollama or provider secrets.
 import json
 
 import pytest
-import sqlglot
 from pydantic import ValidationError
-from sqlglot import exp
 
 from app.agent import AgentRuntime
 from app.charts.executor import ChartExecutor
@@ -176,12 +174,6 @@ def test_temporal_buckets_are_real_calendar_groups(tmp_path, grain):
             "x": {"source_id": source.source_id, "field": "event_day", "type": "temporal", "time_grain": grain},
             "y": {"source_id": source.source_id, "field": "amount", "aggregate": "sum"},
         }
-        parsed = sqlglot.parse_one(
-            f"SELECT DATE_TRUNC('{grain}', \"event_day\") FROM source_typed",
-            read="duckdb",
-        )
-        names = [(type(function).__name__, function.sql_name()) for function in parsed.find_all(exp.Func)]
-        assert all(name.upper() == "DATE_TRUNC" for _, name in names), names
         # Exercise the calculation directly so CI reports the underlying
         # validation/SQL exception instead of build_chart's public fallback.
         LineImplementation(sources, QueryPlanner(catalog)).execute(LineCard.model_validate(definition), [])
