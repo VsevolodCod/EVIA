@@ -174,7 +174,9 @@ function ResultBar({ card, colors }: { card: Card; colors: string[] }) {
   const x = (index: number) => left + (width - left - right) * ((index + .5) / chart.points.length);
   const barWidth = Math.min(24, (width - left - right) / chart.points.length * .7);
   const stride = Math.max(1, Math.ceil(chart.points.length / 10));
-  const series = [...new Set(chart.points.map(point => point.series).filter((name): name is string => typeof name === "string" && !!name))];
+  const hasSeries = object(card.definition) && object(card.definition.series);
+  const seriesName = (point: Point) => point.series == null || point.series === "" ? "Нет значения" : String(point.series);
+  const series = hasSeries ? [...new Set(chart.points.map(seriesName))] : [];
   return <>
     <LimitNote data={card.data} count={chart.points.length} />
     <div className="generated-chart-scroll" role="region" aria-label={`Прокрутка графика ${card.title}`} tabIndex={0}>
@@ -184,8 +186,8 @@ function ResultBar({ card, colors }: { card: Card; colors: string[] }) {
           const value = numeric(point.y);
           if (value === null) return null;
           const topY = Math.min(y(value), baseline);
-          const name = point.series ? `${point.x} · ${point.series}` : String(point.x);
-          const seriesIndex = point.series ? series.indexOf(point.series) : 0;
+          const name = hasSeries ? `${point.x} · ${seriesName(point)}` : String(point.x);
+          const seriesIndex = hasSeries ? series.indexOf(seriesName(point)) : 0;
           return <rect key={index} data-bar="true" x={x(index) - barWidth / 2} y={topY} width={barWidth}
             height={Math.abs(y(value) - baseline)} fill={colors[Math.max(seriesIndex, 0) % colors.length]} rx="2" tabIndex={0}
             aria-label={`${name}: ${point.y}`}><title>{`${name}: ${point.y}`}</title></rect>;

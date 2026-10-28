@@ -42,13 +42,16 @@ it("accepts generated and saved chart payloads without dropping new types", () =
 });
 
 it("labels separate bar series instead of making duplicate categories ambiguous", () => {
-  const bar = { ...cards[0], data: { ...cards[0].data, points: [
-    { x: "A", y: 10, series: "Восток" }, { x: "A", y: 20, series: "Запад" },
+  const bar = { ...cards[0], definition: { ...cards[0].definition, series: { source_id: "sales", field: "region" } },
+    data: { ...cards[0].data, points: [
+    { x: "A", y: 10, series: "Восток" }, { x: "A", y: 20, series: null },
   ] } };
   render(<GeneratedDashboard dashboard={{ version: 1, title: "Панель", cards: [bar] }} scope="series-test" />);
   const chart = screen.getByRole("img", { name: /По категориям/ });
   expect(chart.querySelector('rect[aria-label="A · Восток: 10"]')).not.toBeNull();
-  expect(chart.querySelector('rect[aria-label="A · Запад: 20"]')).not.toBeNull();
+  expect(chart.querySelector('rect[aria-label="A · Нет значения: 20"]')).not.toBeNull();
   expect(screen.getByText("Восток")).toBeInTheDocument();
-  expect(screen.getByText("Запад")).toBeInTheDocument();
+  expect(screen.getByText("Нет значения")).toBeInTheDocument();
+  const bars = chart.querySelectorAll("rect[data-bar]");
+  expect(bars[0].getAttribute("fill")).not.toBe(bars[1].getAttribute("fill"));
 });
