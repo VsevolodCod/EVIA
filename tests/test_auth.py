@@ -2,9 +2,70 @@
 
 import importlib
 import os
+import sqlite3
+from io import BytesIO
+
+from PIL import Image
+from sqlalchemy import inspect
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+
+
+@pytest.mark.asyncio
+async def test_avatar_upload_is_private_and_can_be_removed(auth_module):
+    image_file = BytesIO()
+    Image.new("RGB", (8, 8), "#147d50").save(image_file, format="PNG")
+    image = image_file.getvalue()
+    module = auth_module
+    async with module.app.router.lifespan_context(module.app):
+        async with AsyncClient(transport=ASGITransport(app=module.app), base_url="http://test") as owner, AsyncClient(
+            transport=ASGITransport(app=module.app), base_url="http://test"
+        ) as stranger:
+            assert (await owner.post("/auth/register", json={
+                "email": "avatar@example.com", "password": "correct horse battery", "name": "Avatar",
+            })).status_code == 201
+            assert (await owner.put("/auth/avatar", files={"file": ("avatar.png", image, "image/png")})).status_code == 200
+            account = (await owner.get("/auth/me")).json()
+            assert account["avatar_url"].startswith("/auth/avatar?v=")
+            avatar = await owner.get("/auth/avatar")
+            assert avatar.status_code == 200
+            assert avatar.headers["content-type"] == "image/webp"
+            assert avatar.content.startswith(b"RIFF")
+            assert (await stranger.get("/auth/avatar")).status_code == 401
+            assert (await stranger.post("/auth/register", json={
+                "email": "second-avatar@example.com", "password": "another strong password", "name": "Other",
+            })).status_code == 201
+            assert (await stranger.get("/auth/avatar")).status_code == 404
+            rejected = await owner.put("/auth/avatar", files={"file": ("avatar.svg", b"<svg/>", "image/svg+xml")})
+            assert rejected.status_code == 400
+            compressed_large = BytesIO()
+            Image.new("RGB", (2500, 2500), "#147d50").save(compressed_large, format="PNG")
+            assert len(compressed_large.getvalue()) < 1_048_576
+            too_many_pixels = await owner.put("/auth/avatar", files={"file": ("large.png", compressed_large.getvalue(), "image/png")})
+            assert too_many_pixels.status_code == 400
+            assert (await owner.delete("/auth/avatar")).status_code == 204
+            assert (await owner.get("/auth/me")).json()["avatar_url"] is None
+
+
+def test_avatar_columns_are_added_to_existing_account_database(tmp_path):
+    from app.auth import AuthStore
+
+    db_path = tmp_path / "previous-auth.db"
+    with sqlite3.connect(db_path) as connection:
+        connection.execute("""CREATE TABLE auth_users (
+            id VARCHAR(36) PRIMARY KEY, email VARCHAR(320) UNIQUE NOT NULL,
+            name VARCHAR(80) NOT NULL, password_digest VARCHAR(255) NOT NULL,
+            created_at TIMESTAMP NOT NULL, is_legacy_owner BOOLEAN NOT NULL
+        )""")
+    store = AuthStore(f"sqlite:///{db_path}", secret="migration-test-secret")
+    try:
+        store.initialize()
+        columns = {column["name"] for column in inspect(store.engine).get_columns("auth_users")}
+        assert {"avatar_bytes", "avatar_mime", "avatar_updated_at"} <= columns
+        assert store.register("migrated@example.com", "correct horse battery", "Migrated").email == "migrated@example.com"
+    finally:
+        store.close()
 
 
 def test_brevo_recovery_delivery_without_custom_domain(monkeypatch):

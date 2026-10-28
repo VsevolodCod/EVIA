@@ -118,15 +118,9 @@ export function AnalysisResult({ entry, onOpenChat }: { entry?: Entry; onOpenCha
       </div>}
       {entry?.answer ? (
         <>
-          <div className="analysis-provenance">
-            {entry.answer.status === "error" ? "Запрос не выполнен"
-              : entry.answer.status === "clarification" ? "Нужно уточнение"
-              : entry.answer.answer_kind === "computed" ? "Рассчитано по источнику"
-              : entry.answer.answer_kind === "demo" ? "Демо-ответ"
-              : entry.answer.tool_results.some((item) => item.tool_name === "query_data" && item.ok)
-                ? "Рассчитано по данным"
-                : entry.answer.answer_kind === "model" ? "Ответ модели" : "Ответ из истории"}
-          </div>
+          {(entry.answer.status === "error" || entry.answer.status === "clarification" || entry.answer.answer_kind === "demo") && <div className="analysis-provenance">
+            {entry.answer.status === "error" ? "Запрос не выполнен" : entry.answer.status === "clarification" ? "Нужно уточнение" : "Демо-ответ"}
+          </div>}
           {savedId ? <SavedDashboard id={savedId} /> : generated ? <GeneratedDashboard dashboard={generated} scope={`generated-${entry.id}`} />
             : generatedCharts.map((chart, index) => <GeneratedDashboard key={`${entry.id}-${index}`} dashboard={chart} scope={`chart-${entry.id}-${index}`} />)}
           {scalar && <section className="analysis-scalar" aria-label="Показатель">

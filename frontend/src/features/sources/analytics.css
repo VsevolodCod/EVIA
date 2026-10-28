@@ -469,7 +469,7 @@
 .column-shortlist button:hover {
   color: var(--accent);
 }
-.column-shortlist button > span:nth-child(2) {
+.column-shortlist button > span:first-child {
   flex: 1;
   min-width: 0;
 }

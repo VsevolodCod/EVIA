@@ -23,6 +23,7 @@ it("builds a dashboard from one successful tabular tool result", () => {
 
   expect(screen.getByRole("heading", { name: "Результат анализа" })).toBeInTheDocument();
   expect(screen.getByText("Строк в результате")).toBeInTheDocument();
+  expect(screen.queryByText("Рассчитано по источнику")).not.toBeInTheDocument();
   expect(screen.getByText("Ответ инструмента")).toBeInTheDocument();
   expect(screen.queryByText("В ответе инструмента: 2 строки")).not.toBeInTheDocument();
   expect(screen.queryByText(/предпросмотре источника/)).not.toBeInTheDocument();
@@ -89,7 +90,7 @@ it("distinguishes computed SQL from a demo answer", () => {
     },
   };
   const { rerender } = render(<AnalysisResult entry={entry} />);
-  expect(screen.getByText("Рассчитано по источнику")).toBeInTheDocument();
+  expect(screen.queryByText("Рассчитано по источнику")).not.toBeInTheDocument();
   expect(screen.getByText("SELECT COUNT(*) AS orders FROM source")).toBeInTheDocument();
   rerender(<AnalysisResult entry={{ ...entry, answer: { answer: "Тестовый ответ", steps: 1, answer_kind: "demo", tool_results: [] } }} />);
   expect(screen.getByText("Демо-ответ")).toBeInTheDocument();
@@ -99,9 +100,9 @@ it("distinguishes computed SQL from a demo answer", () => {
   rerender(<AnalysisResult entry={{ ...entry, answer: { answer: "Уточните вопрос", steps: 1, status: "clarification", tool_results: [] } }} />);
   expect(screen.getByText("Нужно уточнение")).toBeInTheDocument();
   rerender(<AnalysisResult entry={{ ...entry, answer: { answer: "Старый ответ", steps: 0, tool_results: [] } }} />);
-  expect(screen.getByText("Ответ из истории")).toBeInTheDocument();
+  expect(screen.queryByText("Ответ из истории")).not.toBeInTheDocument();
   rerender(<AnalysisResult entry={{ ...entry, answer: { answer: "orders: 2", steps: 1, answer_kind: "model", tool_results: entry.answer.tool_results } }} />);
-  expect(screen.getByText("Рассчитано по данным")).toBeInTheDocument();
+  expect(screen.queryByText("Рассчитано по данным")).not.toBeInTheDocument();
 });
 
 it("shows a single computed timestamp as a result instead of an empty dashboard", () => {

@@ -122,9 +122,6 @@ function ColumnCard({
     <section className="column-card" aria-label={`Столбец ${field.name}`}>
       <details open={initialOpen || undefined}>
         <summary>
-          <span className={`column-type-icon column-type-${field.type.replaceAll(" ", "-")}`} aria-hidden="true">
-            {field.type === "string" ? "Aa" : field.type.includes("date") || field.type.includes("time") ? "▣" : "#"}
-          </span>
           <span className="column-card-title">
             <strong>{field.name}</strong>
             <small>

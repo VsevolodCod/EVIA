@@ -90,8 +90,7 @@ export default function AuthGate() {
   return <main className="auth-page">
     <div className="auth-brand">EVIA</div>
     <section className="auth-card" aria-label="Вход в EVIA">
-      <h1>{mode === "login" ? "Вход в EVIA" : mode === "register" ? "Создать аккаунт" : "Восстановить пароль"}</h1>
-      <p className="auth-intro">Ваши источники, диалоги и дашборды будут доступны только вам.</p>
+      <h1>{mode === "login" ? "Вход" : mode === "register" ? "Создать аккаунт" : "Восстановить пароль"}</h1>
       {mode !== "reset-request" && mode !== "reset-confirm" && <div className="auth-tabs">
         <button type="button" aria-pressed={mode === "login"} onClick={() => { setMode("login"); setError(""); }}>Вход</button>
         <button type="button" aria-pressed={mode === "register"} onClick={() => { setMode("register"); setError(""); }}>Регистрация</button>

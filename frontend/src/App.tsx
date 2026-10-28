@@ -25,6 +25,7 @@ import {
   eviaStatus,
 } from "./features/mascot/resolveEviaState";
 import type { EviaState } from "./features/mascot/states";
+import { WelcomeGreeting, welcomeGreetings } from "./features/mascot/WelcomeGreeting";
 
 const CHAT_SOURCE_STORAGE_KEY = "evia.chat-sources.v1";
 
@@ -104,6 +105,7 @@ export default function App({ account, onAccountChange, onLogout }: {
   const [postgresLoading, setPostgresLoading] = useState(false);
   const [postgresError, setPostgresError] = useState("");
   const [sourceSetup, setSourceSetup] = useState<"csv" | "postgres">("csv");
+  const [welcomeGreeting] = useState(() => welcomeGreetings[Math.floor(Math.random() * welcomeGreetings.length)]);
   const [mobilePanel, setMobilePanel] = useState<"home" | "analytics" | "chat">("home");
   const [mobileOverlay, setMobileOverlay] = useState<"upload" | "settings" | null>(null);
   const [theme, setTheme] = useState<"light" | "dark" | "system">(() => {
@@ -657,7 +659,7 @@ export default function App({ account, onAccountChange, onLogout }: {
         >
           EVIA
         </a>
-        {account && onAccountChange && onLogout && <AccountMenu account={account} onChange={onAccountChange} onLogout={onLogout} />}
+        {account && onAccountChange && onLogout && <AccountMenu account={account} onChange={onAccountChange} onLogout={onLogout} theme={theme === "system" ? systemDark ? "dark" : "light" : theme} />}
         <button className="mobile-settings-entry" aria-label="Открыть настройки" onClick={openSettings}><Icon name="settings" size={18} /></button>
       </header>
       <div className="workspace">
@@ -666,6 +668,7 @@ export default function App({ account, onAccountChange, onLogout }: {
             <Icon name="plus" />
             Добавить источник
           </button>
+          {!sourcesLoading && <div className="mobile-home-greeting"><WelcomeGreeting greeting={welcomeGreeting} activeState={mascotState} /></div>}
           <section className="nav-section">
             <div className="nav-heading">
               <h2>Источники</h2>
@@ -708,9 +711,6 @@ export default function App({ account, onAccountChange, onLogout }: {
                     {item.name}
                     <small>{item.source_type.toUpperCase()}</small>
                   </span>
-                  {selectedId === item.source_id && (
-                    <span className="selection-dot" />
-                  )}
                   <span className="mobile-source-chevron"><Icon name="chevron" size={15} /></span>
                 </button>
               ))}
@@ -728,13 +728,12 @@ export default function App({ account, onAccountChange, onLogout }: {
               {uploading ? "Загружаем CSV…" : "Добавить CSV"}
             </button>
             <button
-              className="postgres-nav"
+              className={`postgres-nav ${!source && sourceSetup === "postgres" ? "selected" : ""}`}
               onClick={openPostgresSetup}
               aria-pressed={!source && sourceSetup === "postgres"}
+              title={postgresStatus?.connected ? "PostgreSQL доступен" : undefined}
             >
-              <Icon name="grid" size={16} />
               Подключить PostgreSQL
-              {postgresStatus?.connected && <span aria-label="PostgreSQL доступен" />}
             </button>
             <input
               className="visually-hidden"
@@ -765,7 +764,7 @@ export default function App({ account, onAccountChange, onLogout }: {
             )}
           </section>
           <button className={`reports-nav ${showDashboardGallery ? "selected" : ""}`} type="button" aria-pressed={showDashboardGallery} onClick={() => { setShowDashboardGallery(true); setMobilePanel("analytics"); }}>
-            <Icon name="grid" size={17} /> Сохранённые отчёты <Icon name="chevron" size={15} />
+            Сохранённые отчёты <Icon name="chevron" size={15} />
           </button>
           <section className="nav-section history-section">
             <div className="nav-heading">
@@ -909,24 +908,7 @@ export default function App({ account, onAccountChange, onLogout }: {
                 }}
                 aria-label={mobileOverlay === "upload" ? "Загрузка CSV" : "Добавление источника"}
               >
-                <div className="upload-illustration" aria-hidden="true">
-                  <div className="paper-sheet paper-back" />
-                  <div className="paper-sheet">
-                    <span className="csv-label">CSV</span>
-                    <div className="paper-grid">
-                      <i />
-                      <i />
-                      <i />
-                      <i />
-                      <i />
-                      <i />
-                      <i />
-                      <i />
-                      <i />
-                    </div>
-                  </div>
-                  <span className="paper-plus">+</span>
-                </div>
+                {!sourcesLoading && <WelcomeGreeting greeting={welcomeGreeting} activeState={mascotState} />}
                 <h1>{uploading ? "Загрузка CSV…" : "Добавьте CSV"}</h1>
                 <p>Перетащите файл сюда или выберите его с устройства</p>
                 {selectedUploadFile && <div className="upload-selected-file">
@@ -1039,7 +1021,6 @@ export default function App({ account, onAccountChange, onLogout }: {
                           setMobilePanel("analytics");
                         }}
                       >
-                        <Icon name="grid" />
                         Открыть результат
                         <Icon name="chevron" size={15} />
                       </button>
@@ -1052,7 +1033,7 @@ export default function App({ account, onAccountChange, onLogout }: {
               </>
             ) : (
               <div className="chat-welcome">
-                <Evia large state={mascotState} />
+                {source && !sourcesLoading && <WelcomeGreeting greeting={welcomeGreeting} activeState={mascotState} />}
                 <h3>{source ? "Спросите о своих данных" : "Добавьте источник данных"}</h3>
                 <p className="mobile-chat-intro">{source ? "EVIA поможет найти ответ, построить график или разобраться в таблице." : "Загрузите CSV или подключите PostgreSQL, чтобы начать анализ."}</p>
                 <p
@@ -1162,15 +1143,6 @@ export default function App({ account, onAccountChange, onLogout }: {
               <span>Ctrl / ⌘ + Enter — отправить</span>
               {draft.length > 3500 && <span>{draft.length}/4000</span>}
             </div>
-            <details className="chat-help">
-              <summary>О чате</summary>
-              <p>
-                Вопросы продолжают выбранный диалог: модель получает предыдущие
-                сообщения. «Добавить источник» открывает экран загрузки данных. У каждого
-                источника своя история. Сообщения сохраняются на сервере;
-                список диалогов этой вкладки пока доступен до обновления страницы.
-              </p>
-            </details>
           </div>
         </aside>
       </div>

@@ -15,6 +15,7 @@ test("a visitor registers, enters the workspace, and sees the profile", async ()
   vi.stubGlobal("fetch", fetcher);
   render(<AuthGate />);
   fireEvent.click(await screen.findByRole("button", { name: "Регистрация" }));
+  expect(screen.queryByText("Ваши источники, диалоги и дашборды будут доступны только вам.")).not.toBeInTheDocument();
   fireEvent.change(screen.getByLabelText("Имя"), { target: { value: "Саша" } });
   fireEvent.change(screen.getByLabelText("Почта"), { target: { value: "person@example.com" } });
   fireEvent.change(screen.getByLabelText("Пароль"), { target: { value: "strong password 123" } });

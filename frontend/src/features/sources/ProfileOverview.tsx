@@ -165,13 +165,6 @@ export function ProfileOverview({
         <div className="column-shortlist">
           {model.fields.slice(0, 6).map((field) => (
             <button key={field.name} onClick={() => onColumn(field.name)}>
-              <span className="column-type-icon" aria-hidden="true">
-                {field.type === "string"
-                  ? "Aa"
-                  : field.type === "boolean"
-                    ? "✓"
-                    : "#"}
-              </span>
               <span>
                 <strong>{field.name}</strong>
                 <small>{typeLabel(field.type)}</small>

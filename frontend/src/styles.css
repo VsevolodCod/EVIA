@@ -239,14 +239,6 @@ a {
   letter-spacing: 0.9px;
   color: var(--muted);
 }
-.selection-dot {
-  margin-left: auto;
-  width: 5px;
-  height: 5px;
-  background: #52734d;
-  border-radius: 50%;
-  flex: none;
-}
 .upload-nav {
   display: inline-flex;
   align-items: center;
@@ -2081,4 +2073,59 @@ summary {
 .app[data-theme="dark"] .dashboard-empty-state { color: #b4c4c4; }
 @media (max-width: 640px) and (prefers-color-scheme: dark) {
   .app[data-theme="system"] { color-scheme: dark; }
+}
+
+/* Unified navigation and tactile actions. */
+.app .primary.new-analysis {
+  --button-face: #147d50;
+  --button-edge: #0d603c;
+  --button-ink: #fff;
+  background: #147d50;
+  color: #fff;
+  border-color: #147d50;
+  box-shadow: 0 4px 0 #0d603c;
+}
+.app .postgres-nav {
+  min-height: 54px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 10px;
+  box-shadow: none;
+  background: transparent;
+  color: #274738;
+  font-size: 14px;
+  font-weight: 650;
+}
+.app .postgres-nav:hover,.app .postgres-nav.selected {
+  background: #e8f7ee;
+  box-shadow: inset 3px 0 0 #1d9c6e, inset 0 0 0 1px #cce9d8;
+  color: #17633f;
+}
+.app[data-theme="dark"] .postgres-nav:hover,.app[data-theme="dark"] .postgres-nav.selected { background: #164b40; color: #effff8; }
+.mobile-home-greeting { display: none; }
+@media (max-width: 640px) {
+  .mobile-panel-home .mobile-home-greeting { display: block; }
+  .mobile-home-greeting .evia-greeting-block { min-height: 145px; }
+  .mobile-home-greeting .evia-mascot { width: 85px !important; height: 85px !important; }
+}
+.app :is(.dashboard-actions button,.dashboard-section-heading button,.new-dialog,.reports-nav,.result-open-chat,.saved-dashboard-toolbar button) {
+  min-height: 40px;
+  padding: 9px 13px;
+  border: 2px solid var(--button-edge);
+  border-radius: 11px;
+  background: var(--button-face);
+  box-shadow: 0 4px 0 var(--button-edge);
+  color: var(--button-ink);
+  font-size: 13px;
+  font-weight: 750;
+  transition: transform .1s ease, box-shadow .1s ease, filter .15s ease;
+}
+.app :is(.dashboard-actions button,.dashboard-section-heading button,.new-dialog,.reports-nav,.result-open-chat,.saved-dashboard-toolbar button):hover:not(:disabled) { filter: brightness(.97); }
+.app :is(.dashboard-actions button,.dashboard-section-heading button,.new-dialog,.reports-nav,.result-open-chat,.saved-dashboard-toolbar button):active:not(:disabled) { transform: translateY(3px); box-shadow: 0 1px 0 var(--button-edge); }
+.helper { background: transparent; box-shadow: none; }
+@media (max-width: 640px) { .mobile-panel-chat .chat-bottom { background: transparent; } }
+.topbar .mobile-settings-entry { margin-left: 0; }
+@media (max-width: 640px) {
+  .topbar { gap: 9px; }
+  .topbar .mobile-settings-entry { display: grid; }
 }
