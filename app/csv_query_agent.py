@@ -366,7 +366,8 @@ class CSVQueryAgent:
             if plan.intent == "clarification":
                 normalized_question = _normal_question(question)
                 sum_phrase = re.search(r"(?:сумм\w*|\bsum\b)\s+(.*)", normalized_question)
-                if sum_phrase:
+                average_phrase = re.search(r"(?:средн\w*|\bavg\b|\baverage\b|\bmean\b)", normalized_question)
+                if sum_phrase and (average_phrase is None or sum_phrase.start() < average_phrase.start()):
                     numeric_fields = [field for field in fields if field.inferred_type in {"integer", "number", "decimal"}]
                     target_phrase = re.split(
                         r"\s+(?:по(?!\s+полю)|только|где|если|при|where|when|if|by)\b",
