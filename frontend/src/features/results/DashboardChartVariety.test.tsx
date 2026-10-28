@@ -88,3 +88,33 @@ it("shows declared units for KPI and both scatter axes", () => {
   const points = screen.getByRole("img", { name: /Связь показателей/ }).querySelectorAll("circle[data-point]");
   expect(points[0].getAttribute("aria-label")).toMatch(/₽; 500\s*%/);
 });
+
+it("does not round a large exact decimal KPI through JavaScript Number", () => {
+  const kpi = { id: "exact", type: "kpi" as const, title: "Точная сумма", status: "success" as const,
+    definition: { type: "kpi", field: { source_id: "sales", field: "amount" }, aggregate: "sum" },
+    data: { value: "9007199254740993.25", format: { type: "number", decimals: 2 } } };
+  render(<GeneratedDashboard dashboard={{ version: 1, title: "Панель", cards: [kpi] }} scope="exact-decimal-test" />);
+  const value = screen.getByRole("heading", { name: "Точная сумма" }).closest("section")?.querySelector(".generated-value")?.textContent;
+  expect(value?.replace(/\s/g, "")).toBe("9007199254740993,25");
+});
+
+it("formats fractional percentage ticks without rounding them to two raw decimals first", () => {
+  const line = { id: "ratio", type: "line" as const, title: "Доля", status: "success" as const,
+    definition: { type: "line", x: { source_id: "sales", field: "month" },
+      y: { source_id: "sales", field: "ratio", aggregate: "avg" } },
+    data: { x: { field: "month" }, y: { field: "ratio", format: { type: "percent", decimals: 1 } },
+      points: [{ x: "Jan", y: 0 }, { x: "Feb", y: 0.01 }] } };
+  render(<GeneratedDashboard dashboard={{ version: 1, title: "Панель", cards: [line] }} scope="percent-ticks-test" />);
+  expect(screen.getByRole("img", { name: /Доля/ }).textContent).toMatch(/0,5\s*%/);
+});
+
+it("keeps an unnamed series identifiable after switching bars to a line", () => {
+  const bar = { ...cards[0], definition: { ...cards[0].definition, series: { source_id: "sales", field: "region" } },
+    data: { ...cards[0].data, points: [
+      { x: "A", y: 10, series: "Восток" }, { x: "A", y: 20, series: null },
+    ] } };
+  render(<GeneratedDashboard dashboard={{ version: 1, title: "Панель", cards: [bar] }} scope="series-switch-test" />);
+  fireEvent.click(screen.getByRole("button", { name: "Линия" }));
+  expect(screen.getByText("Нет значения")).toBeInTheDocument();
+  expect(screen.getByRole("img", { name: /По категориям/ }).querySelector('circle[aria-label*="Нет значения"]')).not.toBeNull();
+});
