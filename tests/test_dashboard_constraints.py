@@ -10,7 +10,9 @@ from pydantic import ValidationError
 
 from app.agent import AgentRuntime
 from app.charts.executor import ChartExecutor
-from app.charts.models import LineXAxis
+from app.charts.implementations.line import LineImplementation
+from app.charts.models import LineCard, LineXAxis
+from app.charts.query_planner import QueryPlanner
 from app.charts.repositories import ChartRepository, DashboardRepository
 from app.dashboard_query_agent import DashboardDraft
 from app.models import LLMResponse
@@ -167,11 +169,15 @@ def test_temporal_buckets_are_real_calendar_groups(tmp_path, grain):
         "year": [("2024-01-01", 1), ("2025-01-01", 9)],
     }
     try:
-        result = build_tool_registry(catalog, sources).execute("build_chart", {"definition": {
+        definition = {
             "type": "line", "title": "Calendar",
             "x": {"source_id": source.source_id, "field": "event_day", "type": "temporal", "time_grain": grain},
             "y": {"source_id": source.source_id, "field": "amount", "aggregate": "sum"},
-        }})
+        }
+        # Exercise the calculation directly so CI reports the underlying
+        # validation/SQL exception instead of build_chart's public fallback.
+        LineImplementation(sources, QueryPlanner(catalog)).execute(LineCard.model_validate(definition), [])
+        result = build_tool_registry(catalog, sources).execute("build_chart", {"definition": definition})
         assert result.ok and result.data["success"], result
         assert [(p["x"][:10], float(p["y"])) for p in result.data["result"]["points"]] == expected[grain]
     finally:
