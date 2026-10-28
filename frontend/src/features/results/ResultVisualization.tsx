@@ -68,11 +68,12 @@ function ResultChart({ data, type }: { data: ResultChartData; type: "bar" | "lin
   </div>;
 }
 
-export function ResultVisualization({ rows, label, copyableIdentifierColumns, columns }: {
+export function ResultVisualization({ rows, label, copyableIdentifierColumns, columns, initialView = "table" }: {
   rows: Row[];
   label: string;
   copyableIdentifierColumns?: readonly string[];
   columns?: readonly ChartColumn[];
+  initialView?: View;
 }) {
   const { fields, measures } = useMemo(() => chartFields(rows, columns, copyableIdentifierColumns), [rows, columns, copyableIdentifierColumns]);
   const [selectedMeasure, setMeasure] = useState("");
@@ -81,7 +82,7 @@ export function ResultVisualization({ rows, label, copyableIdentifierColumns, co
   const labelFields = fields.filter(field => field !== valueField);
   const labelField = labelFields.includes(selectedLabel) ? selectedLabel : labelFields.find(field => !measures.includes(field)) ?? labelFields[0] ?? "";
   const data = useMemo(() => valueField && labelField ? resultChartData(rows, valueField, labelField) : null, [rows, valueField, labelField]);
-  const [view, setView] = useState<View>("table");
+  const [view, setView] = useState<View>(initialView);
   return <div className="result-visualization">
     {measures.length > 0 && fields.length > 1 && <div className="result-chart-fields">
       <label>Показатель<select value={valueField} onChange={event => setMeasure(event.target.value)}>

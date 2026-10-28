@@ -223,6 +223,21 @@ class Error(BaseModel):
     retryable: bool = False
 
 
+class CalculationContext(BaseModel):
+    """Facts derived from one successfully executed query, never model prose."""
+    model_config = {'extra': 'forbid'}
+    version: Literal[1] = 1
+    source_id: Identifier
+    snapshot_id: Identifier
+    schema_version: int = Field(ge=1)
+    result_id: Identifier
+    sql: str = Field(min_length=1, max_length=12000)
+    metrics: list[str] = Field(max_length=20)
+    dimensions: list[str] = Field(max_length=20)
+    filters: list[str] = Field(max_length=40)
+    presentation: Literal['table', 'bar', 'line'] = 'table'
+
+
 class AgentResponse(AskResponse):
     contract_version: Literal['1.0'] = '1.0'
     request_id: Identifier
@@ -238,6 +253,8 @@ class AgentResponse(AskResponse):
     error: Error | None = None
     artifact_ids: list[Identifier] = Field(default_factory=list)
     job_id: Identifier | None = None
+    analysis_contexts: list[CalculationContext] = Field(default_factory=list, max_length=8)
+    context_status: Literal['active', 'none', 'stale'] = 'none'
 
     @model_validator(mode='after')
     def consistent_status(self):

@@ -11,8 +11,9 @@ const titles: Record<string, string> = {
   get_schema: "Структура данных",
   execute_sql: "Результат расчёта",
   run_sql: "Результат расчёта",
+  continue_analysis: "Продолжение анализа",
 };
-const exportableTools = new Set(["query_data", "run_sql", "execute_sql"]);
+const exportableTools = new Set(["query_data", "run_sql", "execute_sql", "continue_analysis"]);
 
 function chartColumns(data: unknown): ChartColumn[] | undefined {
   if (!data || typeof data !== "object" || !("columns" in data) || !Array.isArray(data.columns)) return undefined;
@@ -47,8 +48,13 @@ export function ToolResults({ results }: { results: ToolResult[] }) {
   return (
     <div className="tool-results">
       {results.map((result, i) => {
-        const rows = tabularRows(result.data);
-        const csvTable = result.ok && exportableTools.has(result.tool_name) ? csvTableFrom(result.data) : null;
+        const continuation = result.tool_name === "continue_analysis" && result.data && typeof result.data === "object"
+          ? result.data as { query_result?: unknown; presentation?: unknown } : null;
+        const data = continuation?.query_result ?? result.data;
+        const initialView = continuation?.presentation === "bar" || continuation?.presentation === "line" ? continuation.presentation : "table";
+        const resultId = data && typeof data === "object" && "result_id" in data && typeof data.result_id === "string" ? data.result_id : String(i);
+        const rows = tabularRows(data);
+        const csvTable = result.ok && exportableTools.has(result.tool_name) ? csvTableFrom(data) : null;
         return <section className="tool-result" key={i}>
           <div className="section-heading">
             <h3>{titles[result.tool_name] ?? "Результат инструмента"}</h3>
@@ -71,9 +77,11 @@ export function ToolResults({ results }: { results: ToolResult[] }) {
           </div>}
           {rows ? (
             <ResultVisualization
+              key={`${resultId}:${initialView}`}
               rows={rows}
               label={`Результат ${result.tool_name}`}
-              columns={chartColumns(result.data)}
+              columns={chartColumns(data)}
+              initialView={initialView}
               copyableIdentifierColumns={result.tool_name === "list_sources" ? ["source_id", "snapshot_id"] : undefined}
             />
           ) : result.data !== null && result.data !== undefined ? (

@@ -62,6 +62,12 @@ class ToolRegistry:
             for tool in self._tools.values()
         ]
 
+    def fork(self) -> "ToolRegistry":
+        """A request-local registry; closures must never leak between chats."""
+        copied = ToolRegistry()
+        copied._tools = dict(self._tools)
+        return copied
+
     def execute(
             self,
             name: str,
