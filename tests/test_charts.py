@@ -791,6 +791,24 @@ def test_scatter_retains_duplicate_raw_pairs_and_excludes_null_axes(sources, cat
     assert sources.queries[-1][2] == 2
 
 
+def test_scatter_preserves_declared_axis_units_in_computed_result(sources, catalog):
+    result = DashboardEngine(catalog, sources).create_dashboard({
+        "title": "Units", "cards": [{
+            "id": "scatter", "type": "scatter", "title": "Revenue and revenue",
+            "x": {"source_id": "sales", "field": "revenue", "label": "Выручка",
+                  "format": {"type": "currency", "currency": "RUB", "decimals": 2}},
+            "y": {"source_id": "sales", "field": "revenue", "label": "Доля",
+                  "format": {"type": "percent", "decimals": 1}},
+        }],
+    })["cards"][0]
+
+    assert result["status"] == "success"
+    assert result["data"]["x"]["label"] == "Выручка"
+    assert result["data"]["x"]["format"]["currency"] == "RUB"
+    assert result["data"]["y"]["label"] == "Доля"
+    assert result["data"]["y"]["format"]["type"] == "percent"
+
+
 def test_table_returns_selected_raw_fields_in_stable_bounded_order(sources, catalog):
     result = DashboardEngine(catalog, sources).create_dashboard({
         "title": "Rows", "cards": [{

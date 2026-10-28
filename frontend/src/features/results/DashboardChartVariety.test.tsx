@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import type { SavedDashboardBuild } from "../../api";
 import { GeneratedDashboard, generatedChartFrom, generatedDashboardFrom } from "./GeneratedDashboard";
 import { dashboardFromBuild } from "./SavedDashboard";
@@ -54,4 +54,22 @@ it("labels separate bar series instead of making duplicate categories ambiguous"
   expect(screen.getByText("Нет значения")).toBeInTheDocument();
   const bars = chart.querySelectorAll("rect[data-bar]");
   expect(bars[0].getAttribute("fill")).not.toBe(bars[1].getAttribute("fill"));
+});
+
+it("switches an aggregated chart between bars and a line without changing its computed points or currency", () => {
+  const bar = { ...cards[0],
+    definition: { ...cards[0].definition, y: { ...cards[0].definition.y,
+      format: { type: "currency", decimals: 2, currency: "RUB" } } },
+    data: { ...cards[0].data, y: { field: "amount", format: { type: "currency", decimals: 2, currency: "RUB" } } },
+  };
+  render(<GeneratedDashboard dashboard={{ version: 1, title: "Панель", cards: [bar] }} scope="view-switch-test" />);
+
+  const bars = screen.getByRole("img", { name: /По категориям/ });
+  expect(bars.querySelectorAll("rect[data-bar]")).toHaveLength(2);
+  expect(bars.querySelector('rect[aria-label*="₽"]')).not.toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Линия" }));
+  const line = screen.getByRole("img", { name: /По категориям/ });
+  expect(line.querySelectorAll("rect[data-bar]")).toHaveLength(0);
+  expect(line.querySelectorAll('circle[aria-label*="₽"]')).toHaveLength(2);
+  expect(screen.getByRole("button", { name: "Линия" })).toHaveAttribute("aria-pressed", "true");
 });
