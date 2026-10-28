@@ -414,6 +414,21 @@ async def test_missing_sum_field_still_suggests_metric_when_numeric_filter_is_na
 
 
 @pytest.mark.asyncio
+async def test_non_sum_question_about_summary_does_not_suggest_sum(tmp_path):
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    sources = SourceService(tmp_path / "data", catalog)
+    source = sources.register_csv("sales.csv", b"summary,revenue\nA,120\nB,180\n")
+    provider = ScriptedProvider({"intent": "clarification", "sql": None, "explanation": ""})
+    agent = AgentRuntime(provider, build_tool_registry(catalog, sources), sources=sources)
+    try:
+        answer = await agent.ask("Покажи частые значения summary за сегодня", [source.source_id])
+        assert answer.clarification is not None
+        assert "Сумма «revenue»" not in answer.clarification.options
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
 async def test_sum_clarification_for_external_data_does_not_claim_field_is_missing(tmp_path):
     provider = ScriptedProvider({"intent": "clarification", "sql": None, "explanation": "Нужен курс USD"})
     agent, source, catalog = agent_with_csv(tmp_path, provider)
