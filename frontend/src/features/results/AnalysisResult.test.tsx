@@ -23,6 +23,7 @@ it("builds a dashboard from one successful tabular tool result", () => {
 
   expect(screen.getByRole("heading", { name: "Результат анализа" })).toBeInTheDocument();
   expect(screen.getByText("Строк в результате")).toBeInTheDocument();
+  expect(screen.queryByText("Рассчитано по источнику")).not.toBeInTheDocument();
   expect(screen.getByText("Ответ инструмента")).toBeInTheDocument();
   expect(screen.queryByText("В ответе инструмента: 2 строки")).not.toBeInTheDocument();
   expect(screen.queryByText(/предпросмотре источника/)).not.toBeInTheDocument();

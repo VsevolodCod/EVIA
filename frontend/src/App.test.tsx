@@ -100,6 +100,16 @@ async function ask(question: string) {
   fireEvent.click(screen.getByRole("button", { name: "Отправить вопрос" }));
   await waitFor(() => expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).startsWith("/agent/chat?")).length).toBeGreaterThan(previousCalls));
 }
+
+it("greets visitors and highlights PostgreSQL selection without a marker dot", async () => {
+  setup();
+  render(<App />);
+  expect(await screen.findByLabelText("Приветствие EVIA")).toBeInTheDocument();
+  await select("A");
+  expect(document.querySelector(".selection-dot")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Подключить PostgreSQL" }));
+  expect(screen.getByRole("button", { name: "Подключить PostgreSQL" })).toHaveAttribute("aria-pressed", "true");
+});
 it("shows an incomplete model response as a retryable error", async () => {
   setup(() => Promise.resolve(Response.json({
     answer: "Ответ модели прервался из-за лимита генерации.",

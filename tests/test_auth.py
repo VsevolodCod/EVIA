@@ -2,9 +2,37 @@
 
 import importlib
 import os
+import base64
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+
+
+@pytest.mark.asyncio
+async def test_avatar_upload_is_private_and_can_be_removed(auth_module):
+    image = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLttAAAAABJRU5ErkJggg=="
+    )
+    module = auth_module
+    async with module.app.router.lifespan_context(module.app):
+        async with AsyncClient(transport=ASGITransport(app=module.app), base_url="http://test") as owner, AsyncClient(
+            transport=ASGITransport(app=module.app), base_url="http://test"
+        ) as stranger:
+            assert (await owner.post("/auth/register", json={
+                "email": "avatar@example.com", "password": "correct horse battery", "name": "Avatar",
+            })).status_code == 201
+            assert (await owner.put("/auth/avatar", files={"file": ("avatar.png", image, "image/png")})).status_code == 200
+            account = (await owner.get("/auth/me")).json()
+            assert account["avatar_url"].startswith("/auth/avatar?v=")
+            avatar = await owner.get("/auth/avatar")
+            assert avatar.status_code == 200
+            assert avatar.headers["content-type"] == "image/webp"
+            assert avatar.content.startswith(b"RIFF")
+            assert (await stranger.get("/auth/avatar")).status_code == 401
+            rejected = await owner.put("/auth/avatar", files={"file": ("avatar.svg", b"<svg/>", "image/svg+xml")})
+            assert rejected.status_code == 400
+            assert (await owner.delete("/auth/avatar")).status_code == 204
+            assert (await owner.get("/auth/me")).json()["avatar_url"] is None
 
 
 def test_brevo_recovery_delivery_without_custom_domain(monkeypatch):
