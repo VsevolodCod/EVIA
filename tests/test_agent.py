@@ -237,6 +237,7 @@ async def test_selected_csv_dashboard_uses_bounded_spec_and_computed_tool(tmp_pa
             self.schemas.append(schema)
             return LLMResponse(content=json.dumps({
                 "title": "Выручка",
+                "filters": [],
                 "cards": [{"type": "kpi", "title": "Сумма выручки", "field": "revenue", "aggregate": "sum"}],
             }), finish_reason="stop")
 
@@ -273,6 +274,7 @@ async def test_failed_dashboard_does_not_claim_success(tmp_path):
             return LLMResponse(content=json.dumps({
                 "title": "Ошибка", "cards": [{"type": "kpi", "title": "Неверный агрегат",
                 "field": "category", "aggregate": "sum"}],
+                "filters": [],
             }), finish_reason="stop")
 
         async def chat(self, messages, tools=None):
@@ -293,7 +295,7 @@ async def test_failed_dashboard_does_not_claim_success(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_dashboard_uses_schema_fallback_after_invalid_model_draft(tmp_path):
+async def test_dashboard_requests_clarification_after_invalid_model_draft(tmp_path):
     class LLM:
         async def chat(self, messages, tools=None):
             return LLMResponse(content="Построю график по данным.", finish_reason="stop")
@@ -309,19 +311,15 @@ async def test_dashboard_uses_schema_fallback_after_invalid_model_draft(tmp_path
             "Построй дашборд", [source.source_id]
         )
 
-        assert result.status == "answered"
-        assert result.answer_kind == "computed"
-        dashboard = result.tool_results[-1]
-        assert dashboard.tool_name == "create_dashboard"
-        assert dashboard.data["id"]
-        assert [card["type"] for card in dashboard.data["cards"]] == ["kpi", "line"]
-        assert all(card["status"] == "success" for card in dashboard.data["cards"])
+        assert result.status == "clarification"
+        assert result.answer_kind != "computed"
+        assert result.tool_results == []
     finally:
         catalog.close()
 
 
 @pytest.mark.asyncio
-async def test_dashboard_retries_undrawable_card_and_keeps_final_result(tmp_path):
+async def test_dashboard_does_not_replace_failed_plan_with_unrelated_metric(tmp_path):
     import json
 
     class LLM:
@@ -333,7 +331,7 @@ async def test_dashboard_retries_undrawable_card_and_keeps_final_result(tmp_path
             card = ({"type": "line", "title": "Статус", "x": "month", "y": "status", "aggregate": "max"}
                     if self.calls == 1 else
                     {"type": "kpi", "title": "Выручка", "field": "revenue", "aggregate": "sum"})
-            return LLMResponse(content=json.dumps({"title": "Продажи", "cards": [card]}), finish_reason="stop")
+            return LLMResponse(content=json.dumps({"title": "Продажи", "filters": [], "cards": [card]}), finish_reason="stop")
 
     catalog = SchemaCatalog(tmp_path / "catalog.db")
     sources = SourceService(tmp_path / "data", catalog)
@@ -343,10 +341,9 @@ async def test_dashboard_retries_undrawable_card_and_keeps_final_result(tmp_path
         result = await AgentRuntime(llm, build_tool_registry(catalog, sources), sources=sources).ask(
             "Создай дашборд", [source.source_id]
         )
-        assert result.status == "answered"
-        assert result.answer_kind == "computed"
-        assert llm.calls == 2
-        assert [item.data["cards"][0]["status"] for item in result.tool_results] == ["error", "success"]
-        assert result.tool_results[-1].data["cards"][0]["data"]["value"] == "301.0"
+        assert result.status == "error"
+        assert result.answer_kind != "computed"
+        assert llm.calls == 1
+        assert [item.data["cards"][0]["status"] for item in result.tool_results] == ["error"]
     finally:
         catalog.close()

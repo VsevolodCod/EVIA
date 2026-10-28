@@ -27,6 +27,11 @@ class LineImplementation(ChartImplementation):
         plan = self.planner.plan(card, filters)
 
         x_field = quote_identifier(card.x.field)
+        if card.x.time_grain is not None:
+            # The unit is a validated enum, never a model-supplied SQL fragment.
+            # DATE_TRUNC works in both DuckDB and PostgreSQL. Group on the full
+            # bucket start, so quarters/months from different years stay apart.
+            x_field = f"DATE_TRUNC('{card.x.time_grain}', {x_field})"
         y_expression = aggregate_expression(
             card.y.aggregate,
             card.y.field,
@@ -89,6 +94,7 @@ class LineImplementation(ChartImplementation):
                 "field": card.x.field,
                 "label": card.x.label or card.x.field,
                 "type": card.x.type,
+                "time_grain": card.x.time_grain,
             },
             "y": {
                 "field": card.y.field,

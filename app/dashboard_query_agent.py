@@ -6,14 +6,38 @@ import json
 from time import perf_counter
 
 import httpx
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import (
+    BaseModel, ConfigDict, Field, StrictBool, StrictFloat, StrictInt, StrictStr,
+    ValidationError, model_validator,
+)
+
+from app.charts.models import DashboardFilter, FilterOperator, TimeGrain
 
 from app.contracts.v1 import AgentResponse, Error
 from app.data_sources.postgresql_adapter import PostgresSourceError
 from app.llm.base import LLMProvider
-from app.models import AgentTiming, ChatMessage, LLMMessage, ModelTiming, SchemaField, ToolResult
+from app.models import AgentTiming, ChatMessage, LLMMessage, ModelTiming, ToolResult
 from app.source_service import SourceService
 from app.tools.base import ToolRegistry
+
+
+FilterScalar = StrictStr | StrictInt | StrictFloat | StrictBool
+
+
+class DraftFilter(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
+    field: str = Field(min_length=1, max_length=200)
+    operator: FilterOperator
+    value: FilterScalar | list[FilterScalar] | None = None
+
+    @model_validator(mode="after")
+    def valid_filter(self):
+        DashboardFilter(field={"source_id": "selected", "field": self.field},
+                        operator=self.operator, value=self.value)
+        if isinstance(self.value, list) and self.operator not in {"in", "not_in", "between"}:
+            raise ValueError("A scalar comparison cannot contain a list")
+        return self
 
 
 class DraftCard(BaseModel):
@@ -25,6 +49,7 @@ class DraftCard(BaseModel):
     x: str | None = None
     y: str | None = None
     aggregate: str = Field(pattern="^(count|sum|avg|min|max)$")
+    time_grain: TimeGrain | None = None
 
     @model_validator(mode="after")
     def required_fields(self):
@@ -32,6 +57,8 @@ class DraftCard(BaseModel):
             raise ValueError("KPI needs field")
         if self.type == "line" and (not self.x or not self.y):
             raise ValueError("Line needs x and y")
+        if self.type != "line" and self.time_grain is not None:
+            raise ValueError("Only a line chart supports time_grain")
         return self
 
 
@@ -39,7 +66,17 @@ class DashboardDraft(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     title: str = Field(min_length=1, max_length=120)
-    cards: list[DraftCard] = Field(min_length=1, max_length=2)
+    # Required even when empty: an old/incomplete plan must not silently lose
+    # the user's constraints. source_id is always bound by the server.
+    filters: list[DraftFilter] = Field(max_length=20)
+    cards: list[DraftCard] = Field(max_length=2)
+    clarification: str | None = Field(default=None, min_length=1, max_length=1000)
+
+    @model_validator(mode="after")
+    def cards_or_clarification(self):
+        if bool(self.cards) == bool(self.clarification):
+            raise ValueError("Return either cards or a clarification, never both")
+        return self
 
 
 def is_dashboard_question(question: str) -> bool:
@@ -54,68 +91,6 @@ class DashboardQueryAgent:
         self.llm = llm
         self.sources = sources
         self.tools = tools
-
-    @staticmethod
-    def _fallback_draft(fields: list[SchemaField]) -> DashboardDraft | None:
-        """Build a conservative dashboard from the source schema alone."""
-        numeric = [
-            field for field in fields
-            if field.inferred_type in {"integer", "number"}
-            and not field.is_identifier_candidate
-        ]
-        if not numeric:
-            numeric = [
-                field for field in fields
-                if field.inferred_type in {"integer", "number"}
-            ]
-        if numeric:
-            measure = numeric[0]
-            cards = [DraftCard(
-                type="kpi",
-                title=f"Сумма {measure.name}",
-                field=measure.name,
-                aggregate="sum",
-            )]
-            dimension = next(
-                (
-                    field for field in fields
-                    if field.name != measure.name
-                    and not field.is_identifier_candidate
-                    and field.inferred_type not in {"integer", "number"}
-                ),
-                None,
-            )
-            if dimension is None:
-                dimension = next(
-                    (
-                        field for field in fields
-                        if field.name != measure.name
-                        and field.inferred_type not in {"integer", "number"}
-                    ),
-                    None,
-                )
-            if dimension is not None:
-                cards.append(DraftCard(
-                    type="line",
-                    title=f"{measure.name} по {dimension.name}",
-                    x=dimension.name,
-                    y=measure.name,
-                    aggregate="sum",
-                ))
-            return DashboardDraft(title="Базовый обзор данных", cards=cards)
-
-        dimension = next((field for field in fields if not field.is_identifier_candidate), None)
-        if dimension is None:
-            return None
-        return DashboardDraft(
-            title="Базовый обзор данных",
-            cards=[DraftCard(
-                type="kpi",
-                title=f"Количество {dimension.name}",
-                field=dimension.name,
-                aggregate="count",
-            )],
-        )
 
     async def ask(
         self, question: str, source_id: str, timing: AgentTiming, request_id: str,
@@ -132,11 +107,25 @@ class DashboardQueryAgent:
         columns = ", ".join(f'"{field.name}" ({field.inferred_type})' for field in fields)
         system = (
             "Выбери от одной до двух карточек для дашборда из реальных полей источника. "
-            "Верни только JSON с title и cards. Типы: kpi (field, aggregate) или "
-            "line (x, y, aggregate). Агрегации: count, sum, avg, min, max. "
+            "Верни только JSON с title, filters, cards и clarification (null при успехе). "
+            "filters обязателен: все условия вопроса, применённые ко ВСЕМ карточкам через AND; "
+            "каждый фильтр: {field, operator, value}. Операторы eq/ne/gt/gte/lt/lte/in/not_in/"
+            "between/is_null/is_not_null. Для чисел value — число, для даты — ISO-строка. "
+            "Период по полю даты выражай фильтрами gte начала и lt следующей границы "
+            "(например за 2025 год: >= 2025-01-01, < 2026-01-01). "
+            "Не угадывай дату для относительных периодов, если она не определена в запросе/контексте. "
+            "Типы: kpi (field, aggregate) или "
+            "line (x, y, aggregate, time_grain). time_grain: day/week/month/quarter/year "
+            "для группировки по настоящему полю даты; null — исходные значения. "
+            "Не подменяй кварталы месяцами/датами, не суммируй идентификаторы. "
+            "Агрегации: count, sum, avg, min, max. "
             "Для sum/avg бери числовое поле; для line x — поле группировки, "
             "а y — числовой показатель (кроме count). "
             "Не придумывай результаты, SQL, source_id и дополнительные поля. "
+            "Сохраняй показатель, фильтры и период при продолжении диалога, если пользователь "
+            "их не меняет. Если поле отсутствует, условие неоднозначно или его нельзя выразить "
+            "этим контрактом (например OR между разными полями), верни cards=[], filters=[] "
+            "и clarification с конкретным вопросом. Не заменяй запрос общим обзором. "
             f"Доступные поля: {columns}."
         )
         context = [LLMMessage(role=item.role, content=item.content[:1000])
@@ -172,22 +161,30 @@ class DashboardQueryAgent:
                 if candidate and not any(
                     field not in field_names for card in candidate.cards
                     for field in (card.field, card.x, card.y) if field is not None
-                ):
+                ) and not any(item.field not in field_names for item in candidate.filters):
                     draft = candidate
 
-            fallback_used = draft is None
             if draft is None:
                 if attempt == 0:
-                    messages.append(LLMMessage(role="user", content="Верни только полный JSON с title и cards из 1–2 карточек по доступной схеме."))
+                    messages.append(LLMMessage(role="user", content=(
+                        "План неполный или не соответствует схеме. Верни полный JSON с title, "
+                        "filters, cards, clarification. Сохрани ВСЕ условия исходного вопроса. "
+                        "Если они невыполнимы, верни cards=[] и конкретное clarification."
+                    )))
                     continue
-                draft = self._fallback_draft(fields)
-                if draft is None:
-                    return self._error(request_id, timing, attempt + 1, trace, "VALIDATION_ERROR")
+                return self._clarification(request_id, timing, attempt + 1,
+                    "Не удалось составить проверяемый план дашборда с условиями запроса. "
+                    "Уточните показатель, поле даты, период и фильтры. Дашборд не создан.")
 
+            if draft.clarification:
+                return self._clarification(request_id, timing, attempt + 1, draft.clarification)
+
+            filters = [{"field": {"source_id": source_id, "field": item.field},
+                        "operator": item.operator, "value": item.value} for item in draft.filters]
             chart_ids = []
             rendered_cards = []
             for card in draft.cards:
-                definition = {"type": card.type, "title": card.title}
+                definition = {"type": card.type, "title": card.title, "filters": filters}
                 if card.type == "kpi":
                     definition.update({
                         "field": {"source_id": source_id, "field": card.field},
@@ -198,7 +195,8 @@ class DashboardQueryAgent:
                     definition.update({
                         "x": {
                             "source_id": source_id, "field": card.x,
-                            "type": "temporal" if x_field.inferred_type in {"date", "datetime"} else "category",
+                            "type": "temporal" if x_field.inferred_type in {"date", "datetime", "timestamp"} else "category",
+                            "time_grain": card.time_grain,
                         },
                         "y": {
                             "source_id": source_id, "field": card.y,
@@ -263,8 +261,6 @@ class DashboardQueryAgent:
                 count = len(chart_ids)
                 failed = len(draft.cards) - count
                 answer = f"Построено карточек: {count}."
-                if fallback_used:
-                    answer = "Создан базовый дашборд по схеме источника. " + answer
                 if failed:
                     answer += f" Не удалось рассчитать: {failed}."
                 return AgentResponse(
@@ -272,11 +268,16 @@ class DashboardQueryAgent:
                     answer_kind="computed", steps=attempt + 1, tool_results=trace,
                     timing=timing,
                 )
-            if attempt == 0:
-                messages.append(LLMMessage(role="user", content="Карточка не рассчиталась. Выбери одну простую карточку по типу поля и верни JSON заново."))
-                continue
+            # An execution failure must not trigger a simpler, unfiltered plan
+            # which changes the question. Preserve the failed cards for the UI.
             return self._error(request_id, timing, attempt + 1, trace, "QUERY_REJECTED")
         return self._error(request_id, timing, 2, trace, "QUERY_REJECTED")
+
+    @staticmethod
+    def _clarification(request_id, timing, steps, message):
+        return AgentResponse(request_id=request_id, status="clarification",
+                             outcome="clarification", answer=message, steps=steps,
+                             tool_results=[], timing=timing)
 
     @staticmethod
     def _error(request_id, timing, steps, trace, code):

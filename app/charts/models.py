@@ -25,6 +25,7 @@ FilterOperator = Literal[
     "in", "not_in", "between", "is_null", "is_not_null",
 ]
 Aggregate = Literal["count", "sum", "avg", "min", "max"]
+TimeGrain = Literal["day", "week", "month", "quarter", "year"]
 SortDirection = Literal["asc", "desc", "label_asc", "label_desc"]
 FormatType = Literal["number", "integer", "percent", "currency"]
 
@@ -112,8 +113,15 @@ class KPICard(ChartBase):
 
 class LineXAxis(FieldRef):
     type: Literal["temporal", "category", "number"] = "category"
+    time_grain: TimeGrain | None = None
     label: str | None = Field(default=None, max_length=200)
     sort: SortDirection = "asc"
+
+    @model_validator(mode="after")
+    def validate_time_grain(self):
+        if self.time_grain is not None and self.type != "temporal":
+            raise ValueError("time_grain requires a temporal axis")
+        return self
 
 
 class LineYAxis(FieldRef):

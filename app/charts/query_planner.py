@@ -300,6 +300,11 @@ class QueryPlanner:
             y_field = resolved_fields[1]
             self._validate_aggregate(aggregate, y_field)
 
+            if definition.x.time_grain is not None and not self._is_type(
+                resolved_fields[0].inferred_type, {"date", "datetime", "timestamp"},
+            ):
+                raise UnsupportedTypeError("Time grouping requires a typed date or timestamp field")
+
             if aggregate != "count":
                 if not self._is_type(
                     y_field.inferred_type,

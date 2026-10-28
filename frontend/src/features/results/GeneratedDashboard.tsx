@@ -65,7 +65,7 @@ function lineData(value: unknown): { points: Point[]; xLabel: string; yLabel: st
   return { points, xLabel: String(x.label ?? x.field ?? "Категория"), yLabel: String(y.label ?? y.field ?? "Значение") };
 }
 
-function calculationPassport(card: Card): { source: string; formula: string; period: string; filters: string[]; snapshot?: string; schemaVersion?: number } | null {
+function calculationPassport(card: Card): { source: string; formula: string; period: string; filters: string[]; grouping?: string; snapshot?: string; schemaVersion?: number } | null {
   const definition = card.definition;
   if (!object(definition)) return null;
   const measure = definition.type === "kpi" ? definition.field : definition.type === "line" ? definition.y : null;
@@ -80,11 +80,16 @@ function calculationPassport(card: Card): { source: string; formula: string; per
   const result = object(card.data) ? card.data : null;
   const provenance = result && Array.isArray(result.provenance)
     ? result.provenance.find((item) => object(item) && item.source_id === measure.source_id) : null;
+  const grains: Record<string, string> = { day: "По дням", week: "По неделям", month: "По месяцам", quarter: "По кварталам", year: "По годам" };
+  const x = object(definition.x) ? definition.x : null;
   return {
     source: measure.source_id,
     formula: `${aggregate.toUpperCase()}(${measure.field})`,
     period: filters.length ? "Применены фильтры" : "Весь источник без фильтров",
     filters,
+    grouping: x && typeof x.field === "string"
+      ? `${typeof x.time_grain === "string" ? grains[x.time_grain] ?? x.time_grain : "По исходным значениям"}: ${x.field}`
+      : undefined,
     snapshot: object(provenance) && typeof provenance.snapshot_id === "string" ? provenance.snapshot_id : undefined,
     schemaVersion: object(provenance) && typeof provenance.schema_version === "number" ? provenance.schema_version : undefined,
   };
@@ -167,6 +172,7 @@ export function GeneratedDashboard({ dashboard, scope, sourceLabel }: { dashboar
             <summary>Паспорт расчёта</summary>
             <dl><div><dt>Формула</dt><dd>{passport.formula}</dd></div><div><dt>Источник</dt><dd>{passport.source}</dd></div><div><dt>Период</dt><dd>{passport.period}</dd></div>
               {passport.filters.length > 0 && <div><dt>Фильтры</dt><dd>{passport.filters.join("; ")}</dd></div>}
+              {passport.grouping && <div><dt>Группировка</dt><dd>{passport.grouping}</dd></div>}
               {passport.snapshot && <div><dt>Снимок данных</dt><dd>{passport.snapshot}</dd></div>}
               {passport.schemaVersion !== undefined && <div><dt>Версия схемы</dt><dd>{passport.schemaVersion}</dd></div>}
             </dl>
