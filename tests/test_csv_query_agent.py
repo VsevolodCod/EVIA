@@ -402,6 +402,18 @@ async def test_missing_sum_field_still_suggests_numeric_metric_when_dimension_is
 
 
 @pytest.mark.asyncio
+async def test_missing_sum_field_still_suggests_metric_when_numeric_filter_is_named(tmp_path):
+    provider = ScriptedProvider({"intent": "clarification", "sql": None, "explanation": ""})
+    agent, source, catalog = agent_with_csv(tmp_path, provider)
+    try:
+        answer = await agent.ask("Покажи сумму profit только где revenue > 100", [source.source_id])
+        assert answer.clarification is not None
+        assert answer.clarification.options == ["Сумма «revenue»"]
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
 async def test_sum_clarification_for_external_data_does_not_claim_field_is_missing(tmp_path):
     provider = ScriptedProvider({"intent": "clarification", "sql": None, "explanation": "Нужен курс USD"})
     agent, source, catalog = agent_with_csv(tmp_path, provider)
