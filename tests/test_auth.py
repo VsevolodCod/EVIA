@@ -2,7 +2,9 @@
 
 import importlib
 import os
-import base64
+from io import BytesIO
+
+from PIL import Image
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -10,9 +12,9 @@ from httpx import ASGITransport, AsyncClient
 
 @pytest.mark.asyncio
 async def test_avatar_upload_is_private_and_can_be_removed(auth_module):
-    image = base64.b64decode(
-        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLttAAAAABJRU5ErkJggg=="
-    )
+    image_file = BytesIO()
+    Image.new("RGB", (8, 8), "#147d50").save(image_file, format="PNG")
+    image = image_file.getvalue()
     module = auth_module
     async with module.app.router.lifespan_context(module.app):
         async with AsyncClient(transport=ASGITransport(app=module.app), base_url="http://test") as owner, AsyncClient(

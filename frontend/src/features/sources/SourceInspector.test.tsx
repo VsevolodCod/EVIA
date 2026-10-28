@@ -238,7 +238,8 @@ it("labels full CSV statistics as exact while keeping top values scoped to the s
   setup();
   render(<Workspace initial="profile" />);
 
-  expect(await screen.findByText("Весь источник")).toBeInTheDocument();
+  expect(await screen.findByRole("region", { name: "Столбец revenue" })).toBeInTheDocument();
+  expect(document.querySelector(".profile-scope")).toBeNull();
   expect(screen.queryByText("Статистика по всему датасету")).not.toBeInTheDocument();
   expect(screen.queryByText("ИССЛЕДУЙТЕ ДЕТАЛИ")).not.toBeInTheDocument();
   expect(screen.queryByText(/строк в источнике/)).not.toBeInTheDocument();
@@ -279,7 +280,8 @@ it("keeps PostgreSQL sample profiles visibly limited to sampled statistics", asy
   setup(sampledProfile);
   render(<Workspace initial="profile" />);
 
-  expect(await screen.findByText("Выборка: 4 строки")).toBeInTheDocument();
+  expect(await screen.findByRole("region", { name: "Столбец region" })).toBeInTheDocument();
+  expect(document.querySelector(".profile-scope")).toBeNull();
   expect(screen.queryByText("Статистика относится к выборке, а не ко всему источнику.")).not.toBeInTheDocument();
   expect(screen.queryByText("Статистика по всему датасету")).not.toBeInTheDocument();
   const region = screen.getByRole("region", { name: "Столбец region" });
