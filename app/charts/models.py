@@ -142,10 +142,15 @@ class BarCard(LineCard):
     type: Literal["bar"] = "bar"
 
 
+class ScatterAxis(FieldRef):
+    label: str | None = Field(default=None, max_length=200)
+    format: ValueFormat = Field(default_factory=ValueFormat)
+
+
 class ScatterCard(ChartBase):
     type: Literal["scatter"] = "scatter"
-    x: FieldRef
-    y: FieldRef
+    x: ScatterAxis
+    y: ScatterAxis
     limit: int = Field(default=100, ge=1, le=1000)
 
 

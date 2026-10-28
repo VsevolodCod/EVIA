@@ -7,6 +7,10 @@
 .generated-grid:has(.generated-kpi-card):has(.generated-line-card) .generated-line-card { grid-column: 2; }
 .generated-grid:has(.generated-kpi-card):has(.generated-line-card) .generated-kpi-card { grid-column: 1; grid-row: 1; }
 .generated-card { min-height: 210px; }
+.generated-view-switch { display: inline-flex; gap: 4px; margin: 2px 0 12px; padding: 4px; border: 1px solid #d9e6df; border-radius: 12px; background: #f5f9f6; }
+.generated-view-switch button { border: 0; border-radius: 8px; padding: 6px 12px; background: transparent; color: #3f6353; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.generated-view-switch button[aria-pressed="true"] { background: #087448; color: #fff; box-shadow: 0 2px 0 #075638; }
+.generated-view-switch button:focus-visible { outline: 2px solid #087448; outline-offset: 2px; }
 .generated-kpi-card { display: flex; flex-direction: column; justify-content: space-between; min-height: 170px; }
 .generated-kpi-card .chart-heading { margin-bottom: 20px; }
 .generated-value { color: #292e36; font-size: clamp(36px, 4vw, 58px); font-weight: 700; line-height: 1.1; letter-spacing: -.05em; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }

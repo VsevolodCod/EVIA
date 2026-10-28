@@ -73,3 +73,17 @@ it("switches an aggregated chart between bars and a line without changing its co
   expect(line.querySelectorAll('circle[aria-label*="₽"]')).toHaveLength(2);
   expect(screen.getByRole("button", { name: "Линия" })).toHaveAttribute("aria-pressed", "true");
 });
+
+it("shows declared units for KPI and both scatter axes", () => {
+  const kpi = { id: "kpi", type: "kpi" as const, title: "Выручка", status: "success" as const,
+    definition: { type: "kpi", field: { source_id: "sales", field: "revenue" }, aggregate: "sum",
+      format: { type: "currency", currency: "RUB", decimals: 2 } },
+    data: { value: 10, format: { type: "currency", currency: "RUB", decimals: 2 } } };
+  const scatter = { ...cards[1], data: { ...cards[1].data,
+    x: { field: "revenue", format: { type: "currency", currency: "RUB", decimals: 2 } },
+    y: { field: "cost", format: { type: "percent", decimals: 0 } } } };
+  render(<GeneratedDashboard dashboard={{ version: 1, title: "Панель", cards: [kpi, scatter] }} scope="units-test" />);
+  expect(screen.getByText(/10,00\s*₽/)).toBeInTheDocument();
+  const points = screen.getByRole("img", { name: /Связь показателей/ }).querySelectorAll("circle[data-point]");
+  expect(points[0].getAttribute("aria-label")).toMatch(/₽; 500\s*%/);
+});

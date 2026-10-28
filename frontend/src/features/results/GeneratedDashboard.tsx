@@ -58,6 +58,31 @@ function displayValue(value: unknown): string {
   return `${decimal[1]}${integer}${decimal[3] === undefined ? "" : `,${decimal[3]}`}`;
 }
 
+function axisFormat(card: Card, axis: "x" | "y"): unknown {
+  const data = object(card.data) ? card.data : null;
+  const definition = object(card.definition) ? card.definition : null;
+  const resultAxis = data && object(data[axis]) ? data[axis] : null;
+  const definedAxis = definition && object(definition[axis]) ? definition[axis] : null;
+  return resultAxis?.format ?? definedAxis?.format;
+}
+
+function formattedNumber(value: unknown, format: unknown): string {
+  const number = numeric(value);
+  if (number === null || !object(format)) return displayValue(value);
+  const decimals = typeof format.decimals === "number" && Number.isInteger(format.decimals)
+    ? Math.max(0, Math.min(6, format.decimals)) : 2;
+  const options: Intl.NumberFormatOptions = { minimumFractionDigits: decimals, maximumFractionDigits: decimals };
+  if (format.type === "integer") { options.minimumFractionDigits = 0; options.maximumFractionDigits = 0; }
+  if (format.type === "percent") options.style = "percent";
+  if (format.type === "currency" && typeof format.currency === "string") {
+    options.style = "currency";
+    options.currency = format.currency;
+    options.minimumFractionDigits = decimals;
+  }
+  try { return new Intl.NumberFormat("ru-RU", options).format(number); }
+  catch { return displayValue(value); }
+}
+
 function lineData(value: unknown): { points: Point[]; xLabel: string; yLabel: string } | null {
   if (!object(value) || !Array.isArray(value.points)) return null;
   const points = value.points.filter((item): item is Point =>
@@ -111,6 +136,7 @@ function calculationPassport(card: Card): { source: string; formula: string; per
 
 function ResultLine({ card, colors, gradient }: { card: Card; colors: string[]; gradient: boolean }) {
   const chart = lineData(card.data);
+  const format = axisFormat(card, "y");
   const gradientId = useId().replaceAll(":", "");
   if (!chart || !chart.points.length) return <p className="generated-empty">Нет точек для графика.</p>;
   const labels = [...new Set(chart.points.map((point) => String(point.x ?? "—")))];
@@ -134,7 +160,7 @@ function ResultLine({ card, colors, gradient }: { card: Card; colors: string[]; 
       <defs><linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1"><stop stopColor={colors[0]} stopOpacity=".2" /><stop offset="1" stopColor={colors[0]} stopOpacity="0" /></linearGradient></defs>
       {[0, .5, 1].map((step) => {
         const value = minimum + step * span;
-        return <g key={step}><line x1={left} x2={width - right} y1={y(value)} y2={y(value)} /><text x={left - 10} y={y(value) + 4} textAnchor="end">{Number(value.toFixed(2)).toLocaleString("ru-RU")}</text></g>;
+        return <g key={step}><line x1={left} x2={width - right} y1={y(value)} y2={y(value)} /><text x={left - 10} y={y(value) + 4} textAnchor="end">{formattedNumber(Number(value.toFixed(2)), format)}</text></g>;
       })}
       {plotted.map(({ name, color, points }, index) => {
         const positions = points.map((point) => [x(String(point.x ?? "—")), y(numeric(point.y) ?? 0)]);
@@ -143,7 +169,7 @@ function ResultLine({ card, colors, gradient }: { card: Card; colors: string[]; 
         return <g key={name}>
           {gradient && series.length === 1 && positions.length > 1 && <path d={`M ${positions[0][0]} ${baseline} L ${positions.map(([px, py]) => `${px} ${py}`).join(" L ")} L ${positions.at(-1)![0]} ${baseline} Z`} fill={`url(#${gradientId})`} />}
           <polyline points={line} fill="none" stroke={color} strokeWidth="3" strokeLinejoin="round" data-testid={`generated-series-${index}`} />
-          {points.map((point, pointIndex) => <circle key={`${point.x}-${pointIndex}`} cx={x(String(point.x ?? "—"))} cy={y(numeric(point.y) ?? 0)} r="4" fill={color} tabIndex={0} aria-label={`${point.x}: ${point.y}`}><title>{`${point.x}: ${point.y}`}</title></circle>)}
+          {points.map((point, pointIndex) => <circle key={`${point.x}-${pointIndex}`} cx={x(String(point.x ?? "—"))} cy={y(numeric(point.y) ?? 0)} r="4" fill={color} tabIndex={0} aria-label={`${point.x}: ${formattedNumber(point.y, format)}`}><title>{`${point.x}: ${formattedNumber(point.y, format)}`}</title></circle>)}
         </g>;
       })}
       {labels.filter((_, index) => index % Math.max(1, Math.ceil(labels.length / 6)) === 0).map((label) => <text key={label} x={x(label)} y={height - 13} textAnchor="middle">{label.length > 12 ? `${label.slice(0, 10)}…` : label}</text>)}
@@ -161,6 +187,7 @@ function LimitNote({ data, count, unit = "точек" }: { data: unknown; count:
 
 function ResultBar({ card, colors }: { card: Card; colors: string[] }) {
   const chart = lineData(card.data);
+  const format = axisFormat(card, "y");
   if (!chart || !chart.points.length) return <p className="generated-empty">Нет столбцов для графика.</p>;
   const values = chart.points.map(point => numeric(point.y)).filter((value): value is number => value !== null);
   if (!values.length) return <p className="generated-empty">Нет числовых значений для графика.</p>;
@@ -190,7 +217,7 @@ function ResultBar({ card, colors }: { card: Card; colors: string[] }) {
           const seriesIndex = hasSeries ? series.indexOf(seriesName(point)) : 0;
           return <rect key={index} data-bar="true" x={x(index) - barWidth / 2} y={topY} width={barWidth}
             height={Math.abs(y(value) - baseline)} fill={colors[Math.max(seriesIndex, 0) % colors.length]} rx="2" tabIndex={0}
-            aria-label={`${name}: ${point.y}`}><title>{`${name}: ${point.y}`}</title></rect>;
+            aria-label={`${name}: ${formattedNumber(point.y, format)}`}><title>{`${name}: ${formattedNumber(point.y, format)}`}</title></rect>;
         })}
         {chart.points.map((point, index) => index % stride === 0 && <text key={index} x={x(index)} y={height - 13} textAnchor="middle">
           {String(point.x ?? "—").slice(0, 12)}
@@ -206,6 +233,8 @@ function ResultBar({ card, colors }: { card: Card; colors: string[] }) {
 
 function ResultScatter({ card, color }: { card: Card; color: string }) {
   const chart = lineData(card.data);
+  const xFormat = axisFormat(card, "x");
+  const yFormat = axisFormat(card, "y");
   if (!chart || !chart.points.length) return <p className="generated-empty">Нет точек для диаграммы.</p>;
   const points = chart.points.flatMap(point => {
     const x = numeric(point.x); const y = numeric(point.y);
@@ -227,8 +256,8 @@ function ResultScatter({ card, color }: { card: Card; color: string }) {
       {points.map((point, index) => <circle key={index} data-point="true"
         cx={left + coordinate(point.x, xMin, xMax) * (width - left - right)}
         cy={height - bottom - coordinate(point.y, yMin, yMax) * (height - top - bottom)}
-        r="5" fill={color} fillOpacity=".75" tabIndex={0} aria-label={`${point.x}; ${point.y}`}>
-        <title>{`${point.x}; ${point.y}`}</title>
+        r="5" fill={color} fillOpacity=".75" tabIndex={0} aria-label={`${formattedNumber(point.x, xFormat)}; ${formattedNumber(point.y, yFormat)}`}>
+        <title>{`${formattedNumber(point.x, xFormat)}; ${formattedNumber(point.y, yFormat)}`}</title>
       </circle>)}
     </svg>
     <div className="generated-axis-label">X: {chart.xLabel} · Y: {chart.yLabel}</div>
@@ -244,6 +273,38 @@ function ResultTable({ card }: { card: Card }) {
     <LimitNote data={card.data} count={rows.length} unit="строк" />
     <DataTable rows={rows} columns={columns} label={card.title} />
   </>;
+}
+
+function GeneratedCard({ card, preference }: { card: Card; preference: PalettePreference }) {
+  const [view, setView] = useState<"line" | "bar">(card.type === "line" ? "line" : "bar");
+  useEffect(() => setView(card.type === "line" ? "line" : "bar"), [card.id, card.type]);
+  const grouped = card.status === "success" && (card.type === "line" || card.type === "bar");
+  const activeType = grouped ? view : card.type;
+  const passport = card.status === "success" ? calculationPassport(card) : null;
+  return <section className={`dashboard-card generated-card generated-${activeType}-card`}>
+    <div className="chart-heading"><h3>{card.title}</h3>{card.status === "success" && <small>{({ kpi: "Показатель", line: "Динамика", bar: "Сравнение", scatter: "Связь", table: "Таблица" } as const)[activeType]}</small>}</div>
+    {grouped && <div className="generated-view-switch" role="group" aria-label={`Вид графика «${card.title}»`}
+      title="Линия и столбцы показывают те же вычисленные группы. Точки и таблица требуют нового расчёта исходных строк.">
+      <button type="button" aria-pressed={view === "line"} onClick={() => setView("line")}>Линия</button>
+      <button type="button" aria-pressed={view === "bar"} onClick={() => setView("bar")}>Столбцы</button>
+    </div>}
+    {card.status === "error" ? <p className="generated-empty">Не удалось рассчитать эту карточку.</p>
+      : card.type === "kpi" && object(card.data) ? <strong className="generated-value">{formattedNumber(card.data.value,
+          card.data.format ?? (object(card.definition) ? card.definition.format : null))}</strong>
+        : activeType === "line" ? <ResultLine card={card} colors={preference.colors} gradient={preference.gradient} />
+          : activeType === "bar" ? <ResultBar card={card} colors={preference.colors} />
+            : activeType === "scatter" ? <ResultScatter card={card} color={preference.colors[0]} />
+              : activeType === "table" ? <ResultTable card={card} /> : null}
+    {passport && <details className="generated-passport">
+      <summary>Паспорт расчёта</summary>
+      <dl><div><dt>Формула</dt><dd>{passport.formula}</dd></div><div><dt>Источник</dt><dd>{passport.source}</dd></div><div><dt>Период</dt><dd>{passport.period}</dd></div>
+        {passport.filters.length > 0 && <div><dt>Фильтры</dt><dd>{passport.filters.join("; ")}</dd></div>}
+        {passport.grouping && <div><dt>Группировка</dt><dd>{passport.grouping}</dd></div>}
+        {passport.snapshot && <div><dt>Снимок данных</dt><dd>{passport.snapshot}</dd></div>}
+        {passport.schemaVersion !== undefined && <div><dt>Версия схемы</dt><dd>{passport.schemaVersion}</dd></div>}
+      </dl>
+    </details>}
+  </section>;
 }
 
 export function GeneratedDashboard({ dashboard, scope, sourceLabel }: { dashboard: Dashboard; scope: string; sourceLabel?: string }) {
@@ -268,27 +329,7 @@ export function GeneratedDashboard({ dashboard, scope, sourceLabel }: { dashboar
     </div>
     {showPalette && <PaletteEditor colors={preference.colors} gradient={preference.gradient} onChange={changePalette} onClose={() => setShowPalette(false)} />}
     <div className="generated-grid">
-      {dashboard.cards.map((card) => <section key={card.id} className={`dashboard-card generated-card generated-${card.type}-card`}>
-        <div className="chart-heading"><h3>{card.title}</h3>{card.status === "success" && <small>{({ kpi: "Показатель", line: "Динамика", bar: "Сравнение", scatter: "Связь", table: "Таблица" } as const)[card.type]}</small>}</div>
-        {card.status === "error" ? <p className="generated-empty">Не удалось рассчитать эту карточку.</p>
-          : card.type === "kpi" && object(card.data) ? <strong className="generated-value">{displayValue(card.data.value)}</strong>
-            : card.type === "line" ? <ResultLine card={card} colors={preference.colors} gradient={preference.gradient} />
-              : card.type === "bar" ? <ResultBar card={card} colors={preference.colors} />
-                : card.type === "scatter" ? <ResultScatter card={card} color={preference.colors[0]} />
-                  : card.type === "table" ? <ResultTable card={card} /> : null}
-        {card.status === "success" && (() => {
-          const passport = calculationPassport(card);
-          return passport ? <details className="generated-passport">
-            <summary>Паспорт расчёта</summary>
-            <dl><div><dt>Формула</dt><dd>{passport.formula}</dd></div><div><dt>Источник</dt><dd>{passport.source}</dd></div><div><dt>Период</dt><dd>{passport.period}</dd></div>
-              {passport.filters.length > 0 && <div><dt>Фильтры</dt><dd>{passport.filters.join("; ")}</dd></div>}
-              {passport.grouping && <div><dt>Группировка</dt><dd>{passport.grouping}</dd></div>}
-              {passport.snapshot && <div><dt>Снимок данных</dt><dd>{passport.snapshot}</dd></div>}
-              {passport.schemaVersion !== undefined && <div><dt>Версия схемы</dt><dd>{passport.schemaVersion}</dd></div>}
-            </dl>
-          </details> : null;
-        })()}
-      </section>)}
+      {dashboard.cards.map((card) => <GeneratedCard key={card.id} card={card} preference={preference} />)}
     </div>
   </div>;
 }

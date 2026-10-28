@@ -26,8 +26,10 @@ class ScatterImplementation(ChartImplementation):
         points = [{"x": normalize_sql_value(row[0]), "y": normalize_sql_value(row[1])}
                   for row in result.rows]
         return {
-            "x": {"field": card.x.field, "label": card.x.field, "type": "number"},
-            "y": {"field": card.y.field, "label": card.y.field, "type": "number"},
+            "x": {"field": card.x.field, "label": card.x.label or card.x.field,
+                  "type": "number", "format": card.x.format.model_dump(mode="json")},
+            "y": {"field": card.y.field, "label": card.y.label or card.y.field,
+                  "type": "number", "format": card.y.format.model_dump(mode="json")},
             "points": points,
             "limit": card.limit,
             "limit_reached": len(points) == card.limit,
