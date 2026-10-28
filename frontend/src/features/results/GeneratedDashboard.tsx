@@ -67,17 +67,45 @@ function axisFormat(card: Card, axis: "x" | "y"): unknown {
 }
 
 function formattedNumber(value: unknown, format: unknown): string {
-  const number = numeric(value);
-  if (number === null || !object(format)) return displayValue(value);
+  if (!object(format)) return displayValue(value);
   const decimals = typeof format.decimals === "number" && Number.isInteger(format.decimals)
     ? Math.max(0, Math.min(6, format.decimals)) : 2;
-  const options: Intl.NumberFormatOptions = { minimumFractionDigits: decimals, maximumFractionDigits: decimals };
-  if (format.type === "integer") { options.minimumFractionDigits = 0; options.maximumFractionDigits = 0; }
+  const places = format.type === "integer" ? 0 : decimals;
+  // Decimal query results arrive as strings so that the server does not lose
+  // precision. Keep all arithmetic in integers before adding display units.
+  if (typeof value === "string" && value.length < 1000) {
+    const parts = /^([+-]?)(\d+)(?:\.(\d+))?$/.exec(value.trim());
+    if (parts) {
+      const scale = (parts[3] ?? "").length;
+      let amount = BigInt(parts[2] + (parts[3] ?? ""));
+      if (format.type === "percent") amount *= 100n;
+      if (scale > places) {
+        const divisor = 10n ** BigInt(scale - places);
+        amount = (amount + divisor / 2n) / divisor;
+      } else amount *= 10n ** BigInt(places - scale);
+      const power = 10n ** BigInt(places);
+      const whole = (amount / power).toString().replace(/\B(?=(\d{3})+(?!\d))/g, "\u00a0");
+      const fraction = places ? `,${(amount % power).toString().padStart(places, "0")}` : "";
+      const rendered = `${parts[1] === "-" && amount !== 0n ? "−" : ""}${whole}${fraction}`;
+      if (format.type === "percent") return `${rendered}\u00a0%`;
+      if (format.type === "currency" && typeof format.currency === "string") {
+        try {
+          const unit = new Intl.NumberFormat("ru-RU", { style: "currency", currency: format.currency })
+            .formatToParts(0).find((part) => part.type === "currency")?.value ?? format.currency;
+          return `${rendered}\u00a0${unit}`;
+        } catch { return `${rendered}\u00a0${format.currency}`; }
+      }
+      return rendered;
+    }
+  }
+  if (typeof value === "string") return displayValue(value);
+  const number = numeric(value);
+  if (number === null) return displayValue(value);
+  const options: Intl.NumberFormatOptions = { minimumFractionDigits: places, maximumFractionDigits: places };
   if (format.type === "percent") options.style = "percent";
   if (format.type === "currency" && typeof format.currency === "string") {
     options.style = "currency";
     options.currency = format.currency;
-    options.minimumFractionDigits = decimals;
   }
   try { return new Intl.NumberFormat("ru-RU", options).format(number); }
   catch { return displayValue(value); }
@@ -140,7 +168,9 @@ function ResultLine({ card, colors, gradient }: { card: Card; colors: string[]; 
   const gradientId = useId().replaceAll(":", "");
   if (!chart || !chart.points.length) return <p className="generated-empty">Нет точек для графика.</p>;
   const labels = [...new Set(chart.points.map((point) => String(point.x ?? "—")))];
-  const series = [...new Set(chart.points.map((point) => point.series ?? ""))];
+  const hasSeries = object(card.definition) && object(card.definition.series);
+  const seriesName = (point: Point) => point.series == null || point.series === "" ? "Нет значения" : String(point.series);
+  const series = hasSeries ? [...new Set(chart.points.map(seriesName))] : [""];
   const values = chart.points.map((point) => numeric(point.y)).filter((value): value is number => value !== null);
   if (!values.length) return <p className="generated-empty">Нет числовых значений для графика.</p>;
   const width = 720; const height = 260; const left = 54; const right = 16; const top = 18; const bottom = 42;
@@ -150,7 +180,7 @@ function ResultLine({ card, colors, gradient }: { card: Card; colors: string[]; 
   const y = (value: number) => top + ((height - top - bottom) * (maximum - value)) / span;
   const plotted = series.map((name, index) => ({
     name, color: colors[index % colors.length],
-    points: chart.points.filter((point) => (point.series ?? "") === name && numeric(point.y) !== null),
+    points: chart.points.filter((point) => (!hasSeries || seriesName(point) === name) && numeric(point.y) !== null),
   }));
   return <>
     {object(card.data) && card.data.limit_reached === true && <p className="generated-limit-note">
@@ -160,7 +190,7 @@ function ResultLine({ card, colors, gradient }: { card: Card; colors: string[]; 
       <defs><linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1"><stop stopColor={colors[0]} stopOpacity=".2" /><stop offset="1" stopColor={colors[0]} stopOpacity="0" /></linearGradient></defs>
       {[0, .5, 1].map((step) => {
         const value = minimum + step * span;
-        return <g key={step}><line x1={left} x2={width - right} y1={y(value)} y2={y(value)} /><text x={left - 10} y={y(value) + 4} textAnchor="end">{formattedNumber(Number(value.toFixed(2)), format)}</text></g>;
+        return <g key={step}><line x1={left} x2={width - right} y1={y(value)} y2={y(value)} /><text x={left - 10} y={y(value) + 4} textAnchor="end">{formattedNumber(value, format)}</text></g>;
       })}
       {plotted.map(({ name, color, points }, index) => {
         const positions = points.map((point) => [x(String(point.x ?? "—")), y(numeric(point.y) ?? 0)]);
@@ -169,7 +199,7 @@ function ResultLine({ card, colors, gradient }: { card: Card; colors: string[]; 
         return <g key={name}>
           {gradient && series.length === 1 && positions.length > 1 && <path d={`M ${positions[0][0]} ${baseline} L ${positions.map(([px, py]) => `${px} ${py}`).join(" L ")} L ${positions.at(-1)![0]} ${baseline} Z`} fill={`url(#${gradientId})`} />}
           <polyline points={line} fill="none" stroke={color} strokeWidth="3" strokeLinejoin="round" data-testid={`generated-series-${index}`} />
-          {points.map((point, pointIndex) => <circle key={`${point.x}-${pointIndex}`} cx={x(String(point.x ?? "—"))} cy={y(numeric(point.y) ?? 0)} r="4" fill={color} tabIndex={0} aria-label={`${point.x}: ${formattedNumber(point.y, format)}`}><title>{`${point.x}: ${formattedNumber(point.y, format)}`}</title></circle>)}
+          {points.map((point, pointIndex) => <circle key={`${point.x}-${pointIndex}`} cx={x(String(point.x ?? "—"))} cy={y(numeric(point.y) ?? 0)} r="4" fill={color} tabIndex={0} aria-label={`${point.x}${hasSeries ? ` · ${seriesName(point)}` : ""}: ${formattedNumber(point.y, format)}`}><title>{`${point.x}${hasSeries ? ` · ${seriesName(point)}` : ""}: ${formattedNumber(point.y, format)}`}</title></circle>)}
         </g>;
       })}
       {labels.filter((_, index) => index % Math.max(1, Math.ceil(labels.length / 6)) === 0).map((label) => <text key={label} x={x(label)} y={height - 13} textAnchor="middle">{label.length > 12 ? `${label.slice(0, 10)}…` : label}</text>)}
