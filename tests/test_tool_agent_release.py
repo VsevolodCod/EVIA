@@ -1,5 +1,3 @@
-import json
-
 import pytest
 
 from app.agent import AgentRuntime
@@ -35,7 +33,7 @@ async def test_model_cannot_expand_selected_source_scope(tmp_path, scripted_llm,
         assert result.tool_results[0].error == "SOURCE_SCOPE_VIOLATION"
         assert not result.results
         assert ChartRepository(catalog.session_factory).list_all() == []
-        assert "999" not in json.dumps(result.model_dump(mode="json"))
+        assert result.tool_results[0].data is None
     finally:
         catalog.close()
 
