@@ -21,6 +21,22 @@ it("continues the requested chat and rejects a response from another chat", asyn
   await expect(api.chat("next", "source-A", "chat-A")).rejects.toThrow("другого диалога");
 });
 
+it("sends a dashboard id only when the user attached a saved report", async () => {
+  const fetcher = vi.fn().mockResolvedValue(Response.json({ answer: "ok", chat_id: "chat-A", steps: 1, tool_results: [] }));
+  vi.stubGlobal("fetch", fetcher);
+  await api.chat("Поясни отчёт", "source-A", "chat-A", undefined, "report-1");
+  expect(fetcher).toHaveBeenCalledWith("/agent/chat?chat_id=chat-A", expect.objectContaining({
+    body: JSON.stringify({ question: "Поясни отчёт", source_ids: ["source-A"], dashboard_id: "report-1" }),
+  }));
+});
+
+it("requests the next page of saved report ids", async () => {
+  const fetcher = vi.fn().mockResolvedValue(Response.json({ dashboard_ids: [] }));
+  vi.stubGlobal("fetch", fetcher);
+  await api.dashboardIds(undefined, 100);
+  expect(fetcher).toHaveBeenCalledWith("/dashboards/ids?limit=100&offset=100", expect.any(Object));
+});
+
 it("keeps a future stored-analysis envelope readable without inventing results", () => {
   const message: ChatMessage = {
     message_id: "old-answer", role: "assistant", content: "Старый ответ", created_at: "2026-10-25T10:00:00Z",

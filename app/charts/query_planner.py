@@ -11,6 +11,8 @@ from app.charts.errors import (
 )
 from app.charts.models import (
     Aggregate,
+    ScatterCard,
+    TableCard,
     ChartDefinition,
     DashboardFilter,
     FieldRef,
@@ -269,6 +271,14 @@ class QueryPlanner:
 
             aggregate = definition.y.aggregate
 
+        elif isinstance(definition, ScatterCard):
+            refs = [definition.x, definition.y]
+            aggregate = None
+
+        elif isinstance(definition, TableCard):
+            refs = definition.fields
+            aggregate = None
+
         else:
             raise UnsupportedTypeError(
                 f"Unsupported chart type: "
@@ -300,6 +310,11 @@ class QueryPlanner:
             y_field = resolved_fields[1]
             self._validate_aggregate(aggregate, y_field)
 
+            if definition.x.time_grain is not None and not self._is_type(
+                resolved_fields[0].inferred_type, {"date", "datetime", "timestamp"},
+            ):
+                raise UnsupportedTypeError("Time grouping requires a typed date or timestamp field")
+
             if aggregate != "count":
                 if not self._is_type(
                     y_field.inferred_type,
@@ -309,6 +324,14 @@ class QueryPlanner:
                         f"Line chart requires a numeric Y field; "
                         f"'{y_field.field_name}' has type "
                         f"'{y_field.inferred_type}'"
+                    )
+
+        elif isinstance(definition, ScatterCard):
+            for axis, field in zip(("X", "Y"), resolved_fields):
+                if not self._is_type(field.inferred_type, NUMERIC_TYPES):
+                    raise UnsupportedTypeError(
+                        f"Scatter chart requires a numeric {axis} field; "
+                        f"'{field.field_name}' has type '{field.inferred_type}'"
                     )
 
         return QueryPlan(

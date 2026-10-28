@@ -23,6 +23,7 @@ class ChatORM(ChatBase):
     __tablename__ = "chats"
 
     chat_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    owner_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     # No foreign key: archived analyses remain readable after source removal.
     source_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
     title: Mapped[str] = mapped_column(

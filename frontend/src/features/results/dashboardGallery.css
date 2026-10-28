@@ -1,0 +1,38 @@
+.dashboard-gallery { display: grid; align-content: start; gap: 24px; min-width: 0; }
+.dashboard-gallery-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+.dashboard-gallery-heading > div:first-child { min-width: 0; }
+.dashboard-gallery-heading span { color: #31835d; font-size: 12px; font-weight: 750; }
+.dashboard-gallery-heading h1 { margin: 6px 0 8px; color: #123b2c; font-size: clamp(27px, 2.4vw, 37px); letter-spacing: -.035em; }
+.dashboard-gallery-heading p { color: #687e70; font-size: 14px; line-height: 1.5; }
+.dashboard-gallery-actions { display: flex; gap: 8px; flex: none; }
+.dashboard-gallery-actions button { min-height: 40px; padding: 9px 13px; border: 1px solid #d1e4d6; border-bottom-width: 3px; border-radius: 10px; background: #fff; color: #146c4b; font-size: 12px; font-weight: 750; }
+.dashboard-gallery-actions button:hover { background: #edf8f1; }
+.dashboard-gallery-status { color: #6a7d72; font-size: 13px; }
+.dashboard-gallery-empty { padding: 38px; border: 1px dashed #cfe4d6; border-radius: 18px; background: #f4fbf6; }
+.dashboard-gallery-empty h2 { font-size: 20px; }
+.dashboard-gallery-empty p { margin-top: 9px; color: #677b6e; font-size: 14px; line-height: 1.5; }
+.dashboard-gallery-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+.dashboard-gallery-list button { display: flex; align-items: center; gap: 13px; min-width: 0; min-height: 90px; padding: 15px; border: 1px solid #dbe9df; border-bottom-width: 3px; border-radius: 15px; background: #fff; text-align: left; box-shadow: 0 7px 22px #143d2808; }
+.dashboard-gallery-list button:hover,.dashboard-gallery-list button.selected { border-color: #85caa5; background: #eff9f2; }
+.dashboard-gallery-list button > span:nth-child(2) { flex: 1; min-width: 0; }
+.dashboard-gallery-list strong,.dashboard-gallery-list small { display: block; }
+.dashboard-gallery-list strong { color: #193f2c; font-size: 15px; overflow-wrap: anywhere; }
+.dashboard-gallery-list small { margin-top: 5px; color: #6d8173; font-size: 12px; line-height: 1.4; }
+.dashboard-gallery-tile { display: grid; place-items: center; width: 42px; height: 42px; flex: none; border-radius: 11px; background: #dff3e6; color: #128156; font-size: 22px !important; }
+.dashboard-gallery-list button > span:last-child { color: #2f7954; font-size: 20px; }
+.dashboard-gallery-open { display: grid; gap: 14px; }
+.dashboard-gallery-attach { justify-self: start; min-height: 44px; padding: 11px 17px; border: 2px solid #20a468; border-radius: 12px; background: #3bd58b; box-shadow: 0 4px 0 #20a468; color: #073c27; font-size: 13px; font-weight: 800; }
+.dashboard-gallery-attach:active { transform: translateY(3px); box-shadow: 0 1px 0 #20a468; }
+@media (max-width: 640px) {
+  .dashboard-gallery { gap: 17px; }
+  .dashboard-gallery-heading { display: grid; gap: 14px; }
+  .dashboard-gallery-heading h1 { font-size: 25px; }
+  .dashboard-gallery-heading p { font-size: 12px; }
+  .dashboard-gallery-actions { flex-wrap: wrap; }
+  .dashboard-gallery-list { grid-template-columns: 1fr; gap: 9px; }
+  .dashboard-gallery-list button { min-height: 74px; }
+  .dashboard-gallery-empty { padding: 25px; }
+}
+.app[data-theme="dark"] .dashboard-gallery-heading h1,.app[data-theme="dark"] .dashboard-gallery-list strong { color: #e7f2eb; }
+.app[data-theme="dark"] .dashboard-gallery-list button,.app[data-theme="dark"] .dashboard-gallery-actions button,.app[data-theme="dark"] .dashboard-gallery-empty { background: #192a31; border-color: #315057; color: #e7f2eb; }
+.app[data-theme="dark"] .dashboard-gallery-list button.selected { background: #1c4032; }

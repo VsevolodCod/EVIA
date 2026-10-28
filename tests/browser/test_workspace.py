@@ -98,7 +98,9 @@ def test_real_workspace_keyboard_mobile_and_safe_markdown(server):
             chat_id = parse_qs(urlparse(sent.value.url).query)['chat_id'][0]
             expect(page.get_by_role('region', name='Ответ EVIA').get_by_text('Тестовый режим показал первые строки выбранного источника.', exact=False)).to_be_visible()
             assert page.locator('.history-list').evaluate('(node) => node.scrollWidth <= node.clientWidth')
-            page.get_by_role('button', name='Результаты инструментов', exact=True).click()
+            page.get_by_role('button', name='Открыть результат', exact=True).click()
+            expect(page.get_by_role('region', name='Таблица результата').get_by_text('0001', exact=True)).to_be_visible()
+            page.get_by_text('Таблица и детали расчёта', exact=True).click()
             expect(page.get_by_role('region', name='Результат preview_data').get_by_text('0001', exact=True)).to_be_visible()
             # Server source binding and the complete tool result survive without the old browser cache.
             page.evaluate("localStorage.removeItem('evia.chat-sources.v1')")
@@ -106,7 +108,8 @@ def test_real_workspace_keyboard_mobile_and_safe_markdown(server):
             page.get_by_role('button', name='sales', exact=True).click()
             page.get_by_role('button', name=first_question.strip()).click()
             expect(page.get_by_role('region', name='Ответ EVIA').get_by_text('Тестовый режим показал первые строки выбранного источника.', exact=False)).to_be_visible()
-            page.get_by_role('button', name='Результаты инструментов', exact=True).click()
+            page.get_by_role('button', name='Открыть результат', exact=True).click()
+            page.get_by_text('Таблица и детали расчёта', exact=True).click()
             expect(page.get_by_role('region', name='Результат preview_data').get_by_text('0001', exact=True)).to_be_visible()
             page.screenshot(path=str(artifacts / 'desktop.png'), full_page=True)
 
@@ -137,7 +140,7 @@ def test_real_workspace_keyboard_mobile_and_safe_markdown(server):
             expect(page.locator('.markdown pre code')).to_contain_text('SELECT 1')
             expect(page.locator('.markdown img, .markdown script, .markdown a')).to_have_count(0)
             assert page.evaluate('window.pwned') is None
-            page.get_by_role('button', name='Результаты инструментов', exact=True).last.click()
+            page.get_by_role('button', name='Открыть результат', exact=True).last.click()
             expect(page.get_by_text('Нет строк для отображения', exact=True)).to_be_visible()
             page.set_viewport_size({'width': 390, 'height': 844})
             page.get_by_role('button', name='Чат').click()
@@ -170,14 +173,14 @@ def test_profile_overview_drilldown_search_and_responsive_layout(server):
                            'Север,1500,Сайт\n,600,Магазин\nЗапад,900,Сайт\nВосток,1100,\n').encode(),
             })
             expect(page.get_by_role('heading', name='retail-demo')).to_be_visible()
-            expect(page.get_by_text('6 строк обработано', exact=True)).to_be_visible()
-            expect(page.get_by_text('Профиль покрывает весь датасет', exact=True)).to_be_visible()
+            expect(page.locator('.kpi-grid .dashboard-card').first).to_contain_text('6')
+            expect(page.get_by_text('Заполненность источника', exact=True)).to_be_visible()
             expect(page.get_by_role('textbox', name='Ваш вопрос')).to_be_in_viewport()
             page.screenshot(path=str(artifacts / 'analytics-overview-desktop.png'), full_page=True)
             for width in [1280, 1024, 768, 390]:
                 page.set_viewport_size({'width': width, 'height': 844})
                 assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), f'Overflow at {width}px'
-            page.get_by_role('button', name='Аналитика').click()
+            page.get_by_role('button', name='Рабочее пространство').click()
             expect(page.get_by_role('navigation', name='Разделы источника')).to_be_visible()
             page.screenshot(path=str(artifacts / 'analytics-overview-mobile.png'), full_page=True)
             page.set_viewport_size({'width': 1440, 'height': 1000})
@@ -199,19 +202,21 @@ def test_profile_overview_drilldown_search_and_responsive_layout(server):
             expect(page.get_by_role('region', name='Предпросмотр источника').get_by_text('1200', exact=True)).to_be_visible()
             page.get_by_role('textbox', name='Ваш вопрос').fill('Какие данные доступны?')
             page.get_by_role('button', name='Отправить вопрос').click()
-            page.get_by_role('button', name='Результаты инструментов', exact=True).click()
+            page.get_by_role('button', name='Открыть результат', exact=True).click()
             expect(page.get_by_role('heading', name='Результат анализа')).to_be_visible()
-            expect(page.get_by_role('region', name='Вывод EVIA')).to_contain_text('Тестовый режим')
+            expect(page.get_by_role('main').get_by_text('Тестовый режим', exact=False)).to_have_count(0)
+            page.get_by_role('button', name='Открыть ответ в чате').click()
+            expect(page.get_by_role('region', name='Ответ EVIA')).to_contain_text('Тестовый режим')
             page.screenshot(path=str(artifacts / 'analytics-result-desktop.png'), full_page=True)
             # Reload and choose the same persisted source: the overview uses the same real profile.
             page.reload()
             page.get_by_role('button', name='retail-demo', exact=True).click()
-            expect(page.get_by_text('6 строк обработано', exact=True)).to_be_visible()
+            expect(page.locator('.kpi-grid .dashboard-card').first).to_contain_text('6')
             # New data must clear both search context and old profile immediately.
             page.get_by_label('Загрузить CSV').set_input_files({
                 'name': 'second.csv', 'mimeType': 'text/csv', 'buffer': b'id\n1\n2\n',
             })
-            expect(page.get_by_text('2 строки обработано', exact=True)).to_be_visible()
+            expect(page.locator('.kpi-grid .dashboard-card').first).to_contain_text('2')
             page.get_by_role('button', name='Столбцы', exact=True).click()
             expect(page.get_by_role('searchbox', name='Поиск столбца')).to_have_value('')
             expect(page.get_by_role('region', name='Столбец id')).to_be_visible()

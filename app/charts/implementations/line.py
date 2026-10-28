@@ -9,24 +9,29 @@ from app.charts.aggregation import (
     where_clause,
 )
 from app.charts.implementations.base import ChartImplementation
-from app.charts.models import ChartDefinition, DashboardFilter, LineCard
+from app.charts.models import BarCard, ChartDefinition, DashboardFilter, LineCard
 
 
 class LineImplementation(ChartImplementation):
     def supports(self, card: ChartDefinition) -> bool:
-        return isinstance(card, LineCard)
+        return isinstance(card, LineCard) and card.type == "line"
 
     def execute(
         self,
         card: ChartDefinition,
         filters: list[DashboardFilter],
     ) -> dict[str, Any]:
-        if not isinstance(card, LineCard):
+        if not isinstance(card, (LineCard, BarCard)):
             raise TypeError("LineImplementation only supports line cards")
 
         plan = self.planner.plan(card, filters)
 
         x_field = quote_identifier(card.x.field)
+        if card.x.time_grain is not None:
+            # The unit is a validated enum, never a model-supplied SQL fragment.
+            # DATE_TRUNC works in both DuckDB and PostgreSQL. Group on the full
+            # bucket start, so quarters/months from different years stay apart.
+            x_field = f"DATE_TRUNC('{card.x.time_grain}', {x_field})"
         y_expression = aggregate_expression(
             card.y.aggregate,
             card.y.field,
@@ -89,6 +94,7 @@ class LineImplementation(ChartImplementation):
                 "field": card.x.field,
                 "label": card.x.label or card.x.field,
                 "type": card.x.type,
+                "time_grain": card.x.time_grain,
             },
             "y": {
                 "field": card.y.field,
@@ -100,6 +106,7 @@ class LineImplementation(ChartImplementation):
                 card.series.field if card.series is not None else None
             ),
             "points": points,
+            "source_id": plan.source_id,
             "limit": card.limit,
             # Это флаг достижения лимита, а не доказательство
             # наличия дополнительных точек.

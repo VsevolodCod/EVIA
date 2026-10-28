@@ -17,7 +17,6 @@ import { ProfileQuality } from "./ProfileQuality";
 import {
   numberText,
   profileModel,
-  sampleDescription,
   typeLabel,
 } from "./profileModel";
 import "./analytics.css";
@@ -34,15 +33,7 @@ const views: [View, string][] = [
   ["quality", "Качество"],
   ["preview", "Данные"],
   ["schema", "Схема"],
-  ["results", "Результат"],
 ];
-
-function previewLabel(type: string, count: number) {
-  const remainder = Math.abs(count) % 100;
-  const lastDigit = remainder % 10;
-  const noun = remainder > 10 && remainder < 20 ? "строк" : lastDigit === 1 ? "строка" : lastDigit > 1 && lastDigit < 5 ? "строки" : "строк";
-  return `${type.toUpperCase()} · ${numberText(count)} ${noun}`;
-}
 
 function sourceRowCount(schema: SourceSchema) {
   return schema.objects.reduce<number | null>((total, object) =>
@@ -55,12 +46,14 @@ export function SourceInspector({
   entry,
   view,
   setView,
+  onOpenChat,
   onReimport,
 }: {
   source: Source;
   entry?: Entry;
   view: View;
   setView: (view: View) => void;
+  onOpenChat?: () => void;
   onReimport?: (file: File, sourceId: string) => void;
 }) {
   const [data, setData] = useState<SourceData | null>(null);
@@ -136,9 +129,13 @@ export function SourceInspector({
 
   return (
     <div className="analytics-workspace">
-      <div className="mobile-source-context">
-        <strong>{source.name}</strong>
-        <span>{source.source_type.toUpperCase()} · {current ? numberText(sourceRowCount(current.schema) ?? current.rows.length) : "…"} строк</span>
+      <div className="source-workspace-heading">
+        <div className="source-workspace-identity">
+          <h1>{source.name}</h1>
+        </div>
+        <button className="source-refresh" type="button" onClick={() => setRevision((value) => value + 1)}>
+          <Icon name="refresh" size={16} /> Обновить
+        </button>
       </div>
       <nav className="analytics-tabs" aria-label="Разделы источника">
         {views.map(([id, label]) => (
@@ -156,51 +153,11 @@ export function SourceInspector({
             )}
           </button>
         ))}
+        {view === "results" && <button aria-pressed="true" onClick={() => setView("results")}>Результат анализа</button>}
       </nav>
-      {view !== "overview" && <div className="analysis-heading">
-        <div>
-          <p className="analytics-kicker">ИССЛЕДОВАНИЕ ДАННЫХ</p>
-          <h1>{source.name}</h1>
-          <p className="source-line">
-            <span className="status-dot" />
-            {source.source_type.toUpperCase()} ·{" "}
-            {source.status === "available" ? "Доступен" : source.status}
-          </p>
-        </div>
-        <button
-          className="icon-button"
-          aria-label="Обновить данные источника"
-          onClick={() => setRevision((value) => value + 1)}
-        >
-          <Icon name="refresh" />
-        </button>
-      </div>}
-      {view !== "overview" && <div className="analytics-metrics" aria-label="Сведения об источнике">
-        <div>
-          <span>Строк в источнике</span>
-          <strong>
-            {model?.totalRows == null ? "—" : numberText(model.totalRows)}
-          </strong>
-          <small>Полный датасет</small>
-        </div>
-        <div>
-          <span>Столбцов</span>
-          <strong>{model ? numberText(model.fields.length) : "—"}</strong>
-          <small>В схеме источника</small>
-        </div>
-        <div>
-          <span>{current?.profile?.coverage === "full" ? "Строк обработано" : "Строк изучено"}</span>
-          <strong>
-            {current?.profile
-              ? numberText(current.profile.coverage === "full" ? current.profile.processed_rows : current.profile.sample_size)
-              : "—"}
-          </strong>
-          <small>{current?.profile?.coverage === "full" ? "Полный датасет" : "Для профиля выборки"}</small>
-        </div>
-      </div>}
       <section className="analytics-report" aria-label="Исследование данных">
         {view === "results" ? (
-          <AnalysisResult entry={entry} />
+          <AnalysisResult entry={entry} onOpenChat={onOpenChat} />
         ) : error ? (
           <div className="pane-padding">
             <ErrorNotice
@@ -216,30 +173,16 @@ export function SourceInspector({
           </div>
         ) : (
           <>
-            {current.profile && model && ["profile", "quality"].includes(view) && (
-              <div className="profile-scope">
-                <span className="scope-dot" aria-hidden="true" />
-                <p>
-                  {current.profile.coverage === "full"
-                    ? "Статистика по всему датасету"
-                    : sampleDescription(current.profile)}
-                  <small>
-                    {current.profile.coverage === "full"
-                      ? <><span>Обработано {numberText(current.profile.processed_rows)} строк</span>. Точные показатели рассчитаны по всем строкам; частые значения — по выборке из {numberText(current.profile.sample_size)} строк.</>
-                      : "Статистика относится к выборке, а не ко всему источнику."}
-                  </small>
-                </p>
-              </div>
-            )}
             {view === "overview" ? (
               <Dashboard
-                title={source.name}
-                sourceLabel={previewLabel(source.source_type, current.rows.length)}
+                title="Обзор источника"
+                sourceLabel={source.name}
                 scope={source.source_id}
                 schema={current.schema}
                 rows={current.rows}
                 profile={current.profile}
                 fullSourceRows={sourceRowCount(current.schema)}
+                onOpenData={() => setView("preview")}
               />
             ) : view === "profile" ? (
               model ? <ProfileColumns
@@ -288,12 +231,7 @@ export function SourceInspector({
                 <div className="pane-heading">
                   <div>
                     <h2>Предпросмотр данных</h2>
-                    <p>
-                      Первые {numberText(current.rows.length)} строк · максимум
-                      100
-                    </p>
                   </div>
-                  <Icon name="grid" />
                 </div>
                 <DataTable
                   rows={current.rows}
@@ -307,17 +245,9 @@ export function SourceInspector({
               <div className="analytics-section">
                 <div className="analytics-title">
                   <div>
-                    <span className="analytics-kicker">
-                      УСТРОЙСТВО ДАТАСЕТА
-                    </span>
                     <h2>Структура источника</h2>
                   </div>
                 </div>
-                <p className="analytics-caption">
-                  {source.import_report
-                    ? "Типы определены по всему файлу. Исходные значения сохранены."
-                    : "Типы определены автоматически по выборке."}
-                </p>
                 {source.import_report && <details className="csv-import-details">
                   <summary>Отчёт об импорте</summary>
                   <p>Принято {numberText(source.import_report.accepted_rows)} из {numberText(source.import_report.rows_read)} строк · отклонено {numberText(source.import_report.rejected_rows)}</p>

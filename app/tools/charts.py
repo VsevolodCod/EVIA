@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, get_args, get_origin
 
-from pydantic import BaseModel, Field, TypeAdapter, create_model
+from pydantic import BaseModel, Field, create_model
 
 from app.charts.executor import ChartExecutor
 from app.charts.models import (
@@ -239,14 +239,13 @@ def register_chart_tools(
         Затем выполняем его через ChartExecutor.
         """
 
-        definition = payload["definition"]
-        filters = payload.get("filters", [])
-
-        # ChartDefinition уже валидируется Pydantic-схемой инструмента,
-        # но повторная проверка защищает от прямых вызовов handler.
-        parsed_definition = TypeAdapter(
-            ChartDefinition
-        ).validate_python(definition)
+        # The registry checks argument names, not nested types. Validate the
+        # whole payload and persist every condition used for the first build;
+        # otherwise reopening a chart silently broadens it to the full source.
+        args = build_args_model.model_validate(payload)
+        parsed_definition = args.definition.model_copy(update={
+            "filters": [*args.definition.filters, *args.filters],
+        })
 
         chart = charts.create_from_definition(
             parsed_definition.model_dump(mode="json")
@@ -254,8 +253,7 @@ def register_chart_tools(
 
         try:
             result = executor.execute(
-                chart_id=chart.chart_id,
-                filters=filters,
+                chart_id=chart.id,
             )
         except Exception:
             # A failed attempt must not leave an artifact that a retry can add

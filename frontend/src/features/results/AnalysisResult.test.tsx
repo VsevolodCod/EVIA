@@ -2,7 +2,8 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { AnalysisResult } from "./AnalysisResult";
 
 it("builds a dashboard from one successful tabular tool result", () => {
-  render(<AnalysisResult entry={{
+  const openChat = vi.fn();
+  render(<AnalysisResult onOpenChat={openChat} entry={{
     id: "answer-1",
     question: "Как менялись продажи?",
     state: "success",
@@ -22,11 +23,22 @@ it("builds a dashboard from one successful tabular tool result", () => {
 
   expect(screen.getByRole("heading", { name: "Результат анализа" })).toBeInTheDocument();
   expect(screen.getByText("Строк в результате")).toBeInTheDocument();
+  expect(screen.queryByText("Рассчитано по источнику")).not.toBeInTheDocument();
   expect(screen.getByText("Ответ инструмента")).toBeInTheDocument();
-  expect(screen.getByText("В ответе инструмента: 2 строки")).toBeInTheDocument();
+  expect(screen.queryByText("В ответе инструмента: 2 строки")).not.toBeInTheDocument();
   expect(screen.queryByText(/предпросмотре источника/)).not.toBeInTheDocument();
   expect(screen.getByRole("img", { name: /Динамика по полю month/ })).toBeInTheDocument();
-  expect(screen.getByText("Продажи растут.")).toBeInTheDocument();
+  expect(screen.queryByText("Продажи растут.")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Открыть ответ в чате" }));
+  expect(openChat).toHaveBeenCalledOnce();
+});
+
+it("keeps the answer in the result view when no visual result exists", () => {
+  render(<AnalysisResult entry={{ id: "text", question: "Что изменилось?", state: "success", answer: {
+    answer: "Продажи выросли.", steps: 1, tool_results: [],
+  } }} />);
+  expect(screen.getByText("Продажи выросли.")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Открыть ответ в чате" })).not.toBeInTheDocument();
 });
 
 it("builds a dashboard from the QueryResult container returned by query_data", () => {
@@ -51,6 +63,21 @@ it("builds a dashboard from the QueryResult container returned by query_data", (
   expect(screen.getByRole("img", { name: /Распределение поля revenue/ })).toBeInTheDocument();
 });
 
+it("shows a chart returned by the current build_chart tool", () => {
+  render(<AnalysisResult entry={{
+    id: "chart-answer", question: "Построй график", state: "success",
+    answer: { answer: "График готов.", steps: 1, tool_results: [{
+      tool_name: "build_chart", ok: true,
+      data: { success: true, chart_id: "chart-1", chart_type: "kpi",
+        definition: { type: "kpi", title: "Выручка", field: { source_id: "sales", field: "revenue" }, aggregate: "sum" },
+        result: { value: 30 } },
+    }] },
+  }} />);
+  expect(screen.getAllByRole("heading", { name: "Выручка" })).toHaveLength(2);
+  expect(screen.getByText("30")).toBeInTheDocument();
+  expect(screen.queryByText("chart_id", { exact: false })).not.toBeInTheDocument();
+});
+
 it("distinguishes computed SQL from a demo answer", () => {
   const entry = {
     id: "computed", question: "Сколько заказов?", state: "success" as const,
@@ -63,7 +90,7 @@ it("distinguishes computed SQL from a demo answer", () => {
     },
   };
   const { rerender } = render(<AnalysisResult entry={entry} />);
-  expect(screen.getByText("Рассчитано по источнику")).toBeInTheDocument();
+  expect(screen.queryByText("Рассчитано по источнику")).not.toBeInTheDocument();
   expect(screen.getByText("SELECT COUNT(*) AS orders FROM source")).toBeInTheDocument();
   rerender(<AnalysisResult entry={{ ...entry, answer: { answer: "Тестовый ответ", steps: 1, answer_kind: "demo", tool_results: [] } }} />);
   expect(screen.getByText("Демо-ответ")).toBeInTheDocument();
@@ -73,9 +100,9 @@ it("distinguishes computed SQL from a demo answer", () => {
   rerender(<AnalysisResult entry={{ ...entry, answer: { answer: "Уточните вопрос", steps: 1, status: "clarification", tool_results: [] } }} />);
   expect(screen.getByText("Нужно уточнение")).toBeInTheDocument();
   rerender(<AnalysisResult entry={{ ...entry, answer: { answer: "Старый ответ", steps: 0, tool_results: [] } }} />);
-  expect(screen.getByText("Ответ из истории")).toBeInTheDocument();
+  expect(screen.queryByText("Ответ из истории")).not.toBeInTheDocument();
   rerender(<AnalysisResult entry={{ ...entry, answer: { answer: "orders: 2", steps: 1, answer_kind: "model", tool_results: entry.answer.tool_results } }} />);
-  expect(screen.getByText("Рассчитано по данным")).toBeInTheDocument();
+  expect(screen.queryByText("Рассчитано по данным")).not.toBeInTheDocument();
 });
 
 it("shows a single computed timestamp as a result instead of an empty dashboard", () => {
@@ -149,7 +176,7 @@ it("renders a computed dashboard with KPI, line, colors and PDF export", () => {
     expect(screen.getByText("2026-01")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Цвета" }));
     expect(screen.getByText("Цвета графиков")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Экспорт PDF" }));
+    fireEvent.click(screen.getByRole("button", { name: "Печать / PDF" }));
     expect(print).toHaveBeenCalledOnce();
     expect(screen.queryByText(/\"version\"/)).not.toBeInTheDocument();
   } finally {

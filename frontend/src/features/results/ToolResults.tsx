@@ -2,6 +2,7 @@ import type { Row, ToolResult } from "../../api";
 import { Icon } from "../../components/Icon";
 import { ResultVisualization } from "./ResultVisualization";
 import { csvTableFrom, downloadCsv } from "./csvExport";
+import type { ChartColumn } from "./resultChartModel";
 
 const titles: Record<string, string> = {
   list_sources: "Источники данных",
@@ -12,6 +13,17 @@ const titles: Record<string, string> = {
   run_sql: "Результат расчёта",
 };
 const exportableTools = new Set(["query_data", "run_sql", "execute_sql"]);
+
+function chartColumns(data: unknown): ChartColumn[] | undefined {
+  if (!data || typeof data !== "object" || !("columns" in data) || !Array.isArray(data.columns)) return undefined;
+  return data.columns.flatMap((column: unknown) => {
+    if (!column || typeof column !== "object" || !("name" in column) || typeof column.name !== "string") return [];
+    return [{ name: column.name,
+      data_type: "data_type" in column && typeof column.data_type === "string" ? column.data_type : undefined,
+      is_identifier_candidate: "is_identifier_candidate" in column && column.is_identifier_candidate === true,
+    }];
+  });
+}
 
 function tabularRows(data: unknown): Row[] | null {
   if (Array.isArray(data) && data.every((row) => row !== null && typeof row === "object" && !Array.isArray(row))) return data as Row[];
@@ -61,6 +73,7 @@ export function ToolResults({ results }: { results: ToolResult[] }) {
             <ResultVisualization
               rows={rows}
               label={`Результат ${result.tool_name}`}
+              columns={chartColumns(result.data)}
               copyableIdentifierColumns={result.tool_name === "list_sources" ? ["source_id", "snapshot_id"] : undefined}
             />
           ) : result.data !== null && result.data !== undefined ? (

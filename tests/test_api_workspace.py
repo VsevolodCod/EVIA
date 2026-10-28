@@ -18,7 +18,7 @@ async def test_workspace_csv_to_agent_contract(tmp_path, monkeypatch):
     # app.main owns configuration at import time; reload so this test never sees
     # a catalog left by an earlier HTTP test in the same pytest process.
     module = importlib.reload(importlib.import_module('app.main'))
-    route = next(route for route in module.app.routes if route.path == '/sources/{source_id}/profile')
+    route = next(route for route in module.app.routes if getattr(route, 'path', None) == '/sources/{source_id}/profile')
     assert route.response_model is Profile
     async with module.app.router.lifespan_context(module.app), AsyncClient(
         transport=ASGITransport(app=module.app, raise_app_exceptions=False), base_url='http://test'

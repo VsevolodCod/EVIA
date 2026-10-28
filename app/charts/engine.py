@@ -23,7 +23,10 @@ from app.charts.models import (
     CardResult,
 )
 from app.charts.errors import ChartError, InvalidDashboardError
-from app.charts.implementations import KPIImplementation, LineImplementation
+from app.charts.implementations import (
+    BarImplementation, KPIImplementation, LineImplementation,
+    ScatterImplementation, TableImplementation,
+)
 from app.charts.query_planner import QueryPlanner
 from app.schema_catalog import SchemaCatalog
 from app.source_service import SourceService

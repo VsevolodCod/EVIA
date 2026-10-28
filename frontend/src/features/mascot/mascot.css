@@ -48,9 +48,52 @@
   line-height: 1.6;
   margin: 12px 0;
 }
+.evia-greeting-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: 208px;
+  width: min(100%, 300px);
+  margin-inline: auto;
+}
+.evia-greeting {
+  position: relative;
+  width: fit-content;
+  max-width: 100%;
+  min-height: 44px;
+  margin: 0 auto 12px;
+  padding: 11px 15px;
+  border: 1px solid #cce5d5;
+  border-radius: 15px 15px 15px 5px;
+  background: #fff;
+  box-shadow: 0 5px 15px #16452e12;
+  color: #24523a;
+  font-size: 13px;
+  line-height: 1.45;
+  text-align: center;
+}
+.evia-greeting[data-typing="true"] > span:first-child::after {
+  content: "";
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 3px;
+  background: #178556;
+  vertical-align: -2px;
+  animation: evia-caret .7s steps(1) infinite;
+}
+@keyframes evia-caret { 50% { opacity: 0; } }
+.app[data-theme="dark"] .evia-greeting { background: #193830; color: #e7f2eb; border-color: #3e6b55; }
+@media (max-width: 640px) {
+  .evia-greeting-block { min-height: 176px; }
+  .evia-greeting-block .evia-mascot { width: 112px !important; height: 112px !important; }
+  .mobile-upload-overlay .evia-greeting-block { display: none; }
+}
 @media (prefers-reduced-motion: reduce) {
   .evia-mascot img {
     animation: none !important;
     transform: none;
   }
+  .evia-greeting::after { animation: none !important; }
 }

@@ -1,7 +1,7 @@
 import { StrictMode, lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
-const App = lazy(() => import("./App"));
+const AuthGate = lazy(() => import("./AuthGate"));
 const MascotGallery = lazy(() => import("./features/mascot/MascotGallery"));
 const gallery =
   new URLSearchParams(window.location.search).get("mascot") === "1";
@@ -16,7 +16,7 @@ createRoot(document.getElementById("root")!).render(
         </p>
       }
     >
-      {gallery ? <MascotGallery /> : <App />}
+      {gallery ? <MascotGallery /> : <AuthGate />}
     </Suspense>
   </StrictMode>,
 );

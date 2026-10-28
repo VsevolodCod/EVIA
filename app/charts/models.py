@@ -25,6 +25,7 @@ FilterOperator = Literal[
     "in", "not_in", "between", "is_null", "is_not_null",
 ]
 Aggregate = Literal["count", "sum", "avg", "min", "max"]
+TimeGrain = Literal["day", "week", "month", "quarter", "year"]
 SortDirection = Literal["asc", "desc", "label_asc", "label_desc"]
 FormatType = Literal["number", "integer", "percent", "currency"]
 
@@ -110,8 +111,15 @@ class KPICard(ChartBase):
 
 class LineXAxis(FieldRef):
     type: Literal["temporal", "category", "number"] = "category"
+    time_grain: TimeGrain | None = None
     label: str | None = Field(default=None, max_length=200)
     sort: SortDirection = "asc"
+
+    @model_validator(mode="after")
+    def validate_time_grain(self):
+        if self.time_grain is not None and self.type != "temporal":
+            raise ValueError("time_grain requires a temporal axis")
+        return self
 
 
 class LineYAxis(FieldRef):
@@ -128,8 +136,31 @@ class LineCard(ChartBase):
     limit: int = Field(default=100, ge=1, le=1000)
 
 
+class BarCard(LineCard):
+    type: Literal["bar"] = "bar"
+
+
+class ScatterCard(ChartBase):
+    type: Literal["scatter"] = "scatter"
+    x: FieldRef
+    y: FieldRef
+    limit: int = Field(default=100, ge=1, le=1000)
+
+
+class TableCard(ChartBase):
+    type: Literal["table"] = "table"
+    fields: list[FieldRef] = Field(min_length=1, max_length=20)
+    limit: int = Field(default=100, ge=1, le=1000)
+
+    @model_validator(mode="after")
+    def unique_fields(self):
+        if len({(ref.source_id, ref.field) for ref in self.fields}) != len(self.fields):
+            raise ValueError("Table fields must be unique")
+        return self
+
+
 ChartDefinition = Annotated[
-    KPICard | LineCard,
+    KPICard | LineCard | BarCard | ScatterCard | TableCard,
     Field(discriminator="type"),
 ]
 

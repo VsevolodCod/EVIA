@@ -12,9 +12,12 @@ import {
 } from "./api";
 import { ErrorNotice, Evia, Icon, SafeMarkdown } from "./components";
 import { SourceInspector } from "./features/sources/SourceInspector";
+import { DashboardGallery } from "./features/results/DashboardGallery";
 import { PostgresSetup } from "./features/sources/PostgresSetup";
 import type { Entry, View } from "./features/chat/types";
 import { ResponseTiming } from "./features/chat/ResponseTiming";
+import { AccountMenu } from "./AccountMenu";
+import type { Account } from "./authApi";
 import "./styles.css";
 import {
   resolveEviaState,
@@ -22,6 +25,7 @@ import {
   eviaStatus,
 } from "./features/mascot/resolveEviaState";
 import type { EviaState } from "./features/mascot/states";
+import { WelcomeGreeting, welcomeGreetings } from "./features/mascot/WelcomeGreeting";
 
 const CHAT_SOURCE_STORAGE_KEY = "evia.chat-sources.v1";
 
@@ -89,7 +93,11 @@ function mergeEntries(existing: Entry[], loaded: Entry[]): Entry[] {
   return [...loaded.filter((entry) => !known.has(entry.id)), ...existing];
 }
 
-export default function App() {
+export default function App({ account, onAccountChange, onLogout }: {
+  account?: Account;
+  onAccountChange?: (account: Account) => void;
+  onLogout?: () => Promise<void>;
+} = {}) {
   const [sources, setSources] = useState<Source[]>([]);
   const [sourcesLoading, setSourcesLoading] = useState(true);
   const [sourcesError, setSourcesError] = useState("");
@@ -97,8 +105,9 @@ export default function App() {
   const [postgresLoading, setPostgresLoading] = useState(false);
   const [postgresError, setPostgresError] = useState("");
   const [sourceSetup, setSourceSetup] = useState<"csv" | "postgres">("csv");
-  const [mobilePanel, setMobilePanel] = useState<"home" | "analytics" | "chat" | "profile">("home");
-  const [mobileOverlay, setMobileOverlay] = useState<"wizard" | "upload" | "settings" | null>(null);
+  const [welcomeGreeting] = useState(() => welcomeGreetings[Math.floor(Math.random() * welcomeGreetings.length)]);
+  const [mobilePanel, setMobilePanel] = useState<"home" | "analytics" | "chat">("home");
+  const [mobileOverlay, setMobileOverlay] = useState<"upload" | "settings" | null>(null);
   const [theme, setTheme] = useState<"light" | "dark" | "system">(() => {
     const saved = localStorage.getItem("evia.theme");
     return saved === "dark" || saved === "system" ? saved : "light";
@@ -117,6 +126,8 @@ export default function App() {
   >({});
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [view, setView] = useState<View>("overview");
+  const [showDashboardGallery, setShowDashboardGallery] = useState(false);
+  const [attachedDashboard, setAttachedDashboard] = useState<{ id: string; title: string } | null>(null);
   const [uploadedId, setUploadedId] = useState<string | null>(null);
   const [uploadFailure, setUploadFailure] = useState<EviaState | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -126,6 +137,8 @@ export default function App() {
   const [dragOver, setDragOver] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const composer = useRef<HTMLTextAreaElement>(null);
+  const settingsDialog = useRef<HTMLElement>(null);
+  const settingsReturnFocus = useRef<HTMLElement | null>(null);
   const sourceController = useRef<AbortController | null>(null);
   const postgresController = useRef<AbortController | null>(null);
   const uploadController = useRef<AbortController | null>(null);
@@ -159,6 +172,7 @@ export default function App() {
     Boolean(chat.source_id) && !sources.some((source) => source.source_id === chat.source_id));
   const unboundChats = chatSummaries.filter((chat) =>
     !chat.source_id && !chatSources[chat.chat_id]);
+  const historyCount = (selectedId ? conversations.length : 0) + archivedChats.length + unboundChats.length;
   const failedServerChat = selectedServerChats.find(
     (chat) => historyPages[chat.chat_id]?.error,
   );
@@ -344,6 +358,34 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (mobileOverlay !== "settings") return;
+    const dialog = settingsDialog.current;
+    const buttons = Array.from(dialog?.querySelectorAll("button") ?? []);
+    buttons[0]?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setMobileOverlay(null);
+      } else if (event.key === "Tab" && buttons.length) {
+        const first = buttons[0];
+        const last = buttons[buttons.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      settingsReturnFocus.current?.focus();
+    };
+  }, [mobileOverlay]);
+
+  useEffect(() => {
     if (!selectedId || historyListLoading) return;
     chatSummaries
       .filter((chat) => (chat.source_id ?? chatSources[chat.chat_id]) === selectedId)
@@ -354,6 +396,8 @@ export default function App() {
   }, [selectedId, chatSummaries, chatSources, historyListLoading]);
 
   function selectSource(id: string) {
+    setShowDashboardGallery(false);
+    if (id !== selectedId) setAttachedDashboard(null);
     if (archivedChat && (archivedChat.source_id === null || archivedChat.source_id === undefined)) {
       const archivedKey = `archive:${archivedChat.chat_id}`;
       const existingEntries = histories[archivedKey] ?? [];
@@ -381,6 +425,8 @@ export default function App() {
       setDrafts((previous) => ({ ...previous, [selectedId]: value }));
   }
   function resetAnalysis() {
+    setShowDashboardGallery(false);
+    setAttachedDashboard(null);
     if (selectedId) {
       setActiveIds((previous) => ({ ...previous, [selectedId]: undefined }));
       activeConversations.current.delete(selectedId);
@@ -400,6 +446,8 @@ export default function App() {
     setView("overview");
   }
   function openArchivedChat(chat: ChatSummary) {
+    setShowDashboardGallery(false);
+    setAttachedDashboard(null);
     const key = `archive:${chat.chat_id}`;
     setSelectedId(null);
     setArchivedChatId(chat.chat_id);
@@ -413,15 +461,30 @@ export default function App() {
   }
   function newAnalysis() {
     if (window.matchMedia?.("(max-width: 640px)").matches) {
-      setMobilePanel("home");
-      setMobileOverlay("wizard");
+      openMobileUpload();
       return;
     }
     resetAnalysis();
   }
+  function newDialog() {
+    if (!selectedId) return;
+    setActiveIds((previous) => ({ ...previous, [selectedId]: undefined }));
+    activeConversations.current.delete(selectedId);
+    setDrafts((previous) => ({ ...previous, [selectedId]: "" }));
+    setView("overview");
+    setShowDashboardGallery(false);
+    setMobilePanel("chat");
+  }
   function openMobileUpload() {
-    resetAnalysis();
+    setSelectedUploadFile(null);
+    setUploadError("");
+    setFailedFile(null);
+    setMobilePanel("analytics");
     setMobileOverlay("upload");
+  }
+  function openSettings() {
+    settingsReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setMobileOverlay("settings");
   }
   function chooseTheme(value: "light" | "dark" | "system") {
     setTheme(value);
@@ -485,6 +548,7 @@ export default function App() {
     setUploadError("");
     const sourceId = selectedId;
     const retried = retryId ? histories[sourceId]?.find((item) => item.id === retryId) : undefined;
+    const dashboardId = retried?.dashboardId ?? attachedDashboard?.id;
     const existingConversationId = retried?.conversationId ?? activeConversations.current.get(sourceId);
     const conversationId = existingConversationId ?? crypto.randomUUID();
     if (askControllers.current.has(conversationId)) return;
@@ -497,6 +561,7 @@ export default function App() {
       state: "pending",
       startedAt: performance.now(),
       mascotState: retryId ? "retrying" : "thinking",
+      dashboardId,
     };
     const controller = new AbortController();
     askControllers.current.set(conversationId, controller);
@@ -541,7 +606,7 @@ export default function App() {
       }
       const chatId = await waitForChat(chat, controller.signal);
       controller.signal.throwIfAborted();
-      const answer = await api.chat(entry.question, sourceId, chatId, controller.signal);
+      const answer = await api.chat(entry.question, sourceId, chatId, controller.signal, dashboardId);
       if (controller.signal.aborted)
         finish({
           state: "error",
@@ -594,14 +659,16 @@ export default function App() {
         >
           EVIA
         </a>
-        <button className="mobile-profile-entry" aria-label="Открыть профиль" onClick={() => setMobilePanel("profile")}><Icon name="user" size={18} /></button>
+        {account && onAccountChange && onLogout && <AccountMenu account={account} onChange={onAccountChange} onLogout={onLogout} theme={theme === "system" ? systemDark ? "dark" : "light" : theme} />}
+        <button className="mobile-settings-entry" aria-label="Открыть настройки" onClick={openSettings}><Icon name="settings" size={18} /></button>
       </header>
       <div className="workspace">
         <aside className="sidebar" aria-label="Навигация рабочего пространства">
           <button className="primary new-analysis" onClick={newAnalysis}>
             <Icon name="plus" />
-            Новый анализ
+            Добавить источник
           </button>
+          {!sourcesLoading && <div className="mobile-home-greeting"><WelcomeGreeting greeting={welcomeGreeting} activeState={mascotState} /></div>}
           <section className="nav-section">
             <div className="nav-heading">
               <h2>Источники</h2>
@@ -644,9 +711,6 @@ export default function App() {
                     {item.name}
                     <small>{item.source_type.toUpperCase()}</small>
                   </span>
-                  {selectedId === item.source_id && (
-                    <span className="selection-dot" />
-                  )}
                   <span className="mobile-source-chevron"><Icon name="chevron" size={15} /></span>
                 </button>
               ))}
@@ -664,13 +728,12 @@ export default function App() {
               {uploading ? "Загружаем CSV…" : "Добавить CSV"}
             </button>
             <button
-              className="postgres-nav"
+              className={`postgres-nav ${!source && sourceSetup === "postgres" ? "selected" : ""}`}
               onClick={openPostgresSetup}
               aria-pressed={!source && sourceSetup === "postgres"}
+              title={postgresStatus?.connected ? "PostgreSQL доступен" : undefined}
             >
-              <Icon name="grid" size={16} />
               Подключить PostgreSQL
-              {postgresStatus?.connected && <span aria-label="PostgreSQL доступен" />}
             </button>
             <input
               className="visually-hidden"
@@ -700,11 +763,14 @@ export default function App() {
               />
             )}
           </section>
+          <button className={`reports-nav ${showDashboardGallery ? "selected" : ""}`} type="button" aria-pressed={showDashboardGallery} onClick={() => { setShowDashboardGallery(true); setMobilePanel("analytics"); }}>
+            Сохранённые отчёты <Icon name="chevron" size={15} />
+          </button>
           <section className="nav-section history-section">
             <div className="nav-heading">
-              <h2>История</h2>
-              {conversations.length > 0 && (
-                <span className="nav-count">{conversations.length}</span>
+              <h2>История диалогов</h2>
+              {historyCount > 0 && (
+                <span className="nav-count">{historyCount}</span>
               )}
             </div>
             {historyListLoading ? (
@@ -715,15 +781,18 @@ export default function App() {
                 onRetry={() => void loadChatList()}
                 label="Повторить загрузку диалогов"
               />
-            ) : failedServerChat && !history.length ? (
-              <ErrorNotice
-                message={historyPages[failedServerChat.chat_id]?.error ?? "Не удалось загрузить историю."}
-                onRetry={() => historyKey && void loadChatHistory(historyKey, failedServerChat.chat_id)}
-                label="Повторить загрузку истории"
-              />
-            ) : history.length ? (
+            ) : (
+              <>
+                {failedServerChat && !history.length && (
+                  <ErrorNotice
+                    message={historyPages[failedServerChat.chat_id]?.error ?? "Не удалось загрузить историю."}
+                    onRetry={() => historyKey && void loadChatHistory(historyKey, failedServerChat.chat_id)}
+                    label="Повторить загрузку истории"
+                  />
+                )}
+                {historyCount > 0 ? (
               <div className="history-list">
-                {[...conversations].reverse().map((entry) => (
+                {selectedId && [...conversations].reverse().map((entry) => (
                   <button
                     key={entry.id}
                     className={`history-item ${activeEntry?.conversationId === entry.conversationId ? "active" : ""}`}
@@ -739,6 +808,7 @@ export default function App() {
                         }));
                       }
                       setView("results");
+                      setShowDashboardGallery(false);
                       setMobilePanel("analytics");
                     }}
                   >
@@ -749,40 +819,24 @@ export default function App() {
                     )}
                   </button>
                 ))}
-              </div>
-            ) : (
-              <p className="sidebar-note">Нет диалогов</p>
-            )}
-          </section>
-          {archivedChats.length > 0 && (
-            <section className="nav-section history-section" aria-label="Архивные диалоги">
-              <div className="nav-heading"><h2>Архивные диалоги</h2></div>
-              <p className="sidebar-note">Источник больше недоступен. Сохранённые ответы можно открыть, но новый расчёт невозможен.</p>
-              <div className="history-list">
                 {archivedChats.map((chat) => (
                   <button
                     key={chat.chat_id}
                     className={`history-item ${archivedChatId === chat.chat_id ? "active" : ""}`}
                     aria-label={`Архив: ${chat.title}`}
+                    title={`Источник недоступен · ${chat.title}`}
                     onClick={() => openArchivedChat(chat)}
                   >
                     <Icon name="chat" size={16} />
                     <span>{chat.title}</span>
                   </button>
                 ))}
-              </div>
-            </section>
-          )}
-          {unboundChats.length > 0 && (
-            <section className="nav-section history-section" aria-label="Диалоги без источника">
-              <div className="nav-heading"><h2>Диалоги без источника</h2></div>
-              <p className="sidebar-note">Старые записи можно прочитать. Для продолжения выберите источник после открытия чата.</p>
-              <div className="history-list">
                 {unboundChats.map((chat) => (
                   <button
                     key={chat.chat_id}
                     className={`history-item ${archivedChatId === chat.chat_id ? "active" : ""}`}
                     aria-label={`Без источника: ${chat.title}`}
+                    title={`Без источника · ${chat.title}`}
                     onClick={() => openArchivedChat(chat)}
                   >
                     <Icon name="chat" size={16} />
@@ -790,8 +844,12 @@ export default function App() {
                   </button>
                 ))}
               </div>
-            </section>
-          )}
+                ) : !failedServerChat && (
+                  <p className="sidebar-note">Нет диалогов</p>
+                )}
+              </>
+            )}
+          </section>
         </aside>
         <main
           className={`analysis ${source ? "" : "analysis-empty"}`}
@@ -802,18 +860,25 @@ export default function App() {
             <button aria-label={mobileOverlay === "upload" ? "Закрыть загрузку CSV" : "Назад к источникам"} onClick={() => { setMobileOverlay(null); setMobilePanel("home"); }}>
               <Icon name="back" size={22} />
             </button>
-            <strong>{source ? "Анализ данных" : sourceSetup === "postgres" ? "PostgreSQL" : "Загрузка CSV"}</strong>
+            <strong>{mobileOverlay === "upload" ? "Загрузка CSV" : showDashboardGallery ? "Отчёты" : source ? "Данные источника" : sourceSetup === "postgres" ? "PostgreSQL" : "Загрузка CSV"}</strong>
             <span aria-hidden="true" />
           </div>
-          {source ? (
+          {showDashboardGallery && mobileOverlay !== "upload" ? (
+            <DashboardGallery onClose={() => setShowDashboardGallery(false)} onAttach={source ? (id, title) => {
+              setAttachedDashboard({ id, title });
+              setShowDashboardGallery(false);
+              setMobilePanel("chat");
+            } : undefined} />
+          ) : source && mobileOverlay !== "upload" ? (
             <SourceInspector
               source={source}
               entry={activeEntry}
               view={view}
               setView={setView}
+              onOpenChat={() => setMobilePanel("chat")}
               onReimport={(file, id) => void upload(file, id)}
             />
-          ) : sourceSetup === "postgres" ? (
+          ) : sourceSetup === "postgres" && mobileOverlay !== "upload" ? (
             <PostgresSetup
               status={postgresStatus}
               loading={postgresLoading}
@@ -843,24 +908,7 @@ export default function App() {
                 }}
                 aria-label={mobileOverlay === "upload" ? "Загрузка CSV" : "Добавление источника"}
               >
-                <div className="upload-illustration" aria-hidden="true">
-                  <div className="paper-sheet paper-back" />
-                  <div className="paper-sheet">
-                    <span className="csv-label">CSV</span>
-                    <div className="paper-grid">
-                      <i />
-                      <i />
-                      <i />
-                      <i />
-                      <i />
-                      <i />
-                      <i />
-                      <i />
-                      <i />
-                    </div>
-                  </div>
-                  <span className="paper-plus">+</span>
-                </div>
+                {!sourcesLoading && <WelcomeGreeting greeting={welcomeGreeting} activeState={mascotState} />}
                 <h1>{uploading ? "Загрузка CSV…" : "Добавьте CSV"}</h1>
                 <p>Перетащите файл сюда или выберите его с устройства</p>
                 {selectedUploadFile && <div className="upload-selected-file">
@@ -889,7 +937,8 @@ export default function App() {
         </main>
         <aside className="chat-panel" aria-label="Чат с EVIA">
           <header className="chat-header">
-            <h2>Чат</h2><strong className="mobile-chat-brand">EVIA</strong>
+            <h2>AI-помощник</h2><strong className="mobile-chat-brand">EVIA</strong>
+            {source && <button className="new-dialog" type="button" onClick={newDialog}><Icon name="plus" size={15} /> Новый диалог</button>}
           </header>
           <div className="chat-content">
             {activeEntry ? (
@@ -963,16 +1012,16 @@ export default function App() {
                               : "Сохранённые детали этого ответа повреждены, поэтому показан только текст."}
                         </p>
                       )}
-                      {!message.historyDetail && <button
+                      {!message.historyDetail && Boolean(message.answer?.tool_results.length || message.answer?.analysis?.sql) && <button
                         className="result-link"
                         onClick={() => {
                           if (historyKey) setActiveIds((previous) => ({ ...previous, [historyKey]: message.id }));
                           setView("results");
+                          setShowDashboardGallery(false);
                           setMobilePanel("analytics");
                         }}
                       >
-                        <Icon name="grid" />
-                        Результаты инструментов
+                        Открыть результат
                         <Icon name="chevron" size={15} />
                       </button>
                       }
@@ -984,8 +1033,9 @@ export default function App() {
               </>
             ) : (
               <div className="chat-welcome">
-                <Evia large state={mascotState} />
-                {source && <p className="mobile-chat-intro">Источник подключён. Можно исследовать данные.</p>}
+                {source && !sourcesLoading && <WelcomeGreeting greeting={welcomeGreeting} activeState={mascotState} />}
+                <h3>{source ? "Спросите о своих данных" : "Добавьте источник данных"}</h3>
+                <p className="mobile-chat-intro">{source ? "EVIA поможет найти ответ, построить график или разобраться в таблице." : "Загрузите CSV или подключите PostgreSQL, чтобы начать анализ."}</p>
                 <p
                   className={`evia-live-status ${["welcome", "waiting", "listening", "explaining"].includes(mascotState) ? "visually-hidden" : ""}`}
                   role="status"
@@ -1017,14 +1067,8 @@ export default function App() {
             )}
           </div>
           <div className="chat-bottom">
-            {activeEntry && (
-              <div className="helper">
-                <Evia state={mascotState} />
-                <div role="status">
-                  <strong>{eviaStatus(mascotState)}</strong>
-                </div>
-              </div>
-            )}
+            {attachedDashboard && source && <div className="attached-report" aria-label="Прикреплённый отчёт"><span>Отчёт: <strong>{attachedDashboard.title}</strong></span><button type="button" aria-label="Открепить отчёт" onClick={() => setAttachedDashboard(null)}><Icon name="close" size={14} /></button></div>}
+            {activeEntry && <div className="helper" role="status"><Evia state={mascotState} />{activeEntry.state === "pending" && <strong>{eviaStatus(mascotState)}</strong>}</div>}
             {archivedChat && !archivedChat.source_id && (
               <p className="history-details-notice">
                 Для продолжения этого старого диалога выберите источник в левой панели.
@@ -1099,48 +1143,11 @@ export default function App() {
               <span>Ctrl / ⌘ + Enter — отправить</span>
               {draft.length > 3500 && <span>{draft.length}/4000</span>}
             </div>
-            <details className="chat-help">
-              <summary>О чате</summary>
-              <p>
-                Вопросы продолжают выбранный диалог: модель получает предыдущие
-                сообщения. «Новый анализ» открывает экран добавления источника. У каждого
-                источника своя история. Сообщения сохраняются на сервере;
-                список диалогов этой вкладки пока доступен до обновления страницы.
-              </p>
-            </details>
           </div>
         </aside>
       </div>
-      <section className="mobile-profile" aria-label="Профиль и настройки">
-        <header className="mobile-page-header">
-          <button aria-label="Назад к источникам" onClick={() => setMobilePanel("home")}>
-            <Icon name="back" size={22} />
-          </button>
-          <strong>Профиль</strong>
-          <span aria-hidden="true" />
-        </header>
-        <div className="mobile-profile-card">
-          <span className="mobile-profile-avatar"><Icon name="user" size={24} /></span>
-          <div><strong>Гостевой доступ</strong><small>Ваши источники доступны в этом рабочем пространстве</small></div>
-        </div>
-        <div className="mobile-profile-list">
-          <button type="button" onClick={() => setMobileOverlay("settings")} aria-label="Открыть настройки"><strong>Настройки</strong><Icon name="chevron" size={16} /></button>
-          <div><strong>Язык</strong><span>Русский</span></div>
-          <div><strong>О приложении</strong><span>EVIA</span></div>
-        </div>
-      </section>
-      {mobileOverlay === "wizard" && <section className="mobile-fullscreen mobile-wizard" role="dialog" aria-label="Новый анализ" aria-modal="true">
-        <header><h2>Новый анализ</h2><button aria-label="Закрыть новый анализ" onClick={() => setMobileOverlay(null)}><Icon name="close" size={19} /></button></header>
-        <ol className="wizard-steps">
-          <li className="active"><b>1</b><span>Загрузка данных</span></li>
-          <li><b>2</b><span>Настройка</span></li>
-          <li><b>3</b><span>Анализ</span></li>
-          <li><b>4</b><span>Результат</span></li>
-        </ol>
-        {sources.length > 0 && <div className="wizard-existing"><h3>Или выберите источник</h3>{sources.slice(0, 3).map((item) => <button key={item.source_id} aria-label={`Использовать ${item.name}`} onClick={() => { resetAnalysis(); selectSource(item.source_id); }}><Icon name="file" size={18} /><span><strong>{item.name}</strong><small>{item.source_type.toUpperCase()}</small></span><Icon name="chevron" size={15} /></button>)}</div>}
-        <div className="wizard-bottom"><button className="primary" aria-label="Загрузить CSV в новом анализе" onClick={openMobileUpload}>Загрузить CSV <Icon name="arrow" size={17} /></button><button className="wizard-postgres" onClick={() => { setMobileOverlay(null); openPostgresSetup(); }}>Подключить PostgreSQL</button></div>
-      </section>}
-      {mobileOverlay === "settings" && <section className="mobile-fullscreen mobile-settings" role="dialog" aria-label="Настройки" aria-modal="true">
+      {mobileOverlay === "settings" && <div className="settings-backdrop" data-testid="settings-backdrop" aria-hidden="true" onClick={() => setMobileOverlay(null)} />}
+      {mobileOverlay === "settings" && <section className="mobile-fullscreen mobile-settings" role="dialog" aria-label="Настройки" aria-modal="true" ref={settingsDialog}>
         <header><h2>Настройки</h2><button aria-label="Закрыть настройки" onClick={() => setMobileOverlay(null)}><Icon name="close" size={19} /></button></header>
         <h3>Тема</h3>
         <div className="settings-options">
@@ -1150,20 +1157,20 @@ export default function App() {
       </section>}
       <nav className="mobile-nav" aria-label="Мобильная навигация">
         <button
-          aria-label="Главная"
+          aria-label="Источники"
           aria-pressed={mobilePanel === "home"}
           onClick={() => setMobilePanel("home")}
         >
           <Icon name="home" size={18} />
-          <span>Главная</span>
+          <span>Источники</span>
         </button>
         <button
-          aria-label="Аналитика"
+          aria-label="Рабочее пространство"
           aria-pressed={mobilePanel === "analytics"}
           onClick={() => setMobilePanel("analytics")}
         >
           <Icon name="file" size={18} />
-          <span>Аналитика</span>
+          <span>Данные</span>
         </button>
         <button
           aria-label="Чат"
@@ -1174,12 +1181,12 @@ export default function App() {
           <span>Чат</span>
         </button>
         <button
-          aria-label="Профиль"
-          aria-pressed={mobilePanel === "profile"}
-          onClick={() => setMobilePanel("profile")}
+          aria-label="Настройки"
+          aria-pressed={mobileOverlay === "settings"}
+          onClick={openSettings}
         >
-          <Icon name="user" size={18} />
-          <span>Профиль</span>
+          <Icon name="settings" size={18} />
+          <span>Настройки</span>
         </button>
       </nav>
     </div>
