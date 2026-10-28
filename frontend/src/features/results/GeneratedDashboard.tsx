@@ -153,9 +153,9 @@ function ResultLine({ card, colors, gradient }: { card: Card; colors: string[]; 
   </>;
 }
 
-function LimitNote({ data, count }: { data: unknown; count: number }) {
+function LimitNote({ data, count, unit = "точек" }: { data: unknown; count: number; unit?: string }) {
   return object(data) && data.limit_reached === true ? <p className="generated-limit-note">
-    Показано точек: {count}. Достигнут лимит выдачи; в источнике могут быть другие строки или группы. Уточните фильтры.
+    Показано {unit}: {count}. Достигнут лимит выдачи; в источнике могут быть другие строки или группы. Уточните фильтры.
   </p> : null;
 }
 
@@ -233,7 +233,7 @@ function ResultTable({ card }: { card: Card }) {
   const rows = data && Array.isArray(data.rows) ? data.rows.filter(object) : [];
   if (!columns.length) return <p className="generated-empty">Нет столбцов для таблицы.</p>;
   return <>
-    <LimitNote data={card.data} count={rows.length} />
+    <LimitNote data={card.data} count={rows.length} unit="строк" />
     <DataTable rows={rows} columns={columns} label={card.title} />
   </>;
 }
