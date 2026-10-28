@@ -106,6 +106,7 @@ class LineImplementation(ChartImplementation):
                 card.series.field if card.series is not None else None
             ),
             "points": points,
+            "source_id": plan.source_id,
             "limit": card.limit,
             # Это флаг достижения лимита, а не доказательство
             # наличия дополнительных точек.
