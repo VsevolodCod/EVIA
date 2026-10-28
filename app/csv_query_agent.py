@@ -364,12 +364,18 @@ class CSVQueryAgent:
                 response.steps += attempt + 1
                 return response
             if plan.intent == "clarification":
-                options = [f"Рассчитать по полю «{field.name}»" for field in fields[:3]]
+                if any(word in _normal_question(question) for word in ("сумм", "sum", "total")):
+                    numeric_fields = [field for field in fields if field.inferred_type in {"integer", "number", "decimal"}]
+                    options = [f"Сумма «{field.name}»" for field in numeric_fields[:3]]
+                    reason = "Запрошенное поле может отсутствовать или не подходит для суммы. Укажите доступное числовое поле."
+                else:
+                    options = [f"Рассчитать по полю «{field.name}»" for field in fields[:3]]
+                    reason = "Не удалось однозначно выбрать расчёт. Укажите поле и условие."
                 if not options:
                     options = ["Показать структуру источника", "Показать обзор данных"]
                 clarification = self._clarification(
                     question, request_id, timing, "clarification",
-                    "Не удалось однозначно выбрать расчёт. Укажите поле и условие.", options,
+                    reason, options,
                 )
                 clarification.steps = attempt + 1
                 clarification.tool_results = trace
