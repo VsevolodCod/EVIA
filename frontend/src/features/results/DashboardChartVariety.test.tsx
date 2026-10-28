@@ -83,7 +83,8 @@ it("shows declared units for KPI and both scatter axes", () => {
     x: { field: "revenue", format: { type: "currency", currency: "RUB", decimals: 2 } },
     y: { field: "cost", format: { type: "percent", decimals: 0 } } } };
   render(<GeneratedDashboard dashboard={{ version: 1, title: "Панель", cards: [kpi, scatter] }} scope="units-test" />);
-  expect(screen.getByText(/10,00\s*₽/)).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Выручка" }).closest("section")?.querySelector(".generated-value")?.textContent)
+    .toMatch(/10,00\s*₽/);
   const points = screen.getByRole("img", { name: /Связь показателей/ }).querySelectorAll("circle[data-point]");
   expect(points[0].getAttribute("aria-label")).toMatch(/₽; 500\s*%/);
 });
