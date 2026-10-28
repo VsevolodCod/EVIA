@@ -429,6 +429,21 @@ async def test_non_sum_question_about_summary_does_not_suggest_sum(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_average_of_total_column_does_not_suggest_sum(tmp_path):
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    sources = SourceService(tmp_path / "data", catalog)
+    source = sources.register_csv("sales.csv", b"total\n120\n180\n")
+    provider = ScriptedProvider({"intent": "clarification", "sql": None, "explanation": ""})
+    agent = AgentRuntime(provider, build_tool_registry(catalog, sources), sources=sources)
+    try:
+        answer = await agent.ask("Покажи среднее total за сегодня", [source.source_id])
+        assert answer.clarification is not None
+        assert "Сумма «total»" not in answer.clarification.options
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
 async def test_sum_clarification_for_external_data_does_not_claim_field_is_missing(tmp_path):
     provider = ScriptedProvider({"intent": "clarification", "sql": None, "explanation": "Нужен курс USD"})
     agent, source, catalog = agent_with_csv(tmp_path, provider)
