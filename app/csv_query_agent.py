@@ -367,8 +367,14 @@ class CSVQueryAgent:
                 if any(word in _normal_question(question) for word in ("сумм", "sum", "total")):
                     numeric_fields = [field for field in fields if field.inferred_type in {"integer", "number", "decimal"}]
                     normalized_question = _normal_question(question)
+                    sum_phrase = re.search(r"(?:сумм\w*|\bsum\b|\btotal\b)\s+(.*)", normalized_question)
+                    target_phrase = re.split(
+                        r"\s+(?:по(?!\s+полю)|только|где|если|при|where|when|if|by)\b",
+                        sum_phrase.group(1) if sum_phrase else "",
+                        maxsplit=1,
+                    )[0]
                     has_named_numeric = any(
-                        re.search(rf"(?<!\w){re.escape(_normal_question(field.name))}(?!\w)", normalized_question)
+                        re.search(rf"(?<!\w){re.escape(_normal_question(field.name))}(?!\w)", target_phrase)
                         for field in numeric_fields
                     )
                     if not numeric_fields:
