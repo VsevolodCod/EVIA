@@ -366,16 +366,20 @@ class CSVQueryAgent:
             if plan.intent == "clarification":
                 if any(word in _normal_question(question) for word in ("сумм", "sum", "total")):
                     numeric_fields = [field for field in fields if field.inferred_type in {"integer", "number", "decimal"}]
-                    has_named_field = any(re.search(rf"(?<!\w){re.escape(field.name.casefold())}(?!\w)", _normal_question(question)) for field in fields)
-                    if has_named_field:
-                        options = ["Показать структуру источника", "Показать обзор данных"]
-                        reason = "Для расчёта не хватает данных или условий. Уточните их в следующем вопросе."
-                    elif numeric_fields:
-                        options = [f"Сумма «{field.name}»" for field in numeric_fields[:3]]
-                        reason = "Запрошенное поле может отсутствовать или не подходит для суммы. Укажите доступное числовое поле."
-                    else:
+                    normalized_question = _normal_question(question)
+                    has_named_numeric = any(
+                        re.search(rf"(?<!\w){re.escape(_normal_question(field.name))}(?!\w)", normalized_question)
+                        for field in numeric_fields
+                    )
+                    if not numeric_fields:
                         options = ["Показать структуру источника", "Показать обзор данных"]
                         reason = "В источнике нет числовых полей для суммы. Выберите другой источник или уточните вопрос."
+                    elif has_named_numeric:
+                        options = ["Показать структуру источника", "Показать обзор данных"]
+                        reason = "Для расчёта не хватает данных или условий. Уточните их в следующем вопросе."
+                    else:
+                        options = [f"Сумма «{field.name}»" for field in numeric_fields[:3]]
+                        reason = "Запрошенное поле может отсутствовать или не подходит для суммы. Укажите доступное числовое поле."
                 else:
                     options = [f"Рассчитать по полю «{field.name}»" for field in fields[:3]]
                     reason = "Не удалось однозначно выбрать расчёт. Укажите поле и условие."
