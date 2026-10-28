@@ -364,12 +364,37 @@ class CSVQueryAgent:
                 response.steps += attempt + 1
                 return response
             if plan.intent == "clarification":
-                options = [f"Рассчитать по полю «{field.name}»" for field in fields[:3]]
+                normalized_question = _normal_question(question)
+                sum_phrase = re.search(r"(?:сумм\w*|\bsum\b)\s+(.*)", normalized_question)
+                average_phrase = re.search(r"(?:средн\w*|\bavg\b|\baverage\b|\bmean\b)", normalized_question)
+                if sum_phrase and (average_phrase is None or sum_phrase.start() < average_phrase.start()):
+                    numeric_fields = [field for field in fields if field.inferred_type in {"integer", "number", "decimal"}]
+                    target_phrase = re.split(
+                        r"\s+(?:по(?!\s+полю)|только|где|если|при|where|when|if|by)\b",
+                        sum_phrase.group(1),
+                        maxsplit=1,
+                    )[0]
+                    has_named_numeric = any(
+                        re.search(rf"(?<!\w){re.escape(_normal_question(field.name))}(?!\w)", target_phrase)
+                        for field in numeric_fields
+                    )
+                    if not numeric_fields:
+                        options = ["Показать структуру источника", "Показать обзор данных"]
+                        reason = "В источнике нет числовых полей для суммы. Выберите другой источник или уточните вопрос."
+                    elif has_named_numeric:
+                        options = ["Показать структуру источника", "Показать обзор данных"]
+                        reason = "Для расчёта не хватает данных или условий. Уточните их в следующем вопросе."
+                    else:
+                        options = [f"Сумма «{field.name}»" for field in numeric_fields[:3]]
+                        reason = "Запрошенное поле может отсутствовать или не подходит для суммы. Укажите доступное числовое поле."
+                else:
+                    options = [f"Рассчитать по полю «{field.name}»" for field in fields[:3]]
+                    reason = "Не удалось однозначно выбрать расчёт. Укажите поле и условие."
                 if not options:
                     options = ["Показать структуру источника", "Показать обзор данных"]
                 clarification = self._clarification(
                     question, request_id, timing, "clarification",
-                    "Не удалось однозначно выбрать расчёт. Укажите поле и условие.", options,
+                    reason, options,
                 )
                 clarification.steps = attempt + 1
                 clarification.tool_results = trace

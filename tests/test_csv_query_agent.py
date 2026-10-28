@@ -375,6 +375,141 @@ async def test_out_of_schema_question_returns_clarification_without_query(tmp_pa
 
 
 @pytest.mark.asyncio
+async def test_missing_aggregate_field_suggests_only_numeric_columns(tmp_path):
+    provider = ScriptedProvider({"intent": "clarification", "sql": None, "explanation": ""})
+    agent, source, catalog = agent_with_csv(tmp_path, provider)
+    try:
+        answer = await agent.ask("Покажи сумму profit", [source.source_id])
+        assert answer.status == "clarification"
+        assert answer.clarification is not None
+        assert answer.clarification.options == ["Сумма «revenue»"]
+        assert "запрошенное поле" in answer.clarification.reason.lower()
+        assert answer.results == []
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
+async def test_missing_sum_field_still_suggests_numeric_metric_when_dimension_is_named(tmp_path):
+    provider = ScriptedProvider({"intent": "clarification", "sql": None, "explanation": ""})
+    agent, source, catalog = agent_with_csv(tmp_path, provider)
+    try:
+        answer = await agent.ask("Покажи сумму profit по month", [source.source_id])
+        assert answer.clarification is not None
+        assert answer.clarification.options == ["Сумма «revenue»"]
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
+async def test_missing_sum_field_still_suggests_metric_when_numeric_filter_is_named(tmp_path):
+    provider = ScriptedProvider({"intent": "clarification", "sql": None, "explanation": ""})
+    agent, source, catalog = agent_with_csv(tmp_path, provider)
+    try:
+        answer = await agent.ask("Покажи сумму profit только где revenue > 100", [source.source_id])
+        assert answer.clarification is not None
+        assert answer.clarification.options == ["Сумма «revenue»"]
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
+async def test_non_sum_question_about_summary_does_not_suggest_sum(tmp_path):
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    sources = SourceService(tmp_path / "data", catalog)
+    source = sources.register_csv("sales.csv", b"summary,revenue\nA,120\nB,180\n")
+    provider = ScriptedProvider({"intent": "clarification", "sql": None, "explanation": ""})
+    agent = AgentRuntime(provider, build_tool_registry(catalog, sources), sources=sources)
+    try:
+        answer = await agent.ask("Покажи частые значения summary за сегодня", [source.source_id])
+        assert answer.clarification is not None
+        assert "Сумма «revenue»" not in answer.clarification.options
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
+async def test_average_of_total_column_does_not_suggest_sum(tmp_path):
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    sources = SourceService(tmp_path / "data", catalog)
+    source = sources.register_csv("sales.csv", b"total\n120\n180\n")
+    provider = ScriptedProvider({"intent": "clarification", "sql": None, "explanation": ""})
+    agent = AgentRuntime(provider, build_tool_registry(catalog, sources), sources=sources)
+    try:
+        answer = await agent.ask("Покажи среднее total за сегодня", [source.source_id])
+        assert answer.clarification is not None
+        assert "Сумма «total»" not in answer.clarification.options
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "field,question",
+    [("sum", "Покажи среднее sum за сегодня"),
+     ("сумма", "Покажи среднее по полю сумма за сегодня")],
+)
+async def test_average_of_sum_named_column_does_not_suggest_sum(tmp_path, field, question):
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    sources = SourceService(tmp_path / "data", catalog)
+    source = sources.register_csv("sales.csv", f"{field}\n120\n180\n".encode())
+    provider = ScriptedProvider({"intent": "clarification", "sql": None, "explanation": ""})
+    agent = AgentRuntime(provider, build_tool_registry(catalog, sources), sources=sources)
+    try:
+        answer = await agent.ask(question, [source.source_id])
+        assert answer.clarification is not None
+        assert f"Сумма «{field}»" not in answer.clarification.options
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
+async def test_sum_clarification_for_external_data_does_not_claim_field_is_missing(tmp_path):
+    provider = ScriptedProvider({"intent": "clarification", "sql": None, "explanation": "Нужен курс USD"})
+    agent, source, catalog = agent_with_csv(tmp_path, provider)
+    try:
+        answer = await agent.ask("Покажи сумму revenue по текущему курсу USD", [source.source_id])
+        assert answer.status == "clarification"
+        assert answer.clarification is not None
+        assert "запрошенное поле" not in answer.clarification.reason.lower()
+        assert "Сумма «revenue»" not in answer.clarification.options
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
+async def test_missing_sum_field_without_numeric_columns_explains_no_available_metric(tmp_path):
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    sources = SourceService(tmp_path / "data", catalog)
+    source = sources.register_csv("labels.csv", b"kind\nA\nB\n")
+    provider = ScriptedProvider({"intent": "clarification", "sql": None, "explanation": ""})
+    agent = AgentRuntime(provider, build_tool_registry(catalog, sources), sources=sources)
+    try:
+        answer = await agent.ask("Покажи сумму profit", [source.source_id])
+        assert answer.status == "clarification"
+        assert answer.clarification is not None
+        assert "нет числовых полей" in answer.clarification.reason.lower()
+        assert answer.clarification.options == ["Показать структуру источника", "Показать обзор данных"]
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
+async def test_sum_of_named_text_field_explains_no_numeric_metric(tmp_path):
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    sources = SourceService(tmp_path / "data", catalog)
+    source = sources.register_csv("labels.csv", b"kind\nA\nB\n")
+    provider = ScriptedProvider({"intent": "clarification", "sql": None, "explanation": ""})
+    agent = AgentRuntime(provider, build_tool_registry(catalog, sources), sources=sources)
+    try:
+        answer = await agent.ask("Покажи сумму kind", [source.source_id])
+        assert answer.clarification is not None
+        assert "нет числовых полей" in answer.clarification.reason.lower()
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
 async def test_missing_profit_inputs_returns_resumable_clarification_without_model(tmp_path):
     provider = ScriptedProvider()
     agent, source, catalog = agent_with_csv(tmp_path, provider)
