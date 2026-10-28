@@ -138,8 +138,31 @@ class LineCard(ChartBase):
     limit: int = Field(default=100, ge=1, le=1000)
 
 
+class BarCard(LineCard):
+    type: Literal["bar"] = "bar"
+
+
+class ScatterCard(ChartBase):
+    type: Literal["scatter"] = "scatter"
+    x: FieldRef
+    y: FieldRef
+    limit: int = Field(default=100, ge=1, le=1000)
+
+
+class TableCard(ChartBase):
+    type: Literal["table"] = "table"
+    fields: list[FieldRef] = Field(min_length=1, max_length=20)
+    limit: int = Field(default=100, ge=1, le=1000)
+
+    @model_validator(mode="after")
+    def unique_fields(self):
+        if len({(ref.source_id, ref.field) for ref in self.fields}) != len(self.fields):
+            raise ValueError("Table fields must be unique")
+        return self
+
+
 ChartDefinition = Annotated[
-    KPICard | LineCard,
+    KPICard | LineCard | BarCard | ScatterCard | TableCard,
     Field(discriminator="type"),
 ]
 

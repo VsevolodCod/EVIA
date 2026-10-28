@@ -224,3 +224,37 @@ def test_build_tool_persists_extra_filters_and_rebuild_does_not_broaden_scope(tm
         assert float(executor.execute(result.data["chart_id"])["value"]) == 10
     finally:
         catalog.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind,csv,card,expected", [
+    ("bar", "category,amount\nA,10\nA,20\nB,5\n",
+     {"type": "bar", "title": "По категории", "x": "category", "y": "amount", "aggregate": "sum"},
+     [{"x": "A", "y": 30}, {"x": "B", "y": 5}]),
+    ("scatter", "revenue,cost\n10,5\n10,5\n20,8\n",
+     {"type": "scatter", "title": "Связь показателей", "x": "revenue", "y": "cost"},
+     [{"x": 10, "y": 5}, {"x": 10, "y": 5}, {"x": 20, "y": 8}]),
+    ("table", "category,note\nA,ok\nB,review\n",
+     {"type": "table", "title": "Строки", "fields": ["category", "note"]},
+     [{"category": "A", "note": "ok"}, {"category": "B", "note": "review"}]),
+])
+async def test_agent_builds_requested_chart_type_and_reopens_it(tmp_path, kind, csv, card, expected):
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    sources = SourceService(tmp_path / "data", catalog)
+    source = sources.register_csv("chart.csv", csv.encode())
+    llm = PlanLLM({"title": "Панель", "filters": [], "cards": [card], "clarification": None})
+    try:
+        response = await AgentRuntime(llm, build_tool_registry(catalog, sources), sources=sources).ask(
+            "Создай дашборд с графиком или таблицей по этим полям", [source.source_id],
+        )
+        assert response.status == "answered", response
+        dashboard = response.tool_results[-1].data
+        assert dashboard["cards"][0]["type"] == kind
+        assert dashboard["cards"][0]["status"] == "success"
+        payload = dashboard["cards"][0]["data"]
+        assert payload["points" if kind != "table" else "rows"] == expected
+        chart_id = dashboard["cards"][0]["id"]
+        executor = ChartExecutor.build_executor(sources, catalog, ChartRepository(catalog.session_factory))
+        assert executor.execute(chart_id)["points" if kind != "table" else "rows"] == expected
+    finally:
+        catalog.close()

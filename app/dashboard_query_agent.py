@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from time import perf_counter
+from typing import Literal
 
 import httpx
 from pydantic import (
@@ -43,22 +44,27 @@ class DraftFilter(BaseModel):
 class DraftCard(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    type: str = Field(pattern="^(kpi|line)$")
+    type: Literal["kpi", "line", "bar", "scatter", "table"]
     title: str = Field(min_length=1, max_length=120)
     field: str | None = None
     x: str | None = None
     y: str | None = None
-    aggregate: str = Field(pattern="^(count|sum|avg|min|max)$")
+    aggregate: Literal["count", "sum", "avg", "min", "max"] | None = None
     time_grain: TimeGrain | None = None
+    fields: list[str] | None = Field(default=None, min_length=1, max_length=20)
 
     @model_validator(mode="after")
     def required_fields(self):
-        if self.type == "kpi" and not self.field:
-            raise ValueError("KPI needs field")
-        if self.type == "line" and (not self.x or not self.y):
-            raise ValueError("Line needs x and y")
-        if self.type != "line" and self.time_grain is not None:
-            raise ValueError("Only a line chart supports time_grain")
+        if self.type == "kpi" and (not self.field or not self.aggregate or self.x or self.y or self.fields or self.time_grain):
+            raise ValueError("KPI needs only a field and aggregate")
+        if self.type in {"line", "bar"} and (not self.x or not self.y or not self.aggregate or self.field or self.fields):
+            raise ValueError("Grouped chart needs x, y and aggregate")
+        if self.type == "scatter" and (not self.x or not self.y or self.field or self.fields or self.aggregate or self.time_grain):
+            raise ValueError("Scatter needs only numeric x and y fields")
+        if self.type == "table" and (not self.fields or self.field or self.x or self.y or self.aggregate or self.time_grain):
+            raise ValueError("Table needs only selected fields")
+        if self.type not in {"line", "bar"} and self.time_grain is not None:
+            raise ValueError("Only grouped charts support time_grain")
         return self
 
 
@@ -114,12 +120,16 @@ class DashboardQueryAgent:
             "Период по полю даты выражай фильтрами gte начала и lt следующей границы "
             "(например за 2025 год: >= 2025-01-01, < 2026-01-01). "
             "Не угадывай дату для относительных периодов, если она не определена в запросе/контексте. "
-            "Типы: kpi (field, aggregate) или "
-            "line (x, y, aggregate, time_grain). time_grain: day/week/month/quarter/year "
+            "Типы: kpi (field, aggregate), line/bar (x, y, aggregate, time_grain), "
+            "scatter (x, y: два числовых поля, без aggregate), "
+            "table (fields: список существующих полей, без aggregate). "
+            "Выбирай line для времени, bar для категорий, scatter для связи двух чисел, "
+            "table для отдельных строк или когда график невозможен. "
+            "time_grain: day/week/month/quarter/year "
             "для группировки по настоящему полю даты; null — исходные значения. "
             "Не подменяй кварталы месяцами/датами, не суммируй идентификаторы. "
             "Агрегации: count, sum, avg, min, max. "
-            "Для sum/avg бери числовое поле; для line x — поле группировки, "
+            "Для sum/avg бери числовое поле; для line/bar x — поле группировки, "
             "а y — числовой показатель (кроме count). "
             "Не придумывай результаты, SQL, source_id и дополнительные поля. "
             "Сохраняй показатель, фильтры и период при продолжении диалога, если пользователь "
@@ -160,7 +170,7 @@ class DashboardQueryAgent:
                     candidate = None
                 if candidate and not any(
                     field not in field_names for card in candidate.cards
-                    for field in (card.field, card.x, card.y) if field is not None
+                    for field in (card.field, card.x, card.y, *(card.fields or [])) if field is not None
                 ) and not any(item.field not in field_names for item in candidate.filters):
                     draft = candidate
 
@@ -190,7 +200,7 @@ class DashboardQueryAgent:
                         "field": {"source_id": source_id, "field": card.field},
                         "aggregate": card.aggregate,
                     })
-                else:
+                elif card.type in {"line", "bar"}:
                     x_field = next(field for field in fields if field.name == card.x)
                     definition.update({
                         "x": {
@@ -203,6 +213,15 @@ class DashboardQueryAgent:
                             "aggregate": card.aggregate,
                         },
                     })
+                elif card.type == "scatter":
+                    definition.update({
+                        "x": {"source_id": source_id, "field": card.x},
+                        "y": {"source_id": source_id, "field": card.y},
+                    })
+                else:
+                    definition["fields"] = [
+                        {"source_id": source_id, "field": name} for name in (card.fields or [])
+                    ]
                 chart_started = perf_counter()
                 built = self.tools.execute("build_chart", {"definition": definition, "filters": []})
                 timing.tools_ms += (perf_counter() - chart_started) * 1000

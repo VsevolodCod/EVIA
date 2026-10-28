@@ -1,14 +1,17 @@
 import { useEffect, useId, useState } from "react";
 import type { ToolResult } from "../../api";
 import { PaletteEditor } from "../analytics/PaletteEditor";
+import { DataTable } from "./DataTable";
 import { defaultPalette, loadPalette, savePalette, validatePalette, type PalettePreference } from "../analytics/palette";
 import "../analytics/dashboard.css";
 import "../analytics/dashboardPrint.css";
 import "./generatedDashboard.css";
 
-type Card = { id: string; type: "kpi" | "line"; title: string; status: "success" | "error"; definition?: unknown; data?: unknown; error?: { code?: string; message?: string } };
+type ChartType = "kpi" | "line" | "bar" | "scatter" | "table";
+type Card = { id: string; type: ChartType; title: string; status: "success" | "error"; definition?: unknown; data?: unknown; error?: { code?: string; message?: string } };
 export type Dashboard = { version: 1; title: string; palette?: string[] | null; cards: Card[] };
 type Point = { x: string | number | null; y: string | number | null; series?: string | null };
+const chartTypes: ChartType[] = ["kpi", "line", "bar", "scatter", "table"];
 
 function object(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -19,7 +22,7 @@ export function generatedDashboardFrom(result: ToolResult): Dashboard | null {
   const data = result.data;
   if (data.version !== 1 || typeof data.title !== "string" || !Array.isArray(data.cards)) return null;
   if (!data.cards.every((card) => object(card) && typeof card.id === "string" &&
-    typeof card.title === "string" && ["kpi", "line"].includes(String(card.type)) &&
+    typeof card.title === "string" && chartTypes.includes(card.type as ChartType) &&
     ["success", "error"].includes(String(card.status)))) return null;
   return data as Dashboard;
 }
@@ -28,11 +31,11 @@ export function generatedChartFrom(result: ToolResult): Dashboard | null {
   if (!result.ok || result.tool_name !== "build_chart" || !object(result.data)) return null;
   const data = result.data;
   if (data.success !== true || typeof data.chart_id !== "string" || !object(data.definition) ||
-    typeof data.definition.title !== "string" || !["kpi", "line"].includes(String(data.definition.type))) return null;
+    typeof data.definition.title !== "string" || !chartTypes.includes(data.definition.type as ChartType)) return null;
   return {
     version: 1,
     title: data.definition.title,
-    cards: [{ id: data.chart_id, type: data.definition.type as "kpi" | "line", title: data.definition.title,
+    cards: [{ id: data.chart_id, type: data.definition.type as ChartType, title: data.definition.title,
       status: "success", definition: data.definition, data: data.result }],
   };
 }
@@ -68,9 +71,20 @@ function lineData(value: unknown): { points: Point[]; xLabel: string; yLabel: st
 function calculationPassport(card: Card): { source: string; formula: string; period: string; filters: string[]; grouping?: string; snapshot?: string; schemaVersion?: number } | null {
   const definition = card.definition;
   if (!object(definition)) return null;
-  const measure = definition.type === "kpi" ? definition.field : definition.type === "line" ? definition.y : null;
+  const measure = definition.type === "kpi" ? definition.field : definition.y;
+  const fields = Array.isArray(definition.fields) ? definition.fields.filter(object) : [];
+  const source = object(measure) && typeof measure.source_id === "string"
+    ? measure.source_id : fields.length && typeof fields[0].source_id === "string" ? fields[0].source_id : null;
+  if (!source) return null;
   const aggregate = definition.type === "kpi" ? definition.aggregate : object(measure) ? measure.aggregate : null;
-  if (!object(measure) || typeof measure.source_id !== "string" || typeof measure.field !== "string" || typeof aggregate !== "string") return null;
+  let formula: string;
+  if (typeof aggregate === "string" && object(measure) && typeof measure.field === "string")
+    formula = `${aggregate.toUpperCase()}(${measure.field})`;
+  else if (definition.type === "scatter" && object(definition.x) && object(definition.y))
+    formula = `X: ${String(definition.x.field)}; Y: ${String(definition.y.field)}`;
+  else if (definition.type === "table" && fields.length)
+    formula = `Поля: ${fields.map(item => String(item.field)).join(", ")}`;
+  else return null;
   const filters = Array.isArray(definition.filters) ? definition.filters.flatMap((item) => {
     if (!object(item) || !object(item.field) || typeof item.field.field !== "string" || typeof item.operator !== "string") return [];
     const operators: Record<string, string> = { eq: "=", ne: "≠", gt: ">", gte: "≥", lt: "<", lte: "≤", in: "в", not_in: "не в", between: "между", is_null: "пусто", is_not_null: "не пусто" };
@@ -79,15 +93,15 @@ function calculationPassport(card: Card): { source: string; formula: string; per
   }) : [];
   const result = object(card.data) ? card.data : null;
   const provenance = result && Array.isArray(result.provenance)
-    ? result.provenance.find((item) => object(item) && item.source_id === measure.source_id) : null;
+    ? result.provenance.find((item) => object(item) && item.source_id === source) : null;
   const grains: Record<string, string> = { day: "По дням", week: "По неделям", month: "По месяцам", quarter: "По кварталам", year: "По годам" };
   const x = object(definition.x) ? definition.x : null;
   return {
-    source: measure.source_id,
-    formula: `${aggregate.toUpperCase()}(${measure.field})`,
+    source,
+    formula,
     period: filters.length ? "Применены фильтры" : "Весь источник без фильтров",
     filters,
-    grouping: x && typeof x.field === "string"
+    grouping: (definition.type === "line" || definition.type === "bar") && x && typeof x.field === "string"
       ? `${typeof x.time_grain === "string" ? grains[x.time_grain] ?? x.time_grain : "По исходным значениям"}: ${x.field}`
       : undefined,
     snapshot: object(provenance) && typeof provenance.snapshot_id === "string" ? provenance.snapshot_id : undefined,
@@ -139,6 +153,99 @@ function ResultLine({ card, colors, gradient }: { card: Card; colors: string[]; 
   </>;
 }
 
+function LimitNote({ data, count, unit = "точек" }: { data: unknown; count: number; unit?: string }) {
+  return object(data) && data.limit_reached === true ? <p className="generated-limit-note">
+    Показано {unit}: {count}. Достигнут лимит выдачи; в источнике могут быть другие строки или группы. Уточните фильтры.
+  </p> : null;
+}
+
+function ResultBar({ card, colors }: { card: Card; colors: string[] }) {
+  const chart = lineData(card.data);
+  if (!chart || !chart.points.length) return <p className="generated-empty">Нет столбцов для графика.</p>;
+  const values = chart.points.map(point => numeric(point.y)).filter((value): value is number => value !== null);
+  if (!values.length) return <p className="generated-empty">Нет числовых значений для графика.</p>;
+  const width = Math.max(720, chart.points.length * 32 + 70);
+  const height = 260; const left = 54; const right = 16; const top = 18; const bottom = 42;
+  const minimum = Math.min(0, ...values); const maximum = Math.max(0, ...values);
+  const scale = Math.max(1, Math.abs(minimum), Math.abs(maximum));
+  const span = maximum / scale - minimum / scale || 1;
+  const y = (value: number) => top + (height - top - bottom) * ((maximum / scale - value / scale) / span);
+  const baseline = y(0);
+  const x = (index: number) => left + (width - left - right) * ((index + .5) / chart.points.length);
+  const barWidth = Math.min(24, (width - left - right) / chart.points.length * .7);
+  const stride = Math.max(1, Math.ceil(chart.points.length / 10));
+  const hasSeries = object(card.definition) && object(card.definition.series);
+  const seriesName = (point: Point) => point.series == null || point.series === "" ? "Нет значения" : String(point.series);
+  const series = hasSeries ? [...new Set(chart.points.map(seriesName))] : [];
+  return <>
+    <LimitNote data={card.data} count={chart.points.length} />
+    <div className="generated-chart-scroll" role="region" aria-label={`Прокрутка графика ${card.title}`} tabIndex={0}>
+      <svg className="generated-bar-chart" width={width} viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${card.title}: ${chart.yLabel} по ${chart.xLabel}`}>
+        <line x1={left} x2={width - right} y1={baseline} y2={baseline} stroke="#82968b" />
+        {chart.points.map((point, index) => {
+          const value = numeric(point.y);
+          if (value === null) return null;
+          const topY = Math.min(y(value), baseline);
+          const name = hasSeries ? `${point.x} · ${seriesName(point)}` : String(point.x);
+          const seriesIndex = hasSeries ? series.indexOf(seriesName(point)) : 0;
+          return <rect key={index} data-bar="true" x={x(index) - barWidth / 2} y={topY} width={barWidth}
+            height={Math.abs(y(value) - baseline)} fill={colors[Math.max(seriesIndex, 0) % colors.length]} rx="2" tabIndex={0}
+            aria-label={`${name}: ${point.y}`}><title>{`${name}: ${point.y}`}</title></rect>;
+        })}
+        {chart.points.map((point, index) => index % stride === 0 && <text key={index} x={x(index)} y={height - 13} textAnchor="middle">
+          {String(point.x ?? "—").slice(0, 12)}
+        </text>)}
+      </svg>
+    </div>
+    {series.length > 1 && <div className="generated-legend">{series.map((name, index) =>
+      <span key={name}><i style={{ backgroundColor: colors[index % colors.length] }} />{name}</span>
+    )}</div>}
+    <div className="generated-axis-label">{chart.xLabel} · {chart.yLabel}</div>
+  </>;
+}
+
+function ResultScatter({ card, color }: { card: Card; color: string }) {
+  const chart = lineData(card.data);
+  if (!chart || !chart.points.length) return <p className="generated-empty">Нет точек для диаграммы.</p>;
+  const points = chart.points.flatMap(point => {
+    const x = numeric(point.x); const y = numeric(point.y);
+    return x === null || y === null ? [] : [{ x, y }];
+  });
+  if (!points.length) return <p className="generated-empty">Нет числовых пар для диаграммы.</p>;
+  const width = 720; const height = 260; const left = 54; const right = 18; const top = 18; const bottom = 42;
+  const xMin = Math.min(...points.map(point => point.x)); const xMax = Math.max(...points.map(point => point.x));
+  const yMin = Math.min(...points.map(point => point.y)); const yMax = Math.max(...points.map(point => point.y));
+  const coordinate = (value: number, min: number, max: number) => {
+    const scale = Math.max(1, Math.abs(min), Math.abs(max));
+    return (value / scale - min / scale) / (max / scale - min / scale || 1);
+  };
+  return <>
+    <LimitNote data={card.data} count={points.length} />
+    <svg className="generated-scatter-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${card.title}: ${chart.yLabel} по ${chart.xLabel}`}>
+      <line x1={left} x2={left} y1={top} y2={height - bottom} stroke="#82968b" />
+      <line x1={left} x2={width - right} y1={height - bottom} y2={height - bottom} stroke="#82968b" />
+      {points.map((point, index) => <circle key={index} data-point="true"
+        cx={left + coordinate(point.x, xMin, xMax) * (width - left - right)}
+        cy={height - bottom - coordinate(point.y, yMin, yMax) * (height - top - bottom)}
+        r="5" fill={color} fillOpacity=".75" tabIndex={0} aria-label={`${point.x}; ${point.y}`}>
+        <title>{`${point.x}; ${point.y}`}</title>
+      </circle>)}
+    </svg>
+    <div className="generated-axis-label">X: {chart.xLabel} · Y: {chart.yLabel}</div>
+  </>;
+}
+
+function ResultTable({ card }: { card: Card }) {
+  const data = object(card.data) ? card.data : null;
+  const columns = data && Array.isArray(data.columns) ? data.columns.filter((name): name is string => typeof name === "string") : [];
+  const rows = data && Array.isArray(data.rows) ? data.rows.filter(object) : [];
+  if (!columns.length) return <p className="generated-empty">Нет столбцов для таблицы.</p>;
+  return <>
+    <LimitNote data={card.data} count={rows.length} unit="строк" />
+    <DataTable rows={rows} columns={columns} label={card.title} />
+  </>;
+}
+
 export function GeneratedDashboard({ dashboard, scope, sourceLabel }: { dashboard: Dashboard; scope: string; sourceLabel?: string }) {
   const [showPalette, setShowPalette] = useState(false);
   const supplied = (() => { try { return dashboard.palette ? validatePalette(dashboard.palette) : defaultPalette.colors; } catch { return defaultPalette.colors; } })();
@@ -162,10 +269,13 @@ export function GeneratedDashboard({ dashboard, scope, sourceLabel }: { dashboar
     {showPalette && <PaletteEditor colors={preference.colors} gradient={preference.gradient} onChange={changePalette} onClose={() => setShowPalette(false)} />}
     <div className="generated-grid">
       {dashboard.cards.map((card) => <section key={card.id} className={`dashboard-card generated-card generated-${card.type}-card`}>
-        <div className="chart-heading"><h3>{card.title}</h3>{card.status === "success" && <small>{card.type === "kpi" ? "Показатель" : "Динамика"}</small>}</div>
+        <div className="chart-heading"><h3>{card.title}</h3>{card.status === "success" && <small>{({ kpi: "Показатель", line: "Динамика", bar: "Сравнение", scatter: "Связь", table: "Таблица" } as const)[card.type]}</small>}</div>
         {card.status === "error" ? <p className="generated-empty">Не удалось рассчитать эту карточку.</p>
           : card.type === "kpi" && object(card.data) ? <strong className="generated-value">{displayValue(card.data.value)}</strong>
-            : card.type === "line" ? <ResultLine card={card} colors={preference.colors} gradient={preference.gradient} /> : null}
+            : card.type === "line" ? <ResultLine card={card} colors={preference.colors} gradient={preference.gradient} />
+              : card.type === "bar" ? <ResultBar card={card} colors={preference.colors} />
+                : card.type === "scatter" ? <ResultScatter card={card} color={preference.colors[0]} />
+                  : card.type === "table" ? <ResultTable card={card} /> : null}
         {card.status === "success" && (() => {
           const passport = calculationPassport(card);
           return passport ? <details className="generated-passport">
