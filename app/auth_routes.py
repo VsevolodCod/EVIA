@@ -4,7 +4,7 @@ import os
 import httpx
 import logging
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Response
+from fastapi import APIRouter, BackgroundTasks, File, HTTPException, Request, Response, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, EmailStr, Field
 
@@ -57,7 +57,8 @@ def account(request: Request) -> Account:
 
 def public(user: Account) -> dict:
     return {"id": user.id, "email": user.email, "name": user.name,
-            "created_at": user.created_at.isoformat()}
+            "created_at": user.created_at.isoformat(),
+            "avatar_url": f"/auth/avatar?v={int(user.avatar_updated_at.timestamp() * 1_000_000)}" if user.avatar_updated_at else None}
 
 
 def set_cookie(request: Request, response: Response, token: str) -> None:
@@ -137,6 +138,31 @@ async def update_profile(body: ProfileUpdate, request: Request):
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return public(user)
+
+
+@router.put("/avatar")
+async def upload_avatar(request: Request, file: UploadFile = File(...)):
+    if file.content_type not in {"image/png", "image/jpeg", "image/webp"}:
+        raise HTTPException(status_code=400, detail="Only PNG, JPEG and WebP images are supported")
+    raw = await file.read(1_048_577)
+    try:
+        updated = await run_in_threadpool(store(request).save_avatar, account(request).id, raw)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return public(updated)
+
+
+@router.get("/avatar")
+async def get_avatar(request: Request):
+    avatar = await run_in_threadpool(store(request).get_avatar, account(request).id)
+    if avatar is None:
+        raise HTTPException(status_code=404, detail="Avatar not found")
+    return Response(content=avatar[0], media_type=avatar[1])
+
+
+@router.delete("/avatar", status_code=204)
+async def delete_avatar(request: Request):
+    await run_in_threadpool(store(request).remove_avatar, account(request).id)
 
 
 @router.post("/password")

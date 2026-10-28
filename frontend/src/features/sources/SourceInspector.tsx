@@ -17,7 +17,6 @@ import { ProfileQuality } from "./ProfileQuality";
 import {
   numberText,
   profileModel,
-  sampleDescription,
   typeLabel,
 } from "./profileModel";
 import "./analytics.css";
@@ -174,12 +173,6 @@ export function SourceInspector({
           </div>
         ) : (
           <>
-            {current.profile && model && ["profile", "quality"].includes(view) && (
-              <div className="profile-scope">
-                <span className="scope-dot" aria-hidden="true" />
-                <span>{current.profile.coverage === "full" ? "Весь источник" : sampleDescription(current.profile)}</span>
-              </div>
-            )}
             {view === "overview" ? (
               <Dashboard
                 title="Обзор источника"
@@ -239,7 +232,6 @@ export function SourceInspector({
                   <div>
                     <h2>Предпросмотр данных</h2>
                   </div>
-                  <Icon name="grid" />
                 </div>
                 <DataTable
                   rows={current.rows}

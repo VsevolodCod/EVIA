@@ -3,12 +3,14 @@
 import hashlib
 import hmac
 import secrets
+from io import BytesIO
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from pwdlib import PasswordHash
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, create_engine, delete, select
+from PIL import Image, ImageOps, UnidentifiedImageError
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, LargeBinary, String, create_engine, delete, inspect, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
@@ -41,6 +43,9 @@ class UserRow(AuthBase):
     password_digest: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     is_legacy_owner: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    avatar_bytes: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    avatar_mime: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    avatar_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class SessionRow(AuthBase):
@@ -72,10 +77,11 @@ class Account:
     email: str
     name: str
     created_at: datetime
+    avatar_updated_at: datetime | None = None
 
     @classmethod
     def from_row(cls, row: UserRow) -> "Account":
-        return cls(row.id, row.email, row.name, row.created_at)
+        return cls(row.id, row.email, row.name, row.created_at, row.avatar_updated_at)
 
 
 def _aware(value: datetime) -> datetime:
@@ -96,6 +102,18 @@ class AuthStore:
 
     def initialize(self) -> None:
         AuthBase.metadata.create_all(self.engine)
+        # create_all does not add columns to accounts created before avatars existed.
+        with self.engine.begin() as connection:
+            existing = {column["name"] for column in inspect(connection).get_columns("auth_users")}
+            column_types = {
+                "avatar_bytes": "BYTEA" if self.engine.dialect.name == "postgresql" else "BLOB",
+                "avatar_mime": "VARCHAR(32)",
+                "avatar_updated_at": "TIMESTAMPTZ" if self.engine.dialect.name == "postgresql" else "TIMESTAMP",
+            }
+            for name, kind in column_types.items():
+                if name not in existing:
+                    clause = "IF NOT EXISTS " if self.engine.dialect.name == "postgresql" else ""
+                    connection.execute(text(f"ALTER TABLE auth_users ADD COLUMN {clause}{name} {kind}"))
 
     def close(self) -> None:
         self.engine.dispose()
@@ -193,6 +211,46 @@ class AuthStore:
             row.name = name
             session.flush()
             return Account.from_row(row)
+
+    def save_avatar(self, user_id: str, raw: bytes) -> Account:
+        if not raw or len(raw) > 1_048_576:
+            raise ValueError("Image must be smaller than 1 MB")
+        try:
+            with Image.open(BytesIO(raw)) as original:
+                if original.format not in {"PNG", "JPEG", "WEBP"}:
+                    raise ValueError("Only PNG, JPEG and WebP images are supported")
+                image = ImageOps.exif_transpose(original)
+                image.thumbnail((256, 256))
+                image = image.convert("RGBA" if "A" in image.getbands() else "RGB")
+                output = BytesIO()
+                image.save(output, format="WEBP", quality=82, method=4)
+        except (UnidentifiedImageError, OSError, Image.DecompressionBombError) as exc:
+            raise ValueError("Invalid image") from exc
+        with self.sessions.begin() as session:
+            row = session.get(UserRow, user_id)
+            if row is None:
+                raise ValueError("Account not found")
+            row.avatar_bytes = output.getvalue()
+            row.avatar_mime = "image/webp"
+            row.avatar_updated_at = utc_now()
+            session.flush()
+            return Account.from_row(row)
+
+    def get_avatar(self, user_id: str) -> tuple[bytes, str] | None:
+        with self.sessions() as session:
+            row = session.get(UserRow, user_id)
+            if row is None or row.avatar_bytes is None:
+                return None
+            return row.avatar_bytes, row.avatar_mime or "image/webp"
+
+    def remove_avatar(self, user_id: str) -> None:
+        with self.sessions.begin() as session:
+            row = session.get(UserRow, user_id)
+            if row is None:
+                raise ValueError("Account not found")
+            row.avatar_bytes = None
+            row.avatar_mime = None
+            row.avatar_updated_at = None
 
     def change_password(self, user_id: str, current: str, new: str) -> bool:
         if not 12 <= len(new) <= 128:

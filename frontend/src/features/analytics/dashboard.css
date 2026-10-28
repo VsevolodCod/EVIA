@@ -403,3 +403,8 @@
   .chart-heading h3 { font-size: 14px; }
   .bar-row,.quality-row { font-size: 12px; }
 }
+
+.dashboard .kpi-grid .dashboard-card:first-child { background: #147d50; border-color: #147d50; color: #fff; box-shadow: 0 9px 22px #0f704329; }
+.dashboard .kpi-grid .dashboard-card:first-child :is(span,strong,small) { color: #fff; }
+.app[data-theme="dark"] .dashboard .kpi-grid .dashboard-card:first-child { background: #147d50 !important; border-color: #147d50 !important; color: #fff !important; }
+.app[data-theme="dark"] .dashboard .kpi-grid .dashboard-card:first-child :is(span,strong,small) { color: #fff !important; }

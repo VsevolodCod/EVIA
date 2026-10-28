@@ -131,7 +131,7 @@ function ResultLine({ card, colors, gradient }: { card: Card; colors: string[]; 
   </>;
 }
 
-export function GeneratedDashboard({ dashboard, scope, sourceLabel = "Результат рассчитан по выбранному источнику" }: { dashboard: Dashboard; scope: string; sourceLabel?: string }) {
+export function GeneratedDashboard({ dashboard, scope, sourceLabel }: { dashboard: Dashboard; scope: string; sourceLabel?: string }) {
   const [showPalette, setShowPalette] = useState(false);
   const supplied = (() => { try { return dashboard.palette ? validatePalette(dashboard.palette) : defaultPalette.colors; } catch { return defaultPalette.colors; } })();
   const [preference, setPreference] = useState<PalettePreference>(() => loadPalette(scope) ?? { colors: supplied, gradient: false });
@@ -148,7 +148,7 @@ export function GeneratedDashboard({ dashboard, scope, sourceLabel = "Резул
     window.print();
   };
   return <div className="dashboard generated-dashboard" data-print-report="true" style={{ "--dashboard-primary": preference.colors[0], "--dashboard-secondary": preference.colors[1] } as React.CSSProperties}>
-    <div className="dashboard-top"><div><h2>{dashboard.title}</h2><p>{sourceLabel}</p></div>
+    <div className="dashboard-top"><div><h2>{dashboard.title}</h2>{sourceLabel && <p>{sourceLabel}</p>}</div>
       <div className="dashboard-actions"><button type="button" aria-expanded={showPalette} onClick={() => setShowPalette(!showPalette)}>Цвета</button><button type="button" onClick={exportPdf}>Печать / PDF</button></div>
     </div>
     {showPalette && <PaletteEditor colors={preference.colors} gradient={preference.gradient} onChange={changePalette} onClose={() => setShowPalette(false)} />}
