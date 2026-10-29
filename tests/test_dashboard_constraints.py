@@ -14,20 +14,50 @@ from app.charts.implementations.line import LineImplementation
 from app.charts.models import LineCard, LineXAxis
 from app.charts.query_planner import QueryPlanner
 from app.charts.repositories import ChartRepository, DashboardRepository
-from app.models import LLMResponse
+from app.models import LLMResponse, ToolCall
 from app.schema_catalog import SchemaCatalog
 from app.source_service import SourceService
 from app.tools.registration import build_tool_registry
 
 
-class PlanLLM:
-    def __init__(self, plan):
+class ToolDashboardLLM:
+    """Script only tool choice; registry/executor/storage do real work."""
+    def __init__(self, plan, source_id):
         self.plan = plan
+        self.source_id = source_id
         self.calls = 0
 
-    async def chat_structured(self, messages, schema):
+    async def chat(self, messages, tools=None):
         self.calls += 1
-        return LLMResponse(content=json.dumps(self.plan), finish_reason="stop")
+        if self.calls == 1:
+            definitions = []
+            for card in self.plan['cards']:
+                definition = {'type': card['type'], 'title': card['title'], 'filters': [
+                    {**item, 'field': {'source_id': self.source_id, 'field': item['field']}}
+                    for item in self.plan['filters']
+                ]}
+                ref = lambda field: {'source_id': self.source_id, 'field': field}
+                if card['type'] == 'kpi':
+                    definition.update(field=ref(card['field']), aggregate=card['aggregate'])
+                elif card['type'] in {'line', 'bar'}:
+                    definition.update(x={**ref(card['x']),
+                        'type': 'temporal' if card.get('time_grain') else 'category',
+                        'time_grain': card.get('time_grain')},
+                        y={**ref(card['y']), 'aggregate': card['aggregate']})
+                elif card['type'] == 'scatter':
+                    definition.update(x=ref(card['x']), y=ref(card['y']))
+                else:
+                    definition['fields'] = [ref(field) for field in card['fields']]
+                definitions.append(definition)
+            return LLMResponse(tool_calls=[ToolCall(name='build_chart', arguments={'definition': definition})
+                                           for definition in definitions], finish_reason='tool_calls')
+        if self.calls == 2:
+            built = [json.loads(m.content)['data'] for m in messages if m.role == 'tool']
+            assert all(item['success'] for item in built)
+            return LLMResponse(tool_calls=[ToolCall(name='compose_dashboard', arguments={
+                'title': self.plan['title'], 'chart_ids': [item['chart_id'] for item in built],
+            })], finish_reason='tool_calls')
+        return LLMResponse(content='Панель создана по вычисленным данным.')
 
 
 def make_plan(date="event_day", value="amount", segment="segment"):
@@ -62,16 +92,17 @@ async def test_filtered_quarters_match_oracle_and_survive_restart(tmp_path, name
     catalog = SchemaCatalog(tmp_path / "catalog.db")
     sources = SourceService(tmp_path / "data", catalog)
     source = sources.register_csv("unknown.csv", csv.encode())
-    llm = PlanLLM(make_plan(*names))
+    llm = ToolDashboardLLM(make_plan(*names), source.source_id)
     try:
         result = await AgentRuntime(llm, build_tool_registry(catalog, sources), sources=sources).ask(
             f"Создай дашборд суммы {names[1]} для {names[2]} A за 2025 год по кварталам {names[0]}",
             [source.source_id],
         )
         assert result.status == "answered", result
-        dashboard = result.tool_results[-1].data
+        dashboard = result.tool_results[-1].data["dashboard"]
         assert dashboard["id"]
-        kpi, line = dashboard["cards"]
+        built = [item.data for item in result.tool_results if item.tool_name == "build_chart"]
+        kpi, line = [{"data": item["result"], "definition": item["definition"]} for item in built]
         assert float(kpi["data"]["value"]) == 145
         assert [(p["x"][:10], float(p["y"])) for p in line["data"]["points"]] == [
             ("2025-01-01", 60), ("2025-04-01", 40), ("2025-07-01", -5), ("2025-10-01", 50),
@@ -81,7 +112,7 @@ async def test_filtered_quarters_match_oracle_and_survive_restart(tmp_path, name
             assert len(card["definition"]["filters"]) == 3
             assert card["data"]["provenance"][0]["source_id"] == source.source_id
             assert all(f["field"]["source_id"] == source.source_id for f in card["definition"]["filters"])
-        assert llm.calls == 1
+        assert llm.calls == 3
     finally:
         catalog.close()
 
@@ -99,56 +130,25 @@ async def test_filtered_quarters_match_oracle_and_survive_restart(tmp_path, name
         reopened.close()
 
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize("fault", ["missing_filters", "unknown_filter", "bad_operator", "bad_json", "truncated"])
-async def test_incomplete_plan_never_falls_back_to_unfiltered_dashboard(tmp_path, fault):
+@pytest.mark.parametrize("fault", ["unknown_field", "bad_operator", "bad_grain", "non_date_axis"])
+def test_invalid_chart_conditions_do_not_leave_persisted_artifacts(tmp_path, fault):
     catalog = SchemaCatalog(tmp_path / "catalog.db")
     sources = SourceService(tmp_path / "data", catalog)
     source = sources.register_csv("sales.csv", b"event_day,amount,segment\n2025-01-01,10,A\n")
-    plan = make_plan()
-    if fault == "missing_filters":
-        del plan["filters"]
-    elif fault == "unknown_filter":
-        plan["filters"][0]["field"] = "not_in_schema"
-    elif fault == "bad_operator":
-        plan["filters"][0]["operator"] = "execute_sql"
-    llm = PlanLLM(plan)
-    if fault in {"bad_json", "truncated"}:
-        async def invalid(*args):
-            return LLMResponse(content="not JSON" if fault == "bad_json" else json.dumps(plan),
-                               finish_reason="stop" if fault == "bad_json" else "length")
-        llm.chat_structured = invalid
-    registry = build_tool_registry(catalog, sources)
-    def never_execute(*args):
-        raise AssertionError("No artifacts may be built from an invalid plan")
-    registry.execute = never_execute
+    definition = {
+        "type": "line", "title": "Период",
+        "x": {"source_id": source.source_id, "field": "event_day", "type": "temporal", "time_grain": "quarter"},
+        "y": {"source_id": source.source_id, "field": "amount", "aggregate": "sum"},
+        "filters": [{"field": {"source_id": source.source_id, "field": "segment"}, "operator": "eq", "value": "A"}],
+    }
+    if fault == "unknown_field": definition["filters"][0]["field"]["field"] = "missing"
+    elif fault == "bad_operator": definition["filters"][0]["operator"] = "execute_sql"
+    elif fault == "bad_grain": definition["x"]["time_grain"] = "quarter'); DROP TABLE source; --"
+    else: definition["x"]["field"] = "segment"
     try:
-        result = await AgentRuntime(llm, registry, sources=sources).ask(
-            "Дашборд по кварталам только для A за 2025 год", [source.source_id],
-        )
-        assert result.status == "clarification"
-        assert result.tool_results == []
-        assert result.answer_kind != "computed"
-    finally:
-        catalog.close()
-
-
-@pytest.mark.asyncio
-async def test_unsupported_condition_returns_specific_clarification_without_tools(tmp_path):
-    catalog = SchemaCatalog(tmp_path / "catalog.db")
-    sources = SourceService(tmp_path / "data", catalog)
-    source = sources.register_csv("sales.csv", b"amount\n10\n")
-    llm = PlanLLM({"title": "Уточнение", "filters": [], "cards": [],
-                   "clarification": "В источнике нет поля даты. За какой период считать без даты?"})
-    registry = build_tool_registry(catalog, sources)
-    registry.execute = lambda *args: pytest.fail("Clarification must not execute tools")
-    try:
-        result = await AgentRuntime(llm, registry, sources=sources).ask(
-            "Создай дашборд amount за сегодня", [source.source_id],
-        )
-        assert result.status == "clarification"
-        assert "нет поля даты" in result.answer
-        assert not result.tool_results
+        result = build_tool_registry(catalog, sources).execute("build_chart", {"definition": definition})
+        assert not result.ok or not result.data["success"]
+        assert ChartRepository(catalog.session_factory).list_all() == []
     finally:
         catalog.close()
 
@@ -192,19 +192,6 @@ def test_time_grain_is_not_arbitrary_sql_or_a_category_transform():
             LineXAxis(source_id="selected", field="x", **axis)
 
 
-# def test_filter_values_and_conditions_are_strict():
-#     for condition in [
-#         {"field": "amount", "operator": "eq", "value": [10, 20]},
-#         {"field": "amount", "operator": "eq", "value": {"sql": "SELECT 1"}},
-#         {"field": "amount", "operator": "gt", "value": float("inf")},
-#         {"field": "amount", "operator": "is_null", "value": 1},
-#     ]:
-#         plan = make_plan()
-#         plan["filters"] = [condition]
-#         with pytest.raises(ValidationError):
-#             DashboardDraft.model_validate(plan)
-
-
 def test_build_tool_persists_extra_filters_and_rebuild_does_not_broaden_scope(tmp_path):
     catalog = SchemaCatalog(tmp_path / "catalog.db")
     sources = SourceService(tmp_path / "data", catalog)
@@ -241,18 +228,18 @@ async def test_agent_builds_requested_chart_type_and_reopens_it(tmp_path, kind, 
     catalog = SchemaCatalog(tmp_path / "catalog.db")
     sources = SourceService(tmp_path / "data", catalog)
     source = sources.register_csv("chart.csv", csv.encode())
-    llm = PlanLLM({"title": "Панель", "filters": [], "cards": [card], "clarification": None})
+    llm = ToolDashboardLLM({"title": "Панель", "filters": [], "cards": [card]}, source.source_id)
     try:
         response = await AgentRuntime(llm, build_tool_registry(catalog, sources), sources=sources).ask(
             "Создай дашборд с графиком или таблицей по этим полям", [source.source_id],
         )
         assert response.status == "answered", response
-        dashboard = response.tool_results[-1].data
-        assert dashboard["cards"][0]["type"] == kind
-        assert dashboard["cards"][0]["status"] == "success"
-        payload = dashboard["cards"][0]["data"]
+        built = response.tool_results[0].data
+        assert built['success']
+        assert built['definition']['type'] == kind
+        payload = built['result']
         assert payload["points" if kind != "table" else "rows"] == expected
-        chart_id = dashboard["cards"][0]["id"]
+        chart_id = built["chart_id"]
         executor = ChartExecutor.build_executor(sources, catalog, ChartRepository(catalog.session_factory))
         assert executor.execute(chart_id)["points" if kind != "table" else "rows"] == expected
     finally:

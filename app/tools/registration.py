@@ -14,10 +14,18 @@ from app.tools.hypothesis import register_hypothesis_tools
 def build_tool_registry(
     catalog: SchemaCatalog,
     sources: SourceService,
-    dashboard_engine: DashboardEngine,
-    executor: ChartExecutor,
-    charts: ChartRepository
+    dashboard_engine: DashboardEngine | None = None,
+    executor: ChartExecutor | None = None,
+    charts: ChartRepository | None = None,
 ) -> ToolRegistry:
+    # Keep the public two-argument factory usable by integrations and scripts;
+    # production can still inject its shared repositories and executors.
+    if charts is None:
+        charts = ChartRepository(catalog.session_factory)
+    if executor is None:
+        executor = ChartExecutor.build_executor(sources, catalog, charts)
+    if dashboard_engine is None:
+        dashboard_engine = DashboardEngine(charts, DashboardRepository(catalog.session_factory))
     registry = ToolRegistry()
 
     register_data_tools(registry, catalog, sources)

@@ -147,3 +147,13 @@ def register_dashboard_tools(
             handler=lambda **payload: engine.get_dashboard(payload),
         )
     )
+
+    # Existing integrations and saved tool histories use this public name.
+    # Keep it valid while the general agent adopts get_dashboard_info.
+    registry.register(ToolDefinition(
+        name="get_dashboard",
+        description="Compatibility alias for get_dashboard_info: read a saved dashboard and its chart definitions.",
+        parameters=get_parameters,
+        required=get_required,
+        handler=lambda **payload: engine.get_dashboard(payload),
+    ))

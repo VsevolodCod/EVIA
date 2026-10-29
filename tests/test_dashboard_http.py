@@ -69,6 +69,7 @@ async def test_saved_dashboard_can_be_listed_reopened_and_built(tmp_path, monkey
             chart_definition = await client.get(f"/charts/{chart_id}")
             assert chart_definition.status_code == 200
             assert chart_definition.json()["id"] == chart_id
+            assert chart_definition.json()["chart_id"] == chart_id
 
             chart_result = await client.get(f"/charts/{chart_id}/build")
             assert chart_result.status_code == 200

@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Annotated, Literal
 
 from pydantic import (
+    AliasChoices,
     BaseModel,
     ConfigDict,
     Field,
@@ -140,10 +141,15 @@ class BarCard(LineCard):
     type: Literal["bar"] = "bar"
 
 
+class ScatterAxis(FieldRef):
+    label: str | None = Field(default=None, max_length=200)
+    format: ValueFormat = Field(default_factory=ValueFormat)
+
+
 class ScatterCard(ChartBase):
     type: Literal["scatter"] = "scatter"
-    x: FieldRef
-    y: FieldRef
+    x: ScatterAxis
+    y: ScatterAxis
     limit: int = Field(default=100, ge=1, le=1000)
 
 
@@ -192,9 +198,14 @@ class DashboardSpec(StrictModel):
 class ChartModel(StrictModel):
     """Чарт, сохранённый в БД. Его ID независим от ID внутри definition."""
 
-    chart_id: Identifier
+    chart_id: Identifier = Field(validation_alias=AliasChoices("chart_id", "id"))
     definition: ChartDefinition
     version: int = Field(default=1, ge=1)
+
+    @property
+    def id(self) -> str:
+        """Compatibility for integrations predating the explicit chart_id."""
+        return self.chart_id
 
 
 # ---------------------------------------------------------------------------

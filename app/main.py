@@ -334,7 +334,7 @@ async def ask_agent(body: AskRequest):
         return await agent.ask(
             question=body.question,
             source_ids=body.source_ids,
-            dashboard_id=body.dashboard_id,
+            **({"dashboard_id": body.dashboard_id} if body.dashboard_id is not None else {}),
         )
 
     except HTTPException:
@@ -397,7 +397,7 @@ async def chat_agent(
         answer = await agent.ask(
             question=body.question,
             source_ids=[chat.source_id],
-            dashboard_id=body.dashboard_id,
+            **({"dashboard_id": body.dashboard_id} if body.dashboard_id is not None else {}),
             history=chat.messages[:-1],
         )
 
@@ -618,7 +618,7 @@ def get_chart_info(chart_id: str):
                 detail="Chart not found",
             )
 
-        return chart.model_dump(mode="json")
+        return {**chart.model_dump(mode="json"), "id": chart.chart_id}
 
     except HTTPException:
         raise

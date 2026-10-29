@@ -5,7 +5,7 @@ from uuid import uuid4
 
 import httpx
 
-from app.contracts.v1 import AgentResponse, Error
+from app.contracts.v1 import AgentResponse, Error, QueryResult
 from app.llm.base import LLMProvider
 from app.llm.mock import MockLLMProvider
 from app.llm.openai_provider import OpenAIProvider
@@ -27,6 +27,25 @@ class IncompleteModelOutput(Exception):
         self.tool_results = tool_results
 
 
+class AgentStepLimit(IncompleteModelOutput):
+    """The tool loop ended without a final model response."""
+
+
+def _referenced_sources(value):
+    """Collect explicit source references from nested tool arguments."""
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if key == "source_id" and isinstance(child, str):
+                yield child
+            elif key == "source_ids" and isinstance(child, list):
+                yield from (item for item in child if isinstance(item, str))
+            else:
+                yield from _referenced_sources(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from _referenced_sources(child)
+
+
 SYSTEM_PROMPT = """
 Ты — помощник аналитика в локальной BI-платформе.
 
@@ -37,6 +56,11 @@ SYSTEM_PROMPT = """
 - Если данных недостаточно, прямо объясни ограничение.
 - Пиши понятным языком для бизнес-пользователя.
 - Не утверждай, что выполнил анализ, если инструмент его не выполнял.
+- Перед расчётом уточни схему выбранного источника через инструмент.
+- Сохраняй показатель, фильтры и период исходного вопроса при построении карточек.
+- Для календарной группировки используй time_grain, а не отдельные исходные даты.
+- Если условие нельзя выразить инструментами или поле неоднозначно, задай вопрос;
+  не заменяй запрос произвольным обзором всего источника.
 """
 
 
@@ -111,6 +135,14 @@ class AgentRuntime:
 
                 # Отдельно обрабатываем ситуацию, когда модель не успела
                 # завершить генерацию ответа из-за ограничения длины вывода.
+                except AgentStepLimit as exc:
+                    message = "Достигнут лимит шагов агента. Расчёт не завершён; уточните запрос и повторите."
+                    result = AgentResponse(
+                        request_id=request_id, status="error", answer=message,
+                        steps=exc.steps, tool_results=exc.tool_results, timing=timing,
+                        error=Error(code="QUERY_REJECTED", message=message,
+                                    request_id=request_id, retryable=True),
+                    )
                 except IncompleteModelOutput as exc:
                     message = (
                         "Ответ модели прервался из-за лимита генерации. "
@@ -133,6 +165,12 @@ class AgentRuntime:
                     )
 
                 else:
+                    # Preserve computed artifacts in the public contract and
+                    # persistent history even though planning now uses tools.
+                    query_results = [
+                        item.data for item in legacy.tool_results
+                        if item.ok and item.tool_name == "query_data" and isinstance(item.data, QueryResult)
+                    ]
                     # Преобразуем результат обычного агента в общий контракт ответа.
                     # Старое поле timing исключаем, поскольку ниже передаём
                     # актуальный объект timing, собранный в рамках текущего запроса.
@@ -140,6 +178,7 @@ class AgentRuntime:
                         **legacy.model_dump(exclude={"timing"}),
                         request_id=request_id,
                         status="answered",
+                        results=query_results,
                         timing=timing,
                         answer_kind=(
                             "demo"
@@ -210,7 +249,8 @@ class AgentRuntime:
 
         messages = (
                 [LLMMessage(role="system", content=SYSTEM_PROMPT, )] +
-                (history or []) +
+                [LLMMessage.model_validate(item.model_dump(include=set(LLMMessage.model_fields)))
+                 for item in (history or [])] +
                 [LLMMessage(role="user", content=question + context, )]
         )
 
@@ -375,7 +415,11 @@ class AgentRuntime:
                 #     logger.info(call.model_dump())
                 tool_started = perf_counter()
                 try:
-                    result = self.tools.execute(call.name, call.arguments)
+                    referenced = set(_referenced_sources(call.arguments))
+                    if source_ids and not referenced.issubset(source_ids):
+                        result = ToolResult(tool_name=call.name, ok=False, error="SOURCE_SCOPE_VIOLATION")
+                    else:
+                        result = self.tools.execute(call.name, call.arguments)
                 finally:
                     timing.tools_ms += (perf_counter() - tool_started) * 1000
                 results.append(result)
@@ -397,12 +441,4 @@ class AgentRuntime:
                     )
                 )
         logger.warning("Достигнут лимит шагов агента. Завершение")
-        return AskResponse(
-            answer=(
-                "Достигнут лимит шагов агента. "
-                "Попробуйте уточнить вопрос или разбить задачу "
-                "на несколько более простых запросов."
-            ),
-            steps=self.max_steps,
-            tool_results=results,
-        )
+        raise AgentStepLimit(self.max_steps, results)
