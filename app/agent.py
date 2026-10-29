@@ -1,22 +1,19 @@
-import asyncio
 import json
 import re
 from time import perf_counter
 from uuid import uuid4
 
-import httpx
-
 from app.contracts.v1 import AgentResponse, Error, FullProfile, Profile, QueryResult
 from app.llm.base import LLMProvider
 from app.llm.mock import MockLLMProvider
-from app.llm.openai_provider import OpenAIProvider
 from app.source_service import SourceService
 from app.models import (
     AskResponse,
     LLMMessage,
-    ToolResult, ChatMessage, AgentTiming, ModelTiming, SourceSchema,
+    ToolResult, ChatMessage, AgentTiming, SourceSchema,
 )
 from app.tools import ToolRegistry
+from app.retry_agent import LLMRetryPolicy, LLMRetryExhausted, call_with_retry
 import logging
 
 logger = logging.getLogger(__name__)
@@ -182,12 +179,14 @@ class AgentRuntime:
             tools: ToolRegistry,
             max_steps: int = 5,
             sources: SourceService | None = None,
+            retry_policy: LLMRetryPolicy | None = None,
     ) -> None:
 
         self.llm = llm
         self.tools = tools
         self.max_steps = max(1, max_steps)
         self.sources = sources
+        self.retry_policy = retry_policy or LLMRetryPolicy()
 
     async def ask(
             self,
@@ -443,92 +442,27 @@ class AgentRuntime:
         for step in range(1, self.max_steps + 1):
             logger.info(f"Агент начал выполнение шага {step}")
 
-            response = None
-            MAX_LLM_RETRIES = 5
-            BASE_TIME_RETRY = 0.5
+            call_started = perf_counter()
 
-            # Повторяем запрос, не расходуя шаг агента.
-            for attempt in range(1, MAX_LLM_RETRIES + 1):
-                call_started = perf_counter()
-
-                try:
-                    candidate = await self.llm.chat(
+            try:
+                response = await call_with_retry(
+                    lambda: self.llm.chat(
                         messages,
                         self.tools.descriptions(),
-                    )
-
-                except Exception as exc:
-                    elapsed = (perf_counter() - call_started) * 1000
-                    timing.llm_ms += elapsed
-
-                    # Повторяем только временную ошибку Cloud.ru.
-                    if (
-                            not isinstance(exc, httpx.HTTPStatusError)
-                            or exc.response.status_code != 502
-                            or isinstance(self.llm, OpenAIProvider)
-                    ):
-                        raise
-
-                    if attempt == MAX_LLM_RETRIES:
-                        logger.error(
-                            "LLM вернул HTTP 502 после %s попыток",
-                            attempt,
-                        )
-                        raise
-
-                    delay = BASE_TIME_RETRY * (2 ** (attempt - 1))
-                    logger.warning(
-                        "LLM HTTP 502: попытка %s/%s. "
-                        "Повтор через %.1f сек.",
-                        attempt,
-                        MAX_LLM_RETRIES,
-                        delay,
-                    )
-                    await asyncio.sleep(delay)
-                    continue
-
-                else:
-                    elapsed = (perf_counter() - call_started) * 1000
-                    timing.llm_ms += elapsed
-
-                # HTTP 200 ещё не означает, что модель выдала результат.
-                empty_output = (
-                        not candidate.tool_calls
-                        and not (candidate.content or "").strip()
-                        and candidate.finish_reason in (None, "stop")
+                    ),
+                    self.retry_policy,
+                    is_retryable_result=lambda candidate: (
+                            not candidate.tool_calls
+                            and not (candidate.content or "").strip()
+                            and candidate.finish_reason in (None, "stop")
+                    ),
                 )
 
-                if empty_output:
-                    if attempt == MAX_LLM_RETRIES:
-                        logger.error(
-                            "LLM вернул пустой ответ после %s попыток",
-                            attempt,
-                        )
-                        raise IncompleteModelOutput(step, results)
+            except LLMRetryExhausted as exc:
+                raise IncompleteModelOutput(step, results) from exc
 
-                    delay = BASE_TIME_RETRY * (2 ** (attempt - 1))
-                    logger.warning(
-                        "LLM вернул пустой ответ: попытка %s/%s. "
-                        "Повтор через %.1f сек.",
-                        attempt,
-                        MAX_LLM_RETRIES,
-                        delay,
-                    )
-                    await asyncio.sleep(delay)
-                    continue
-
-                # Получили пригодный ответ — выходим из внутреннего цикла.
-                response = candidate
-
-                call_timing = (
-                    response.timing.model_copy()
-                    if response.timing
-                    else ModelTiming()
-                )
-                call_timing.elapsed_ms = elapsed
-                timing.calls.append(call_timing)
-
-                break
+            finally:
+                timing.llm_ms += (perf_counter() - call_started) * 1000
 
             if response is None:
                 # Защита от неожиданного выхода без результата.
@@ -552,6 +486,7 @@ class AgentRuntime:
                     )
                 )
                 continue
+
             if response.finish_reason not in (None, "stop", "tool_calls"):
                 raise IncompleteModelOutput(step, results)
 

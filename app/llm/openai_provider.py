@@ -50,20 +50,21 @@ class OpenAIModel(AsyncModel):
         async with httpx.AsyncClient(
             timeout=self.timeout,
         ) as client:
-            for attempt in range(3):
-                response = await client.post(
-                    self.url,
-                    headers={
-                        "Authorization": f"Bearer {self.api_key}",
-                        "Content-Type": "application/json",
-                    },
-                    json=payload,
-                )
-                if response.status_code == 502 and attempt < 2:
-                    await asyncio.sleep(0.5 * (2 ** attempt))
-                    continue
-                response.raise_for_status()
-                return response.json()
+            # Был организованный нормальный retry-модуль
+            # for attempt in range(3):
+            response = await client.post(
+                self.url,
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+            )
+            # if response.status_code == 502 and attempt < 2:
+            #     await asyncio.sleep(0.5 * (2 ** attempt))
+            #     continue
+            response.raise_for_status()
+            return response.json()
 
 
 class OpenAIProvider(LLMProvider):
