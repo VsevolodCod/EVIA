@@ -102,3 +102,21 @@ def test_invalid_hypothesis_field_is_an_error_not_a_successful_check(tmp_path):
         assert "field" in result.error.lower()
     finally:
         catalog.close()
+
+
+def test_comparison_accepts_decimal_comma_values_from_csv(tmp_path):
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    sources = SourceService(tmp_path / "data", catalog)
+    source = sources.register_csv(
+        "sales.csv", b"period;amount\nbefore;1,5\nbefore;2,5\nafter;3,5\nafter;4,5\n")
+    try:
+        result = build_tool_registry(catalog, sources).execute("compare_groups", {
+            "source_id": source.source_id, "metric_field": "amount", "aggregation": "avg",
+            "group_field": "period", "left_value": "before", "right_value": "after",
+        })
+        assert result.ok, result.error
+        check = result.data["results"][0]
+        assert check["status"] == "completed", check["error"]
+        assert check["data"]["delta"] == pytest.approx(2)
+    finally:
+        catalog.close()

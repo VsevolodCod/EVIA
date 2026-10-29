@@ -16,12 +16,18 @@ def register_hypothesis_tools(registry: ToolRegistry, sources: Any) -> None:
     """Expose short, flat contracts that Cloud.ru can use in one tool call."""
     engine = HypothesisEngine(sources)
 
+    def run_one(payload: dict[str, Any]) -> dict[str, Any]:
+        result = engine.run(payload)
+        if result["results"][0]["status"] != "completed":
+            raise ValueError("Hypothesis check failed; verify the selected source and field names.")
+        return result
+
     def compare_groups(
         source_id: str, metric_field: str, group_field: str,
         left_value: str, right_value: str, aggregation: str = "avg",
         expected: str = "any",
     ) -> dict[str, Any]:
-        return engine.run({
+        return run_one({
             "statement": f"Сравнение {aggregation}({metric_field}) по {group_field}",
             "checks": [{
                 "id": "comparison", "method": "compare",
@@ -60,7 +66,7 @@ def register_hypothesis_tools(registry: ToolRegistry, sources: Any) -> None:
         source_id: str, x_field: str, y_field: str, group_field: str,
         aggregation: str = "sum", time_grain: str | None = None, max_lag: int = 0,
     ) -> dict[str, Any]:
-        return engine.run({
+        return run_one({
             "statement": f"Связь {x_field} и {y_field} по {group_field}",
             "checks": [{
                 "id": "relationship", "method": "relationship",
