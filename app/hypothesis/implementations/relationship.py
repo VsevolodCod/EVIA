@@ -382,6 +382,20 @@ class RelationshipImplementation(HypothesisImplementation):
             output["statistically_significant"] = lag_results[0]["statistically_significant"]
             output["adjusted_p_value"] = lag_results[0]["adjusted_p_value"]
             output["confidence_interval"] = lag_results[0]["confidence_interval"]
+            if output["statistically_significant"] is True:
+                output["interpretation"] = (
+                    "The lag-0 association remains statistically significant after "
+                    "correction for the scanned lags. This does not establish causation."
+                )
+            elif output["statistically_significant"] is False:
+                output["interpretation"] = (
+                    "The lag-0 association is not statistically significant after "
+                    "correction for the scanned lags. This does not prove no relationship."
+                )
+            else:
+                output["interpretation"] = (
+                    "The lag-0 sample is insufficient for a statistical significance assessment."
+                )
             output["limitations"].append(
                 "Lag alignment uses complete calendar periods; gaps reduce the paired sample."
             )

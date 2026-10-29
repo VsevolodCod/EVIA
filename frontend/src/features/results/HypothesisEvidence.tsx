@@ -61,7 +61,7 @@ export function HypothesisEvidence({ evidence }: { evidence: Value & { results: 
           <div className="hypothesis-values">
             <div><span>Коэффициент Пирсона</span><strong>{number(data.correlation)}</strong></div>
             <div><span>Групп в расчёте</span><strong>{number(data.sample_size)}</strong></div>
-            <div><span>p-value</span><strong>{probability(data.p_value)}</strong></div>
+            <div><span>{Array.isArray(data.lag_results) ? "p-value без поправки" : "p-value"}</span><strong>{probability(data.p_value)}</strong></div>
           </div>
           {interval && <p>Доверительный интервал: {number(interval.low)} — {number(interval.high)}</p>}
           {Array.isArray(data.lag_results) && <div className="hypothesis-lags" aria-label="Проверенные лаги">

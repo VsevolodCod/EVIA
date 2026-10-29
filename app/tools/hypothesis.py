@@ -104,7 +104,7 @@ def register_hypothesis_tools(registry: ToolRegistry, sources: Any) -> None:
         for obj in schema.objects:
             for field in obj.fields:
                 inferred_type = field.inferred_type or "unknown"
-                aggregations = ["count_distinct"]
+                aggregations = ["count"]
                 if _is_numeric_type(inferred_type):
                     aggregations.extend(["sum", "avg", "min", "max"])
                 fields.append({
