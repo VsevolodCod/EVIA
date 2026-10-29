@@ -1,10 +1,14 @@
 import csv
+import errno
 import io
+import logging
+import sqlite3
 import uuid
 from pathlib import Path
 from typing import Any, BinaryIO
 
 from pydantic import ValidationError
+import duckdb
 
 from app.data_sources.csv_adapter import CSVAdapter
 from app.data_sources.csv_format import (
@@ -13,13 +17,29 @@ from app.data_sources.csv_format import (
     detect_delimiter,
 )
 from app.data_engine import DuckDBDataEngine
-from app.csv_import import CSVImportError, ImportReport, copy_original, scan_csv
+from app.csv_import import CSVImportError, ImportReport, copy_original, scan_csv, require_import_space
 from app.data_sources.postgresql_adapter import PostgreSQLAdapter
 from app.contracts.v1 import Profile, Provenance, QueryResult
 from app.models import CSVVersion, DataSource, SourceSchema, utc_now
 from app.profile_cache import ProfileCache
 from app.safe_sql import SafeQueryExecutor
 from app.schema_catalog import CatalogConflictError, SchemaCatalog
+
+logger = logging.getLogger(__name__)
+
+
+def _storage_full(error: Exception) -> bool:
+    # SQLAlchemy wraps sqlite errors in .orig. Never expose database paths.
+    error = getattr(error, "orig", error)
+    if isinstance(error, OSError):
+        return error.errno in {errno.ENOSPC, errno.EDQUOT}
+    if isinstance(error, sqlite3.Error):
+        return getattr(error, "sqlite_errorcode", None) == sqlite3.SQLITE_FULL
+    if isinstance(error, duckdb.IOException):
+        return any(message in str(error).lower() for message in (
+            "no space left on device", "disk quota exceeded",
+        ))
+    return False
 
 
 class SourceService:
@@ -121,6 +141,7 @@ class SourceService:
         normalized = self.data_dir / normalized_filename
 
         report: ImportReport | None = None
+        materialization_started = False
         try:
             report = scan_csv(target, normalized, copy_original(stream, target))
             source.import_report = report
@@ -131,6 +152,8 @@ class SourceService:
                 report=report,
             ))
             schema = self.csv_adapter.introspect_schema(source)
+            require_import_space(self.data_dir, normalized.stat().st_size * 2, report)
+            materialization_started = True
             self.data_engine.import_csv(
                 source,
                 normalized,
@@ -147,9 +170,21 @@ class SourceService:
             )
 
         except Exception as exc:
-            self.data_engine.discard(source)
-            target.unlink(missing_ok=True)
-            normalized.unlink(missing_ok=True)
+            # Free the new artifacts first, so database cleanup has room to write.
+            # Never remove originals or tables belonging to the previous snapshot.
+            for artifact in (target, normalized):
+                try:
+                    artifact.unlink(missing_ok=True)
+                except OSError:
+                    logger.exception("Could not remove failed CSV import artifact")
+            if materialization_started:
+                try:
+                    self.data_engine.discard(source)
+                except Exception:
+                    logger.exception("Could not discard failed CSV snapshot")
+            if _storage_full(exc):
+                raise CSVImportError("Insufficient storage for CSV import",
+                                     report or ImportReport(), status_code=507) from exc
             if isinstance(exc, CatalogConflictError):
                 raise CSVImportError("CSV source changed during import; retry with the latest version",
                                      report or ImportReport(), status_code=409) from exc
