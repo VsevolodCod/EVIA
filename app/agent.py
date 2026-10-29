@@ -119,13 +119,13 @@ def _asks_for_source_overview(question: str) -> bool:
     ))
 
 
-def _row_count_text(count: int) -> str:
+def _count_text(count: int, one: str, few: str, many: str) -> str:
     if count % 10 == 1 and count % 100 != 11:
-        word = "строка"
+        word = one
     elif count % 10 in (2, 3, 4) and count % 100 not in (12, 13, 14):
-        word = "строки"
+        word = few
     else:
-        word = "строк"
+        word = many
     return f"{count} {word}"
 
 
@@ -133,10 +133,16 @@ def _overview_answer(schema: SourceSchema, raw_profile: dict) -> str:
     profile = Profile.model_validate(raw_profile).root
     fields = [field for obj in schema.objects for field in obj.fields]
     if isinstance(profile, FullProfile):
-        lines = [f"В выбранном источнике {_row_count_text(profile.processed_rows)} и {len(fields)} полей."]
+        lines = [
+            "В выбранном источнике "
+            f"{_count_text(profile.processed_rows, 'строка', 'строки', 'строк')} "
+            f"и {_count_text(len(fields), 'поле', 'поля', 'полей')}."
+        ]
     else:
         lines = [
-            f"В доступной выборке {_row_count_text(profile.sample_size)} и {len(fields)} полей. "
+            "В доступной выборке "
+            f"{_count_text(profile.sample_size, 'строка', 'строки', 'строк')} "
+            f"и {_count_text(len(fields), 'поле', 'поля', 'полей')}. "
             "Полный размер источника неизвестен."
         ]
     if fields:
