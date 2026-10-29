@@ -210,7 +210,6 @@ def test_relationship_requires_one_to_three_groupings():
         RelationshipCheck.model_validate(
             relationship_payload(group_by=[])
         )
-
     with pytest.raises(ValidationError):
         RelationshipCheck.model_validate(
             relationship_payload(
@@ -222,6 +221,47 @@ def test_relationship_requires_one_to_three_groupings():
                 ]
             )
         )
+
+
+def test_lag_scan_requires_one_temporal_grouping():
+    with pytest.raises(ValidationError):
+        RelationshipCheck.model_validate(relationship_payload(max_lag=2))
+    with pytest.raises(ValidationError):
+        RelationshipCheck.model_validate(relationship_payload(
+            max_lag=2, group_by=[{"field": "month", "granularity": "month"},
+                                 {"field": "region"}]))
+
+
+def test_lag_scan_aligns_calendar_periods_and_adjusts_multiple_tests():
+    values = [2, 9, 1, 7, 3, 8, 4]
+    rows = [{"group_0": f"2026-{i + 1:02d}-01", "x_value": value,
+             "y_value": 0 if i == 0 else values[i - 1]}
+            for i, value in enumerate(values)]
+    check = RelationshipCheck.model_validate(relationship_payload(
+        max_lag=2, group_by=[{"field": "month", "granularity": "month"}]))
+    result = RelationshipImplementation(FakeSources(rows)).execute(check)
+
+    assert len(result["lag_results"]) == 3
+    assert result["lag_results"][1]["lag"] == 1
+    assert result["lag_results"][1]["sample_size"] == 6
+    assert result["lag_results"][1]["correlation"] == pytest.approx(1)
+    assert result["lag_results"][1]["adjusted_p_value"] <= 0.05
+    assert result["lag_results"][1]["confidence_interval"]["level"] > 0.98
+    assert result["period_coverage"] == 1
+
+
+def test_lag_scan_does_not_join_across_missing_calendar_periods():
+    rows = [
+        {"group_0": f"2026-{month:02d}-01", "x_value": month, "y_value": month * 2}
+        for month in (1, 3, 4, 5, 6)
+    ]
+    check = RelationshipCheck.model_validate(relationship_payload(
+        max_lag=1, group_by=[{"field": "month", "granularity": "month"}]))
+    result = RelationshipImplementation(FakeSources(rows)).execute(check)
+
+    assert result["period_coverage"] == pytest.approx(5 / 6)
+    assert result["lag_results"][1]["sample_size"] == 3
+    assert any("missing periods" in warning for warning in result["warnings"])
 
 
 @pytest.mark.parametrize("alpha", [0, 1, -0.1, 1.1])
@@ -561,7 +601,7 @@ def test_relationship_builds_grouped_aggregation_sql():
     assert '"region" = \'north\'' in sql
     assert "GROUP BY DATE_TRUNC" in sql
     assert "ORDER BY DATE_TRUNC" in sql
-    assert "LIMIT 10001" in sql
+    assert f"LIMIT {RelationshipImplementation.MAX_GROUPS + 1}" in sql
 
 
 @pytest.mark.parametrize(
