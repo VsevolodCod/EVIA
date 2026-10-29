@@ -24,7 +24,7 @@ def register_hypothesis_tools(registry: ToolRegistry, sources: Any) -> None:
 
     def compare_groups(
         source_id: str, metric_field: str, group_field: str,
-        left_value: str, right_value: str, aggregation: str = "avg",
+        baseline_value: str, comparison_value: str, aggregation: str = "avg",
         expected: str = "any",
     ) -> dict[str, Any]:
         return run_one({
@@ -32,11 +32,11 @@ def register_hypothesis_tools(registry: ToolRegistry, sources: Any) -> None:
             "checks": [{
                 "id": "comparison", "method": "compare",
                 "metric": {"source_id": source_id, "field": metric_field, "aggregation": aggregation},
-                "left": {"label": left_value, "filters": [{
-                    "field": group_field, "operator": "eq", "value": left_value,
+                "left": {"label": baseline_value, "filters": [{
+                    "field": group_field, "operator": "eq", "value": baseline_value,
                 }]},
-                "right": {"label": right_value, "filters": [{
-                    "field": group_field, "operator": "eq", "value": right_value,
+                "right": {"label": comparison_value, "filters": [{
+                    "field": group_field, "operator": "eq", "value": comparison_value,
                 }]},
                 "expected": expected,
             }],
@@ -47,18 +47,20 @@ def register_hypothesis_tools(registry: ToolRegistry, sources: Any) -> None:
         description=(
             "Compare a numeric metric between two values of one grouping field. "
             "Use the selected source ID and exact schema field names. "
+            "The difference is comparison minus baseline: for a before/after "
+            "question, baseline is before and comparison is after. "
             "Returns observed values and difference; does not prove causation."
         ),
         parameters={
             "source_id": {"type": "string"},
             "metric_field": {"type": "string"},
             "group_field": {"type": "string"},
-            "left_value": {"type": "string"},
-            "right_value": {"type": "string"},
+            "baseline_value": {"type": "string", "description": "Starting or reference group, e.g. before."},
+            "comparison_value": {"type": "string", "description": "Group compared to baseline, e.g. after."},
             "aggregation": {"type": "string", "enum": ["sum", "avg", "min", "max", "count"]},
             "expected": {"type": "string", "enum": ["increase", "decrease", "no_change", "any"]},
         },
-        required=["source_id", "metric_field", "group_field", "left_value", "right_value"],
+        required=["source_id", "metric_field", "group_field", "baseline_value", "comparison_value"],
         handler=compare_groups,
     ))
 

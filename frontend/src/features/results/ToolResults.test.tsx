@@ -90,6 +90,7 @@ it("shows hypothesis evidence in readable cards instead of raw JSON", () => {
   expect(screen.getByText("Сравнение продаж")).toBeInTheDocument();
   expect(screen.getByText("До")).toBeInTheDocument();
   expect(screen.getByText("После")).toBeInTheDocument();
+  expect(screen.getByText("Разница (После − До)")).toBeInTheDocument();
   expect(screen.getByText("+10")).toBeInTheDocument();
   expect(screen.getByText("Разница не доказывает причинность.")).toBeInTheDocument();
   expect(screen.queryByText("Технические данные · compare_groups")).not.toBeInTheDocument();
