@@ -11,6 +11,5 @@ hypothesis_implementations = [
 __all__ = [
     "CompareImplementation",
     "RelationshipImplementation",
-    
     "hypothesis_implementations",
 ]

@@ -52,7 +52,9 @@ export function ToolResults({ results }: { results: ToolResult[] }) {
       {results.map((result, i) => {
         const rows = tabularRows(result.data);
         const csvTable = result.ok && exportableTools.has(result.tool_name) ? csvTableFrom(result.data) : null;
-        const hypothesis = result.ok && isHypothesisEvidence(result.data) ? result.data : null;
+        const hypothesis = result.ok &&
+          (result.tool_name === "compare_groups" || result.tool_name === "analyze_relationship") &&
+          isHypothesisEvidence(result.data) ? result.data : null;
         return <section className="tool-result" key={i}>
           <div className="section-heading">
             <h3>{titles[result.tool_name] ?? "Результат инструмента"}</h3>

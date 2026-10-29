@@ -120,3 +120,23 @@ def test_comparison_accepts_decimal_comma_values_from_csv(tmp_path):
         assert check["data"]["delta"] == pytest.approx(2)
     finally:
         catalog.close()
+
+
+def test_calendar_lag_works_through_real_csv_query_engine(tmp_path):
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    sources = SourceService(tmp_path / "data", catalog)
+    source = sources.register_csv(
+        "monthly.csv", b"month;x;y\n2026-01-01;2;0\n2026-02-01;9;2\n"
+        b"2026-03-01;1;9\n2026-04-01;7;1\n2026-05-01;3;7\n")
+    try:
+        result = build_tool_registry(catalog, sources).execute("analyze_relationship", {
+            "source_id": source.source_id, "x_field": "x", "y_field": "y",
+            "group_field": "month", "time_grain": "month", "max_lag": 1,
+        })
+        assert result.ok, result.error
+        check = result.data["results"][0]
+        assert check["status"] == "completed", check["error"]
+        assert check["data"]["lag_results"][1]["sample_size"] == 4
+        assert check["data"]["lag_results"][1]["correlation"] == pytest.approx(1)
+    finally:
+        catalog.close()

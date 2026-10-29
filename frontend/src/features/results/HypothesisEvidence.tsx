@@ -22,6 +22,11 @@ function signed(value: unknown): string {
   return `${value > 0 ? "+" : ""}${number(value)}`;
 }
 
+function probability(value: unknown): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
+  return value > 0 && value < 0.001 ? "<0,001" : number(value);
+}
+
 export function HypothesisEvidence({ evidence }: { evidence: Value & { results: unknown[] } }) {
   return <div className="hypothesis-evidence" aria-label="Проверка гипотезы">
     <h4>{label(evidence.statement, "Проверка гипотезы")}</h4>
@@ -45,7 +50,7 @@ export function HypothesisEvidence({ evidence }: { evidence: Value & { results: 
           </div>
           {typeof data.change_percent === "number" && <p>Изменение: {signed(data.change_percent)}%</p>}
           {differenceInterval && <p>Доверительный интервал разницы: {number(differenceInterval.low)} — {number(differenceInterval.high)}</p>}
-          {uncertainty?.status === "estimated" && <p>p-value: {number(uncertainty.p_value)} · по {number(uncertainty.left_count)} и {number(uncertainty.right_count)} наблюдениям</p>}
+          {uncertainty?.status === "estimated" && <p>p-value: {probability(uncertainty.p_value)} · по {number(uncertainty.left_count)} и {number(uncertainty.right_count)} наблюдениям</p>}
           {uncertainty?.status === "not_estimated" && <p>Неопределённость не оценена: {label(uncertainty.reason, "Недостаточно данных.")}</p>}
           <p>{label(data.interpretation, "Наблюдаемая разница не доказывает причинность.")}</p>
         </div>;
@@ -56,12 +61,12 @@ export function HypothesisEvidence({ evidence }: { evidence: Value & { results: 
           <div className="hypothesis-values">
             <div><span>Коэффициент Пирсона</span><strong>{number(data.correlation)}</strong></div>
             <div><span>Групп в расчёте</span><strong>{number(data.sample_size)}</strong></div>
-            <div><span>p-value</span><strong>{number(data.p_value)}</strong></div>
+            <div><span>p-value</span><strong>{probability(data.p_value)}</strong></div>
           </div>
           {interval && <p>Доверительный интервал: {number(interval.low)} — {number(interval.high)}</p>}
           {Array.isArray(data.lag_results) && <div className="hypothesis-lags" aria-label="Проверенные лаги">
             {data.lag_results.map((lag, i) => object(lag) ? <p key={i}>
-              Лаг {number(lag.lag)}: r = {number(lag.correlation)}, p с поправкой = {number(lag.adjusted_p_value)}, групп = {number(lag.sample_size)}
+              Лаг {number(lag.lag)}: r = {number(lag.correlation)}, p с поправкой = {probability(lag.adjusted_p_value)}, групп = {number(lag.sample_size)}
             </p> : null)}
           </div>}
           <p>{label(data.interpretation, "Недостаточно данных для статистического вывода.")}</p>
