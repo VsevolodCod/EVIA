@@ -6,7 +6,7 @@ from uuid import uuid4
 
 import httpx
 
-from app.contracts.v1 import AgentResponse, Error, QueryResult
+from app.contracts.v1 import AgentResponse, Error, FullProfile, Profile, QueryResult
 from app.llm.base import LLMProvider
 from app.llm.mock import MockLLMProvider
 from app.llm.openai_provider import OpenAIProvider
@@ -106,6 +106,60 @@ def _schema_answer(schema: SourceSchema) -> str:
     return "\n".join(lines)
 
 
+def _asks_for_source_overview(question: str) -> bool:
+    """Only broad orientation questions; filters and calculations need the agent."""
+    normalized = " ".join(question.casefold().split()).rstrip(" ?!.")
+    return any(re.fullmatch(pattern, normalized) for pattern in (
+        r"что передо мной",
+        r"что (?:есть|содержится) в (?:этих|моих) данных",
+        r"что (?:еще|ещё) можешь (?:сказать|скзаать|рассказать) про (?:эти|мои) данные",
+        r"за какой период (?:они|данные) и сколько (?:их|строк)",
+        r"(?:расскажи|опиши) (?:об|про) (?:этом )?(?:источнике|наборе данных)",
+        r"(?:дай|покажи) общий обзор (?:этих )?данных",
+    ))
+
+
+def _row_count_text(count: int) -> str:
+    if count % 10 == 1 and count % 100 != 11:
+        word = "строка"
+    elif count % 10 in (2, 3, 4) and count % 100 not in (12, 13, 14):
+        word = "строки"
+    else:
+        word = "строк"
+    return f"{count} {word}"
+
+
+def _overview_answer(schema: SourceSchema, raw_profile: dict) -> str:
+    profile = Profile.model_validate(raw_profile).root
+    fields = [field for obj in schema.objects for field in obj.fields]
+    if isinstance(profile, FullProfile):
+        lines = [f"В выбранном источнике {_row_count_text(profile.processed_rows)} и {len(fields)} полей."]
+    else:
+        lines = [
+            f"В доступной выборке {_row_count_text(profile.sample_size)} и {len(fields)} полей. "
+            "Полный размер источника неизвестен."
+        ]
+    if fields:
+        lines.append("Поля: " + ", ".join(f"`{field.name}` ({field.inferred_type})" for field in fields) + ".")
+    if isinstance(profile, FullProfile):
+        periods = [
+            (field.name, column.temporal.minimum, column.temporal.maximum)
+            for field in fields
+            if (column := profile.columns.get(field.name)) is not None
+            and column.temporal is not None and column.temporal.count > 0
+        ]
+        for name, minimum, maximum in periods:
+            lines.append(f"Период по `{name}`: {minimum} — {maximum}.")
+        if not periods:
+            lines.append("Период определить нельзя: нет заполненного поля даты.")
+        missing = [(name, column.null_count) for name, column in profile.columns.items() if column.null_count]
+        if missing:
+            lines.append("Пропуски: " + ", ".join(f"`{name}` — {count}" for name, count in missing) + ".")
+    else:
+        lines.append("Статистика ограничена выборкой; выводы о всём источнике требуют полного расчёта.")
+    return "\n".join(lines)
+
+
 class AgentRuntime:
     """
     Основной класс агента. Некоторое количество раз запускает модель, обрабатывает вызовы инструментов.
@@ -186,6 +240,49 @@ class AgentRuntime:
                     result = AgentResponse(
                         request_id=request_id, status="error", answer=message,
                         steps=0, tool_results=[schema_result], timing=timing,
+                        error=Error(code="QUERY_REJECTED", message=message,
+                                    request_id=request_id, retryable=True),
+                    )
+            elif selected and _asks_for_source_overview(question):
+                tool_started = perf_counter()
+                schema_result = self.tools.execute(
+                    "get_source_schema", {"source_id": selected.source_id}
+                )
+                profile_result = self.tools.execute(
+                    "profile_data", {"source_id": selected.source_id}
+                ) if schema_result.ok else None
+                timing.tools_ms += (perf_counter() - tool_started) * 1000
+                tool_results = [schema_result] + ([profile_result] if profile_result else [])
+                if schema_result.ok and profile_result and profile_result.ok:
+                    schema = SourceSchema.model_validate(schema_result.data)
+                    profile = Profile.model_validate(profile_result.data).root
+                    current = self.sources.catalog.get_source(selected.source_id)
+                    stale = (
+                        current is None
+                        or current.snapshot_id != selected.snapshot_id
+                        or current.schema_version != selected.schema_version
+                        or schema.version != selected.schema_version
+                        or (isinstance(profile, FullProfile) and profile.snapshot_id != selected.snapshot_id)
+                    )
+                    if stale:
+                        message = "Источник изменился во время анализа. Повторите вопрос для новой версии."
+                        result = AgentResponse(
+                            request_id=request_id, status="error", answer=message,
+                            steps=0, tool_results=tool_results, timing=timing,
+                            error=Error(code="QUERY_REJECTED", message=message,
+                                        request_id=request_id, retryable=True),
+                        )
+                    else:
+                        result = AgentResponse(
+                            request_id=request_id, status="answered", answer_kind="computed",
+                            answer=_overview_answer(schema, profile_result.data),
+                            steps=0, tool_results=tool_results, timing=timing,
+                        )
+                else:
+                    message = "Не удалось получить актуальный профиль выбранного источника. Попробуйте обновить его."
+                    result = AgentResponse(
+                        request_id=request_id, status="error", answer=message,
+                        steps=0, tool_results=tool_results, timing=timing,
                         error=Error(code="QUERY_REJECTED", message=message,
                                     request_id=request_id, retryable=True),
                     )

@@ -20,17 +20,17 @@ def setup(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_schema_tool_preserves_dates_and_identifier(setup, scripted_llm):
+async def test_schema_fastpath_preserves_dates_and_identifier(setup, scripted_llm):
     sources, source, catalog = setup
     llm = scripted_llm([
         LLMResponse(tool_calls=[ToolCall(name="get_source_schema", arguments={"source_id": source.source_id})], finish_reason="tool_calls"),
         LLMResponse(content="В источнике есть две даты: открытия и закрытия."),
     ])
     result = await AgentRuntime(llm, build_tool_registry(catalog, sources), sources=sources).ask("Что передо мной?", [source.source_id])
-    fields = result.tool_results[0].data["objects"][0]["fields"]
-    assert {f["name"] for f in fields} == {"Код клиента", "Дата открытия", "Дата закрытия", "amount"}
-    assert next(f for f in fields if f["name"] == "Код клиента")["inferred_type"] == "string"
-    assert len(result.timing.calls) == 2
+    fields = result.tool_results[0].data.objects[0].fields
+    assert {f.name for f in fields} == {"Код клиента", "Дата открытия", "Дата закрытия", "amount"}
+    assert next(f for f in fields if f.name == "Код клиента").inferred_type == "string"
+    assert len(result.timing.calls) == 0
 
 
 @pytest.mark.asyncio
