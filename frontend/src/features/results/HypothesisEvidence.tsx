@@ -34,6 +34,9 @@ export function HypothesisEvidence({ evidence }: { evidence: Value & { results: 
       if (item.method === "compare") {
         const left = object(data.left) ? data.left : {};
         const right = object(data.right) ? data.right : {};
+        const uncertainty = object(data.uncertainty) ? data.uncertainty : null;
+        const differenceInterval = uncertainty && object(uncertainty.confidence_interval)
+          ? uncertainty.confidence_interval : null;
         return <div className="hypothesis-check" key={index}>
           <div className="hypothesis-values">
             <div><span>{label(left.label, "Группа 1")}</span><strong>{number(left.value)}</strong></div>
@@ -41,6 +44,9 @@ export function HypothesisEvidence({ evidence }: { evidence: Value & { results: 
             <div><span>Разница</span><strong>{signed(data.delta)}</strong></div>
           </div>
           {typeof data.change_percent === "number" && <p>Изменение: {signed(data.change_percent)}%</p>}
+          {differenceInterval && <p>Доверительный интервал разницы: {number(differenceInterval.low)} — {number(differenceInterval.high)}</p>}
+          {uncertainty?.status === "estimated" && <p>p-value: {number(uncertainty.p_value)} · по {number(uncertainty.left_count)} и {number(uncertainty.right_count)} наблюдениям</p>}
+          {uncertainty?.status === "not_estimated" && <p>Неопределённость не оценена: {label(uncertainty.reason, "Недостаточно данных.")}</p>}
           <p>{label(data.interpretation, "Наблюдаемая разница не доказывает причинность.")}</p>
         </div>;
       }
@@ -53,6 +59,11 @@ export function HypothesisEvidence({ evidence }: { evidence: Value & { results: 
             <div><span>p-value</span><strong>{number(data.p_value)}</strong></div>
           </div>
           {interval && <p>Доверительный интервал: {number(interval.low)} — {number(interval.high)}</p>}
+          {Array.isArray(data.lag_results) && <div className="hypothesis-lags" aria-label="Проверенные лаги">
+            {data.lag_results.map((lag, i) => object(lag) ? <p key={i}>
+              Лаг {number(lag.lag)}: r = {number(lag.correlation)}, p с поправкой = {number(lag.adjusted_p_value)}, групп = {number(lag.sample_size)}
+            </p> : null)}
+          </div>}
           <p>{label(data.interpretation, "Недостаточно данных для статистического вывода.")}</p>
           {Array.isArray(data.warnings) && data.warnings.map((warning, i) =>
             typeof warning === "string" ? <p key={i}>{warning}</p> : null)}
