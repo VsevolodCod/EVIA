@@ -165,6 +165,13 @@ class RelationshipCheck(CheckBase):
     correlation_method: Literal["pearson"] = "pearson"
     alpha: float = Field(default=0.05, gt=0, lt=1)
     confidence_level: float = Field(default=0.95, gt=0, lt=1)
+    max_lag: int = Field(default=0, ge=0, le=6)
+
+    @model_validator(mode="after")
+    def validate_lag_grouping(self) -> "RelationshipCheck":
+        if self.max_lag and (len(self.group_by) != 1 or self.group_by[0].granularity is None):
+            raise ValueError("Lag checks require one calendar grouping with granularity")
+        return self
 
 
 HypothesisCheck: TypeAlias = Annotated[

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from datetime import datetime
 from typing import Any
 
 from scipy.stats import pearsonr
@@ -139,6 +140,64 @@ class RelationshipImplementation(HypothesisImplementation):
             return "moderate"
         return "strong"
 
+    @staticmethod
+    def _period_index(value: Any, granularity: str) -> int:
+        try:
+            day = datetime.fromisoformat(str(value)).date()
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Calendar grouping produced an invalid date") from exc
+        if granularity == "day":
+            return day.toordinal()
+        if granularity == "week":
+            return day.toordinal() // 7
+        if granularity == "month":
+            return day.year * 12 + day.month - 1
+        if granularity == "quarter":
+            return day.year * 4 + (day.month - 1) // 3
+        return day.year
+
+    @staticmethod
+    def _lag_statistics(
+        pairs: list[tuple[int, float, float]], check: RelationshipCheck,
+    ) -> dict[str, Any]:
+        xs = [x for _, x, _ in pairs]
+        ys = [y for _, _, y in pairs]
+        count = len(pairs)
+        output: dict[str, Any] = {
+            "sample_size": count, "correlation": None, "p_value": None,
+            "adjusted_p_value": None, "statistically_significant": None,
+            "confidence_interval": None, "differenced_correlation": None,
+        }
+        if count < 3 or len(set(xs)) < 2 or len(set(ys)) < 2:
+            return output
+        test = pearsonr(xs, ys)
+        raw_p = float(test.pvalue)
+        comparisons = check.max_lag + 1
+        adjusted = min(1.0, raw_p * comparisons)
+        output.update({
+            "correlation": float(test.statistic), "p_value": raw_p,
+            "adjusted_p_value": adjusted,
+            "statistically_significant": adjusted < check.alpha,
+        })
+        if count >= 4:
+            level = max(check.confidence_level, 1 - check.alpha / comparisons)
+            interval = test.confidence_interval(confidence_level=level)
+            if math.isfinite(interval.low) and math.isfinite(interval.high):
+                output["confidence_interval"] = {
+                    "level": level, "low": float(interval.low), "high": float(interval.high),
+                }
+        differences = [
+            (pairs[index][1] - pairs[index - 1][1],
+             pairs[index][2] - pairs[index - 1][2])
+            for index in range(1, count)
+            if pairs[index][0] == pairs[index - 1][0] + 1
+        ]
+        if len(differences) >= 3:
+            dx, dy = zip(*differences)
+            if len(set(dx)) >= 2 and len(set(dy)) >= 2:
+                output["differenced_correlation"] = float(pearsonr(dx, dy).statistic)
+        return output
+
     def execute(
         self,
         check: RelationshipCheck,
@@ -254,7 +313,7 @@ class RelationshipImplementation(HypothesisImplementation):
                 "statistical significance assessment."
             )
 
-        return {
+        output = {
             "source_id": check.source_id,
             "x_metric": check.x_metric.model_dump(mode="json"),
             "y_metric": check.y_metric.model_dump(mode="json"),
@@ -285,3 +344,42 @@ class RelationshipImplementation(HypothesisImplementation):
             "preview_limit": self.PREVIEW_GROUPS,
             "warnings": warnings,
         }
+        if check.max_lag:
+            grain = check.group_by[0].granularity
+            assert grain is not None
+            periods = {
+                self._period_index(row.get("group_0"), grain): (
+                    self._numeric(row.get("x_value")), self._numeric(row.get("y_value"))
+                ) for row in rows
+            }
+            if periods:
+                span = max(periods) - min(periods) + 1
+                output["period_coverage"] = len(periods) / span
+                if len(periods) < span:
+                    warnings.append(f"{span - len(periods)} missing periods were excluded from lag alignment.")
+            else:
+                output["period_coverage"] = 0
+            lag_results = []
+            for lag in range(check.max_lag + 1):
+                lag_pairs = [
+                    (period, x, periods[period + lag][1])
+                    for period, (x, _) in sorted(periods.items())
+                    if x is not None and period + lag in periods
+                    and periods[period + lag][1] is not None
+                ]
+                stats = self._lag_statistics(lag_pairs, check)
+                lag_results.append({"lag": lag, **stats})
+                if (stats["correlation"] is not None and abs(stats["correlation"]) >= 0.7
+                        and (stats["differenced_correlation"] is None
+                             or abs(stats["differenced_correlation"]) < 0.3)):
+                    warnings.append(f"Lag {lag}: a shared trend may explain the raw correlation.")
+            output["lag_results"] = lag_results
+            output["multiple_testing"] = "Bonferroni correction across scanned lags"
+            output["max_lag"] = check.max_lag
+            output["statistically_significant"] = lag_results[0]["statistically_significant"]
+            output["adjusted_p_value"] = lag_results[0]["adjusted_p_value"]
+            output["confidence_interval"] = lag_results[0]["confidence_interval"]
+            output["limitations"].append(
+                "Lag alignment uses complete calendar periods; gaps reduce the paired sample."
+            )
+        return output

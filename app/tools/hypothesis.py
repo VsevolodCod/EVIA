@@ -58,7 +58,7 @@ def register_hypothesis_tools(registry: ToolRegistry, sources: Any) -> None:
 
     def analyze_relationship(
         source_id: str, x_field: str, y_field: str, group_field: str,
-        aggregation: str = "sum", time_grain: str | None = None,
+        aggregation: str = "sum", time_grain: str | None = None, max_lag: int = 0,
     ) -> dict[str, Any]:
         return engine.run({
             "statement": f"Связь {x_field} и {y_field} по {group_field}",
@@ -68,6 +68,7 @@ def register_hypothesis_tools(registry: ToolRegistry, sources: Any) -> None:
                 "x_metric": {"field": x_field, "aggregation": aggregation},
                 "y_metric": {"field": y_field, "aggregation": aggregation},
                 "group_by": [{"field": group_field, "granularity": time_grain}],
+                "max_lag": max_lag,
             }],
         })
 
@@ -85,6 +86,7 @@ def register_hypothesis_tools(registry: ToolRegistry, sources: Any) -> None:
             "group_field": {"type": "string"},
             "aggregation": {"type": "string", "enum": ["sum", "avg", "min", "max"]},
             "time_grain": {"type": "string", "enum": ["day", "week", "month", "quarter", "year"]},
+            "max_lag": {"type": "integer", "minimum": 0, "maximum": 6},
         },
         required=["source_id", "x_field", "y_field", "group_field"],
         handler=analyze_relationship,

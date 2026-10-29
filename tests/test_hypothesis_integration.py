@@ -63,3 +63,26 @@ def test_relationship_tool_returns_statistical_result_on_csv(tmp_path):
         assert check["data"]["correlation"] == pytest.approx(1.0)
     finally:
         catalog.close()
+
+
+def test_average_comparison_reports_sample_sizes_and_uncertainty(tmp_path):
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    sources = SourceService(tmp_path / "data", catalog)
+    source = sources.register_csv(
+        "sales.csv", b"period;amount\nbefore;9\nbefore;10\nbefore;11\nbefore;10\n"
+        b"after;14\nafter;15\nafter;16\nafter;15\n")
+    try:
+        result = build_tool_registry(catalog, sources).execute("compare_groups", {
+            "source_id": source.source_id, "metric_field": "amount", "aggregation": "avg",
+            "group_field": "period", "left_value": "before", "right_value": "after",
+        })
+        assert result.ok, result.error
+        check = result.data["results"][0]
+        assert check["status"] == "completed", check["error"]
+        uncertainty = check["data"]["uncertainty"]
+        assert uncertainty["method"] == "welch"
+        assert uncertainty["left_count"] == uncertainty["right_count"] == 4
+        assert uncertainty["confidence_interval"]["low"] > 0
+        assert uncertainty["p_value"] < 0.05
+    finally:
+        catalog.close()
