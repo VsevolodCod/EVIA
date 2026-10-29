@@ -275,7 +275,7 @@ class AgentRuntime:
                     sql = (
                         f"SELECT * FROM source WHERE TRY_CAST({field} AS DATE) "
                         f">= DATE '{year}-01-01' AND TRY_CAST({field} AS DATE) "
-                        f"< DATE '{year + 1}-01-01' LIMIT 20"
+                        f"< DATE '{year + 1}-01-01'"
                     )
                     tool_started = perf_counter()
                     query_result = self.tools.execute(
