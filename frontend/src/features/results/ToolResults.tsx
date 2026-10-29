@@ -1,6 +1,7 @@
 import type { Row, ToolResult } from "../../api";
 import { Icon } from "../../components/Icon";
 import { ResultVisualization } from "./ResultVisualization";
+import { HypothesisEvidence, isHypothesisEvidence } from "./HypothesisEvidence";
 import { csvTableFrom, downloadCsv } from "./csvExport";
 import type { ChartColumn } from "./resultChartModel";
 
@@ -11,6 +12,8 @@ const titles: Record<string, string> = {
   get_schema: "Структура данных",
   execute_sql: "Результат расчёта",
   run_sql: "Результат расчёта",
+  compare_groups: "Сравнение групп",
+  analyze_relationship: "Анализ связи",
 };
 const exportableTools = new Set(["query_data", "run_sql", "execute_sql"]);
 
@@ -49,6 +52,7 @@ export function ToolResults({ results }: { results: ToolResult[] }) {
       {results.map((result, i) => {
         const rows = tabularRows(result.data);
         const csvTable = result.ok && exportableTools.has(result.tool_name) ? csvTableFrom(result.data) : null;
+        const hypothesis = result.ok && isHypothesisEvidence(result.data) ? result.data : null;
         return <section className="tool-result" key={i}>
           <div className="section-heading">
             <h3>{titles[result.tool_name] ?? "Результат инструмента"}</h3>
@@ -69,7 +73,7 @@ export function ToolResults({ results }: { results: ToolResult[] }) {
                 : `В CSV попадут только ${csvTable.rows.length} строк, возвращённых сервером. Результат усечён.`}
             </p>}
           </div>}
-          {rows ? (
+          {hypothesis ? <HypothesisEvidence evidence={hypothesis} /> : rows ? (
             <ResultVisualization
               rows={rows}
               label={`Результат ${result.tool_name}`}

@@ -152,7 +152,7 @@ class CompareCheck(CheckBase):
     ] = "any"
 
 
-class RelationshipCheck(StrictModel):
+class RelationshipCheck(CheckBase):
     method: Literal["relationship"] = "relationship"
     source_id: str = Field(min_length=1)
 

@@ -864,6 +864,14 @@ summary {
   overflow: auto;
   line-height: 1.8;
 }
+.hypothesis-evidence { display: grid; gap: 12px; color: var(--ink); }
+.hypothesis-evidence h4 { font-size: 16px; margin: 0; }
+.hypothesis-check { display: grid; gap: 10px; }
+.hypothesis-check p { margin: 0; line-height: 1.5; }
+.hypothesis-values { display: grid; grid-template-columns: repeat(auto-fit, minmax(125px, 1fr)); gap: 10px; }
+.hypothesis-values > div { display: grid; gap: 6px; border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+.hypothesis-values span { font-size: 12px; color: var(--muted); }
+.hypothesis-values strong { font-size: 20px; font-weight: 700; }
 .error-text {
   color: var(--error);
   font-size: 12px;

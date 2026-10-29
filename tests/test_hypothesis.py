@@ -91,6 +91,7 @@ def compare_payload(**overrides):
 
 def relationship_payload(**overrides):
     payload = {
+        "id": "sales-relationship",
         "method": "relationship",
         "source_id": "sales",
         "x_metric": {
