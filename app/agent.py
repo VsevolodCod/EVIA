@@ -1,5 +1,6 @@
 import asyncio
 import json
+import re
 from time import perf_counter
 from uuid import uuid4
 
@@ -13,7 +14,7 @@ from app.source_service import SourceService
 from app.models import (
     AskResponse,
     LLMMessage,
-    ToolResult, ChatMessage, AgentTiming, ModelTiming,
+    ToolResult, ChatMessage, AgentTiming, ModelTiming, SourceSchema,
 )
 from app.tools import ToolRegistry
 import logging
@@ -68,6 +69,41 @@ SYSTEM_PROMPT = """
 - Статистическую связь или разницу описывай только по результату инструмента;
   не объявляй её доказательством причинности.
 """
+
+
+def _asks_for_source_schema(question: str) -> bool:
+    """Recognize requests for field names, without hijacking questions about values."""
+    normalized = " ".join(question.casefold().split()).rstrip(" ?!.")
+    if re.search(r"значен|средн|сумм|график|распределен|частот|первые|дубликат", normalized):
+        return False
+    if re.search(r"\b(?:схем\w*|структур\w*)\b", normalized):
+        return bool(
+            re.search(r"\b(?:какая|какую|покажи|назови|опиши)\b", normalized)
+            and re.search(r"\b(?:источник\w*|данн\w*|таблиц\w*|csv)\b", normalized)
+        )
+    if not re.search(r"\b(?:столбц\w*|колонк\w*|поле\w*|поля|полей)\b", normalized):
+        return False
+    return bool(
+        re.search(r"\b(?:назови|перечисли|список|сколько|названия)\b", normalized)
+        or ("какие" in normalized.split() and "есть" in normalized.split())
+        or re.fullmatch(r"какие (?:у нас )?(?:столбцы|колонки|поля)", normalized)
+        or re.fullmatch(
+            r"покажи\s+(?:мне\s+)?(?:все\s+)?(?:столбцы|колонки|поля)"
+            r"(?:\s+(?:источника|данных|таблицы))?", normalized
+        )
+    )
+
+
+def _schema_answer(schema: SourceSchema) -> str:
+    objects = [obj for obj in schema.objects if obj.fields]
+    fields = [(obj.name, field) for obj in objects for field in obj.fields]
+    if not fields:
+        return "В текущей схеме выбранного источника нет столбцов."
+    lines = [f"Поля текущей схемы источника ({len(fields)}):"]
+    for object_name, field in fields:
+        prefix = f"{object_name}." if len(objects) > 1 else ""
+        lines.append(f"- `{prefix}{field.name}` — {field.inferred_type}")
+    return "\n".join(lines)
 
 
 class AgentRuntime:
@@ -133,6 +169,26 @@ class AgentRuntime:
                         request_id=request_id,
                     ),
                 )
+            elif selected and _asks_for_source_schema(question):
+                tool_started = perf_counter()
+                schema_result = self.tools.execute(
+                    "get_source_schema", {"source_id": selected.source_id}
+                )
+                timing.tools_ms += (perf_counter() - tool_started) * 1000
+                if schema_result.ok:
+                    result = AgentResponse(
+                        request_id=request_id, status="answered", answer_kind="computed",
+                        answer=_schema_answer(SourceSchema.model_validate(schema_result.data)),
+                        steps=0, tool_results=[schema_result], timing=timing,
+                    )
+                else:
+                    message = "Не удалось получить схему выбранного источника. Попробуйте обновить его."
+                    result = AgentResponse(
+                        request_id=request_id, status="error", answer=message,
+                        steps=0, tool_results=[schema_result], timing=timing,
+                        error=Error(code="QUERY_REJECTED", message=message,
+                                    request_id=request_id, retryable=True),
+                    )
             else:
                 try:
                     legacy = await self._ask(
