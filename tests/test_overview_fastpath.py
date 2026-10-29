@@ -77,6 +77,32 @@ async def test_overview_does_not_mix_sources_or_stale_reimports(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_overview_rejects_reimport_between_schema_and_profile(tmp_path, monkeypatch):
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    sources = SourceService(tmp_path / "data", catalog)
+    source = sources.register_csv("events.csv", b"old_field\na\n")
+    original_profile = sources.profile
+
+    def reimport_then_profile(source_id):
+        sources.register_csv("events.csv", b"new_field\nb\n", source_id=source_id)
+        return original_profile(source_id)
+
+    monkeypatch.setattr(sources, "profile", reimport_then_profile)
+    model = UnavailableModel()
+    try:
+        answer = await AgentRuntime(
+            model, build_tool_registry(catalog, sources), sources=sources
+        ).ask("Что передо мной?", [source.source_id])
+        assert answer.status == "error"
+        assert answer.error and answer.error.retryable
+        assert "old_field" not in answer.answer
+        assert "new_field" not in answer.answer
+        assert model.calls == 0
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
 async def test_specific_filtered_question_still_uses_agent(tmp_path):
     catalog = SchemaCatalog(tmp_path / "catalog.db")
     sources = SourceService(tmp_path / "data", catalog)

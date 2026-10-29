@@ -254,13 +254,30 @@ class AgentRuntime:
                 timing.tools_ms += (perf_counter() - tool_started) * 1000
                 tool_results = [schema_result] + ([profile_result] if profile_result else [])
                 if schema_result.ok and profile_result and profile_result.ok:
-                    result = AgentResponse(
-                        request_id=request_id, status="answered", answer_kind="computed",
-                        answer=_overview_answer(
-                            SourceSchema.model_validate(schema_result.data), profile_result.data
-                        ),
-                        steps=0, tool_results=tool_results, timing=timing,
+                    schema = SourceSchema.model_validate(schema_result.data)
+                    profile = Profile.model_validate(profile_result.data).root
+                    current = self.sources.catalog.get_source(selected.source_id)
+                    stale = (
+                        current is None
+                        or current.snapshot_id != selected.snapshot_id
+                        or current.schema_version != selected.schema_version
+                        or schema.version != selected.schema_version
+                        or (isinstance(profile, FullProfile) and profile.snapshot_id != selected.snapshot_id)
                     )
+                    if stale:
+                        message = "Источник изменился во время анализа. Повторите вопрос для новой версии."
+                        result = AgentResponse(
+                            request_id=request_id, status="error", answer=message,
+                            steps=0, tool_results=tool_results, timing=timing,
+                            error=Error(code="QUERY_REJECTED", message=message,
+                                        request_id=request_id, retryable=True),
+                        )
+                    else:
+                        result = AgentResponse(
+                            request_id=request_id, status="answered", answer_kind="computed",
+                            answer=_overview_answer(schema, profile_result.data),
+                            steps=0, tool_results=tool_results, timing=timing,
+                        )
                 else:
                     message = "Не удалось получить актуальный профиль выбранного источника. Попробуйте обновить его."
                     result = AgentResponse(
