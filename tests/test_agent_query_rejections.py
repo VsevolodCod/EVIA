@@ -25,7 +25,7 @@ async def test_repeated_rejected_sql_reports_query_error_early(tmp_path, scripte
     try:
         answer = await AgentRuntime(
             model, build_tool_registry(catalog, sources), max_steps=5, sources=sources
-        ).ask("Покажи строки за 2025 год", [source.source_id])
+        ).ask("Покажи строки за 2025 год для segment A", [source.source_id])
         assert answer.status == "error"
         assert answer.error and answer.error.code == "QUERY_REJECTED"
         assert "запрос" in answer.answer.lower() and "лимит шагов" not in answer.answer.lower()
@@ -50,7 +50,7 @@ async def test_one_rejection_can_recover_to_a_valid_empty_result(tmp_path, scrip
     try:
         answer = await AgentRuntime(
             model, build_tool_registry(catalog, sources), max_steps=5, sources=sources
-        ).ask("Покажи строки за 2025 год", [source.source_id])
+        ).ask("Покажи строки за 2025 год для segment A", [source.source_id])
         assert answer.status == "answered"
         assert [result.ok for result in answer.tool_results] == [False, True]
         assert answer.results and answer.results[0].rows == []

@@ -6,7 +6,8 @@ from uuid import uuid4
 
 import httpx
 
-from app.contracts.v1 import AgentResponse, Error, FullProfile, Profile, QueryResult
+from app.contracts.v1 import AgentResponse, AnalysisPlan, Error, FullProfile, Profile, QueryResult
+from app.descriptive_actions import render_table
 from app.llm.base import LLMProvider
 from app.llm.mock import MockLLMProvider
 from app.llm.openai_provider import OpenAIProvider
@@ -123,6 +124,24 @@ def _asks_for_source_overview(question: str) -> bool:
     ))
 
 
+def _is_off_topic(question: str) -> bool:
+    """Reject unmistakably non-analytical requests without classifying data questions."""
+    phrase = " ".join(question.casefold().replace("ё", "е").split()).rstrip(" ?!.")
+    return bool(re.fullmatch(
+        r"(?:напиши|сочини|придумай) (?:мне )?(?:стих(?:отворение)?|анекдот|сказку)"
+        r"|(?:какая|какую) (?:сейчас )?погода(?: сегодня)?"
+        r"|(?:привет|как дела)",
+        phrase,
+    ))
+
+
+def _rows_year(question: str) -> int | None:
+    """A bounded, unambiguous year filter that does not need model planning."""
+    phrase = " ".join(question.casefold().replace("ё", "е").split()).rstrip(" ?!.")
+    match = re.fullmatch(r"покажи (?:все )?строки за (20\d\d) год", phrase)
+    return int(match.group(1)) if match else None
+
+
 def _count_text(count: int, one: str, few: str, many: str) -> str:
     if count % 10 == 1 and count % 100 != 11:
         word = one
@@ -233,6 +252,66 @@ class AgentRuntime:
                         request_id=request_id,
                     ),
                 )
+            elif _is_off_topic(question):
+                result = AgentResponse(
+                    request_id=request_id, status="clarification", outcome="unsupported",
+                    answer="Я помогаю анализировать данные. Спросите об источнике, показателе или графике.",
+                    steps=0, timing=timing,
+                )
+            elif selected and selected.source_type == "csv" and _rows_year(question) is not None:
+                tool_started = perf_counter()
+                schema_result = self.tools.execute(
+                    "get_source_schema", {"source_id": selected.source_id}
+                )
+                timing.tools_ms += (perf_counter() - tool_started) * 1000
+                schema = SourceSchema.model_validate(schema_result.data) if schema_result.ok else None
+                date_fields = [
+                    field.name for obj in schema.objects for field in obj.fields
+                    if field.inferred_type in {"date", "datetime"}
+                ] if schema and len(schema.objects) == 1 else []
+                if len(date_fields) == 1:
+                    year = _rows_year(question)
+                    field = '"' + date_fields[0].replace('"', '""') + '"'
+                    sql = (
+                        f"SELECT * FROM source WHERE TRY_CAST({field} AS DATE) "
+                        f">= DATE '{year}-01-01' AND TRY_CAST({field} AS DATE) "
+                        f"< DATE '{year + 1}-01-01' LIMIT 20"
+                    )
+                    tool_started = perf_counter()
+                    query_result = self.tools.execute(
+                        "query_data", {"source_id": selected.source_id, "sql": sql, "row_limit": 20}
+                    )
+                    timing.tools_ms += (perf_counter() - tool_started) * 1000
+                    if query_result.ok:
+                        query = QueryResult.model_validate(query_result.data)
+                        answer = (
+                            f"За {year} год совпадений нет."
+                            if not query.rows else
+                            f"Строки за {year} год (показано {query.returned_rows}"
+                            + (", есть ещё" if query.truncated else "") + "):\n\n"
+                            + render_table(query)
+                        )
+                        result = AgentResponse(
+                            request_id=request_id, status="answered", outcome="answer",
+                            answer_kind="computed", answer=answer, steps=0,
+                            analysis=AnalysisPlan(intent="preview", sql=sql,
+                                                  explanation="Фильтр по единственному полю даты."),
+                            results=[query], tool_results=[schema_result, query_result], timing=timing,
+                        )
+                    else:
+                        message = "Не удалось выполнить запрос по году. Проверьте источник и повторите."
+                        result = AgentResponse(
+                            request_id=request_id, status="error", answer=message, steps=0,
+                            tool_results=[schema_result, query_result], timing=timing,
+                            error=Error(code="QUERY_REJECTED", message=message,
+                                        request_id=request_id, retryable=True),
+                        )
+                else:
+                    result = AgentResponse(
+                        request_id=request_id, status="clarification", outcome="clarification",
+                        answer="Уточните поле даты для фильтра по году.", steps=0,
+                        tool_results=[schema_result], timing=timing,
+                    )
             elif selected and _asks_for_source_schema(question):
                 tool_started = perf_counter()
                 schema_result = self.tools.execute(
@@ -618,6 +697,14 @@ class AgentRuntime:
                     )
                 )
                 if call.name == "query_data":
+                    if (len(response.tool_calls) == 1 and result.ok
+                            and isinstance(result.data, QueryResult) and not result.data.rows
+                            and not any(item.ok and item.tool_name in {"query_data", "build_chart"}
+                                        for item in results[:-1])):
+                        return AskResponse(
+                            answer="По выбранному условию совпадений нет: строк нет.",
+                            steps=step, tool_results=results,
+                        )
                     if result.error == "QUERY_REJECTED":
                         query_rejections += 1
                         if query_rejections >= 2:
