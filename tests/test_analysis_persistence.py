@@ -202,10 +202,13 @@ async def test_chat_analysis_roundtrip_restart_source_changes_and_conflicts(tmp_
         async def chat(self, messages, tools=None):
             self.calls += 1
             self.histories.append([message.model_dump() for message in messages])
-            return LLMResponse(content=json.dumps({
-                'intent': 'sum', 'sql': 'SELECT SUM(TRY_CAST(revenue AS BIGINT)) AS total FROM source',
-                'explanation': 'Sum of revenue',
-            }))
+            if messages[-1].role == 'tool':
+                return LLMResponse(content='Сумма рассчитана по выбранному источнику.')
+            from app.models import ToolCall
+            return LLMResponse(tool_calls=[ToolCall(name='query_data', arguments={
+                'source_id': source.source_id,
+                'sql': 'SELECT SUM(TRY_CAST(revenue AS BIGINT)) AS total FROM source',
+            })], finish_reason='tool_calls')
 
     catalog = SchemaCatalog(tmp_path / 'catalog.db')
     sources = SourceService(tmp_path / 'data', catalog)
@@ -227,7 +230,7 @@ async def test_chat_analysis_roundtrip_restart_source_changes_and_conflicts(tmp_
         answer = result.json()
         assert answer['results'][0]['rows'] == [[300]]
         assert answer['timing']['elapsed_ms'] > 0
-        assert answer['analysis']['sql']
+        assert answer['tool_results'][0]['tool_name'] == 'query_data'
         assert answer['results'][0]['provenance']
         history = (await client.get(f'/chats/{chat_id}')).json()
         assert history['source_id'] == source.source_id
@@ -236,7 +239,7 @@ async def test_chat_analysis_roundtrip_restart_source_changes_and_conflicts(tmp_
         assert (await client.get('/chats')).json()[0]['source_id'] == source.source_id
         switched = await client.post(endpoint, json={'question': 'Other?', 'source_ids': [other.source_id]})
         assert switched.status_code == 409
-        assert provider.calls == 1
+        assert provider.calls == 2
         assert (await client.get(f'/chats/{chat_id}')).json() == history
         # A fresh connection/manager must restore the exact artifact, without re-execution.
         engine, sessions = create_chat_database(tmp_path / 'chat.db')
@@ -259,6 +262,6 @@ async def test_chat_analysis_roundtrip_restart_source_changes_and_conflicts(tmp_
             missing = await client.post(endpoint, json={'question': 'Now?'})
             assert missing.json()['status'] == 'error'
             assert (await client.get(f'/chats/{chat_id}')).json()['messages'][-1]['role'] == 'user'
-            assert provider.calls == 2
+            assert provider.calls == 4
         finally:
             await engine.dispose()
