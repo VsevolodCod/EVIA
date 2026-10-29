@@ -46,7 +46,7 @@ export function HypothesisEvidence({ evidence }: { evidence: Value & { results: 
           <div className="hypothesis-values">
             <div><span>{label(left.label, "Группа 1")}</span><strong>{number(left.value)}</strong></div>
             <div><span>{label(right.label, "Группа 2")}</span><strong>{number(right.value)}</strong></div>
-            <div><span>Разница</span><strong>{signed(data.delta)}</strong></div>
+            <div><span>Разница ({label(right.label, "Группа 2")} − {label(left.label, "Группа 1")})</span><strong>{signed(data.delta)}</strong></div>
           </div>
           {typeof data.change_percent === "number" && <p>Изменение: {signed(data.change_percent)}%</p>}
           {differenceInterval && <p>Доверительный интервал разницы: {number(differenceInterval.low)} — {number(differenceInterval.high)}</p>}

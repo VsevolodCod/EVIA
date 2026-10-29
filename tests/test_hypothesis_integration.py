@@ -19,6 +19,10 @@ def test_hypothesis_tools_use_simple_model_contract_and_preserve_sql_tool(tmp_pa
             assert name in tools
             assert "$ref" not in str(tools[name])
             assert "oneOf" not in str(tools[name])
+        assert {"baseline_value", "comparison_value"}.issubset(
+            tools["compare_groups"]["properties"]
+        )
+        assert "left_value" not in tools["compare_groups"]["properties"]
     finally:
         catalog.close()
 
@@ -30,7 +34,7 @@ async def test_agent_compares_groups_from_selected_csv(tmp_path, scripted_llm):
     source = sources.register_csv("sales.csv", b"period;amount\nbefore;10\nafter;20\n")
     arguments = {"source_id": source.source_id, "metric_field": "amount",
                  "aggregation": "sum", "group_field": "period",
-                 "left_value": "before", "right_value": "after"}
+                 "baseline_value": "before", "comparison_value": "after"}
     llm = scripted_llm([
         LLMResponse(tool_calls=[ToolCall(name="compare_groups", arguments=arguments)], finish_reason="tool_calls"),
         LLMResponse(content="Сумма выросла на 10; это наблюдение, не доказательство причины."),
@@ -74,7 +78,7 @@ def test_average_comparison_reports_sample_sizes_and_uncertainty(tmp_path):
     try:
         result = build_tool_registry(catalog, sources).execute("compare_groups", {
             "source_id": source.source_id, "metric_field": "amount", "aggregation": "avg",
-            "group_field": "period", "left_value": "before", "right_value": "after",
+            "group_field": "period", "baseline_value": "before", "comparison_value": "after",
         })
         assert result.ok, result.error
         check = result.data["results"][0]
@@ -95,7 +99,7 @@ def test_invalid_hypothesis_field_is_an_error_not_a_successful_check(tmp_path):
     try:
         result = build_tool_registry(catalog, sources).execute("compare_groups", {
             "source_id": source.source_id, "metric_field": "missing",
-            "group_field": "period", "left_value": "before", "right_value": "after",
+            "group_field": "period", "baseline_value": "before", "comparison_value": "after",
         })
         assert not result.ok
         assert result.data is None
@@ -112,7 +116,7 @@ def test_comparison_accepts_decimal_comma_values_from_csv(tmp_path):
     try:
         result = build_tool_registry(catalog, sources).execute("compare_groups", {
             "source_id": source.source_id, "metric_field": "amount", "aggregation": "avg",
-            "group_field": "period", "left_value": "before", "right_value": "after",
+            "group_field": "period", "baseline_value": "before", "comparison_value": "after",
         })
         assert result.ok, result.error
         check = result.data["results"][0]
