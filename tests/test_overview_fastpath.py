@@ -40,6 +40,7 @@ async def test_general_overview_uses_current_full_profile(tmp_path, question):
         assert answer.status == "answered"
         assert answer.answer_kind == "computed"
         assert "3 строки" in answer.answer
+        assert "3 поля" in answer.answer
         assert all(name in answer.answer for name in ("period", "revenue", "segment"))
         assert "2026-01-02" in answer.answer and "2026-03-04" in answer.answer
         assert "обязатель" not in answer.answer.lower()
