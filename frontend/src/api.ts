@@ -366,6 +366,7 @@ async function request<T>(
     }
     const errors: Record<number, string> = {
       400: "Не удалось прочитать данные. Проверьте формат файла и повторите запрос.",
+      409: "Отчёт изменился. Обновите его и повторите действие.",
       404: "Источник больше не доступен. Обновите список источников.",
       413: "Файл слишком большой для сервера. Попробуйте меньший CSV.",
       422: "Проверьте данные запроса: вопрос должен содержать от 1 до 4000 символов.",
@@ -396,6 +397,13 @@ export const api = {
     request(`/dashboards/${encodeURIComponent(id)}`, savedDashboardInfoSchema, { signal }),
   dashboardBuild: (id: string, signal?: AbortSignal) =>
     request(`/dashboards/${encodeURIComponent(id)}/build`, savedDashboardBuildSchema, { signal }),
+  dashboardOrder: (id: string, chartIds: string[], expectedVersion: number) =>
+    request(`/dashboards/${encodeURIComponent(id)}/order`, savedDashboardInfoSchema, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chart_ids: chartIds, expected_version: expectedVersion }),
+    }),
+  deleteDashboard: (id: string) =>
+    request(`/dashboards/${encodeURIComponent(id)}`, z.object({ success: z.literal(true) }), { method: "DELETE" }),
   createChat: (title: string) => request("/chats", chatSummarySchema, {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title }),
   }),

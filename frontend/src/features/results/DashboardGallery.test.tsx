@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach } from "vitest";
 import { api } from "../../api";
 import { DashboardGallery } from "./DashboardGallery";
@@ -31,4 +31,31 @@ it("shows a retry when saved report details fail to load", async () => {
   expect(screen.getByRole("button", { name: "Повторить загрузку отчётов" })).toBeInTheDocument();
 });
 
-afterEach(() => vi.restoreAllMocks());
+it("opens a deep link after reload and requires confirmation before deletion", async () => {
+  window.history.replaceState({}, "", "/?dashboard=report-1");
+  vi.spyOn(api, "dashboardIds").mockResolvedValue({ dashboard_ids: ["report-1"] });
+  vi.spyOn(api, "dashboardInfo").mockResolvedValue({ success: true, dashboard: {
+    id: "report-1", title: "Продажи", version: 1, charts: [],
+  } });
+  vi.spyOn(api, "dashboardBuild").mockResolvedValue({ success: true,
+    dashboard: { id: "report-1", title: "Продажи", version: 1, charts: [] }, charts: [],
+  });
+  const remove = vi.spyOn(api, "deleteDashboard").mockResolvedValue({ success: true });
+  render(<DashboardGallery onClose={() => {}} />);
+  expect(await screen.findByRole("button", { name: "Удалить отчёт" })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Удалить отчёт" }));
+  expect(remove).not.toHaveBeenCalled();
+  expect(screen.getByRole("dialog", { name: "Удалить отчёт" })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Отмена" }));
+  expect(remove).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Удалить отчёт" }));
+  fireEvent.click(screen.getByRole("button", { name: /^Удалить$/ }));
+  await waitFor(() => expect(remove).toHaveBeenCalledWith("report-1"));
+  await waitFor(() => expect(screen.queryByRole("button", { name: "Удалить отчёт" })).not.toBeInTheDocument());
+  expect(new URLSearchParams(window.location.search).has("dashboard")).toBe(false);
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  window.history.replaceState({}, "", "/");
+});

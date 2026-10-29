@@ -280,6 +280,33 @@ class DashboardRepository:
                 session.flush()
                 return True
 
+    def reorder(self, dashboard_id: str, chart_ids: list[str], expected_version: int) -> DashboardModel | None:
+        """Change positions in one transaction without replacing chart-reference rows."""
+        with self.session_maker() as session:
+            with session.begin():
+                statement = (
+                    select(DashboardORM)
+                    .where(DashboardORM.dashboard_id == dashboard_id)
+                    .options(selectinload(DashboardORM.chart_refs))
+                    .with_for_update()
+                )
+                if owner_id() is not None:
+                    statement = statement.where(DashboardORM.owner_id == owner_id())
+                orm = session.scalar(statement)
+                if orm is None:
+                    return None
+                if orm.version != expected_version:
+                    raise ValueError("version_conflict")
+                current_ids = {ref.chart_id for ref in orm.chart_refs}
+                if len(chart_ids) != len(orm.chart_refs) or set(chart_ids) != current_ids:
+                    raise ValueError("invalid_chart_order")
+                positions = {chart_id: index for index, chart_id in enumerate(chart_ids)}
+                for ref in orm.chart_refs:
+                    ref.position = positions[ref.chart_id]
+                orm.version += 1
+                session.flush()
+                return self._to_model(orm)
+
     def list_all(self, limit: int = 100, offset: int = 0) -> list[DashboardModel]:
         """Возвращает дашборды вместе с их ссылками на чарты."""
 
