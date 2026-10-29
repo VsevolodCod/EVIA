@@ -287,3 +287,14 @@ it("sends only selected source and question, without prior conversational histor
     }),
   );
 });
+
+it("explains full server storage without reporting rows as imported", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({
+    detail: {
+      message: "Insufficient storage for CSV import",
+      report: { rows_read: 2, accepted_rows: 2, rejected_rows: 0, errors: [] },
+    },
+  }, { status: 507 })));
+  await expect(api.upload(new File(["id\n1\n2"], "sales.csv")))
+    .rejects.toThrow("На сервере недостаточно места");
+});

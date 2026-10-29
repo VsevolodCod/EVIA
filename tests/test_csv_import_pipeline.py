@@ -382,3 +382,57 @@ def test_missing_typed_table_is_rebuilt_from_raw_even_without_normalized_copy(se
     (service.data_dir / source.csv_versions[-1].normalized_filename).unlink()
     result = service.query(source.source_id, "SELECT SUM(amount) AS total FROM source_typed")
     assert result.rows == [["10.50"]]
+
+
+def test_low_storage_rejects_reimport_and_preserves_current_snapshot(service, monkeypatch):
+    import shutil
+    from types import SimpleNamespace
+    from app.csv_import import CSVImportError
+
+    original = b"id,amount\n1,10\n"
+    source = service.register_csv("sales.csv", original)
+    before = set(service.data_dir.glob("*.csv"))
+    monkeypatch.setattr(shutil, "disk_usage", lambda _: SimpleNamespace(free=1024))
+    with pytest.raises(CSVImportError) as error:
+        service.register_csv("sales.csv", b"id,amount\n2,20\n", source_id=source.source_id)
+    assert error.value.status_code == 507
+    assert "storage" in str(error.value).lower()
+    assert service.catalog.get_source(source.source_id).snapshot_id == source.snapshot_id
+    assert service.raw_csv_path(source.source_id).read_bytes() == original
+    assert service.preview(source.source_id) == [{"id": "1", "amount": "10"}]
+    assert set(service.data_dir.glob("*.csv")) == before
+
+
+def test_disk_full_during_copy_has_storage_error_and_removes_partial_file(service, monkeypatch):
+    import errno
+    import app.source_service as module
+    from app.csv_import import CSVImportError
+
+    def interrupted_copy(stream, target):
+        target.write_bytes(b"partial")
+        raise OSError(errno.ENOSPC, "No space left on device: /private/secret/path")
+
+    monkeypatch.setattr(module, "copy_original", interrupted_copy)
+    with pytest.raises(CSVImportError) as error:
+        service.register_csv("sales.csv", b"id\n1\n")
+    assert error.value.status_code == 507
+    assert "secret" not in str(error.value)
+    assert not list(service.data_dir.glob("*.csv"))
+    assert service.list_sources() == []
+
+
+def test_disk_full_during_materialization_preserves_previous_version(service, monkeypatch):
+    import duckdb
+    from app.csv_import import CSVImportError
+
+    source = service.register_csv("sales.csv", b"id\n1\n")
+    before = set(service.data_dir.glob("*.csv"))
+    def disk_full(*args, **kwargs):
+        raise duckdb.IOException('Could not write file: No space left on device')
+    monkeypatch.setattr(service.data_engine, "import_csv", disk_full)
+    with pytest.raises(CSVImportError) as error:
+        service.register_csv("sales.csv", b"id\n2\n", source_id=source.source_id)
+    assert error.value.status_code == 507
+    assert service.catalog.get_source(source.source_id).snapshot_id == source.snapshot_id
+    assert service.preview(source.source_id) == [{"id": "1"}]
+    assert set(service.data_dir.glob("*.csv")) == before
