@@ -95,7 +95,8 @@ export function SavedDashboard({ id, editable = false }: { id: string; editable?
     {editable && ordered.length > 1 && <div className="saved-dashboard-order" aria-label="Порядок графиков">
       {ordered.map((ref, index) => {
         const chart = current.build!.charts.find((item) => item.chart_id === ref.chart_id);
-        const definition = record(chart?.definition) ? chart?.definition : null;
+        const rawDefinition = chart?.definition;
+        const definition = record(rawDefinition) ? rawDefinition : null;
         const title = typeof definition?.title === "string" ? definition.title : `График ${index + 1}`;
         return <div key={ref.chart_id}><span>{title}</span>
           <button type="button" disabled={saving || index === 0} aria-label={`Поднять ${title}`} onClick={() => void move(index, -1)}>↑</button>

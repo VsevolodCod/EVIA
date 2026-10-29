@@ -49,7 +49,7 @@ it("opens a deep link after reload and requires confirmation before deletion", a
   fireEvent.click(screen.getByRole("button", { name: "Отмена" }));
   expect(remove).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: "Удалить отчёт" }));
-  fireEvent.click(screen.getByRole("button", { name: "Удалить", exact: true }));
+  fireEvent.click(screen.getByRole("button", { name: /^Удалить$/ }));
   await waitFor(() => expect(remove).toHaveBeenCalledWith("report-1"));
   await waitFor(() => expect(screen.queryByRole("button", { name: "Удалить отчёт" })).not.toBeInTheDocument());
   expect(new URLSearchParams(window.location.search).has("dashboard")).toBe(false);
