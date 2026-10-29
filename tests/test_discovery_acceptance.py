@@ -46,17 +46,22 @@ async def test_profile_and_tool_chat_sequence_preserve_data_and_history(tmp_path
                 ('А теперь покажи первые строки', 'query_data', 'SELECT * FROM source LIMIT 10'),
                 ('Что ещё можешь скзаать про эти данные?', 'profile_data', None),
             ]
+            direct_questions = {
+                'Что передо мной?', 'Что есть в этих данных?',
+                'Какие есть столбцы?', 'Что ещё можешь скзаать про эти данные?',
+            }
             chat_id = None
             for question, tool, sql in questions:
-                if question != 'Какие есть столбцы?':
+                if question not in direct_questions:
                     add_tool(tool, source_id, sql)
                 path = '/agent/chat' + (f'?chat_id={chat_id}' if chat_id else '')
                 response = await client.post(path, json={'question': question, 'source_ids': [source_id]})
                 assert response.status_code == 200, response.text
                 body = response.json()
                 assert body['status'] == 'answered'
-                assert body['tool_results'][0]['tool_name'] == tool
-                assert len(body['timing']['calls']) == (0 if question == 'Какие есть столбцы?' else 2)
+                first_tool = 'get_source_schema' if question in direct_questions else tool
+                assert body['tool_results'][0]['tool_name'] == first_tool
+                assert len(body['timing']['calls']) == (0 if question in direct_questions else 2)
                 assert chat_id is None or body['chat_id'] == chat_id
                 chat_id = body['chat_id']
                 if 'часто' in question:
@@ -72,12 +77,14 @@ async def test_profile_and_tool_chat_sequence_preserve_data_and_history(tmp_path
             assert history['source_id'] == source_id
             assert len(history['messages']) == 2 * len(questions)
             saved = [m['analysis_payload']['response'] for m in history['messages'] if m['role'] == 'assistant']
-            assert [r['tool_results'][0]['tool_name'] for r in saved] == [tool for _, tool, _ in questions]
+            assert [r['tool_results'][0]['tool_name'] for r in saved] == [
+                'get_source_schema' if question in direct_questions else tool
+                for question, tool, _ in questions
+            ]
             other = await client.post('/sources/csv', files={'file': ('other.csv', b'other_field\nZ\n', 'text/csv')})
             other_id = other.json()['source_id']
             conflict = await client.post(f'/agent/chat?chat_id={chat_id}', json={'question': 'Что передо мной?', 'source_ids': [other_id]})
             assert conflict.status_code == 409
-            add_tool('get_source_schema', other_id)
             fresh = await client.post('/agent/chat', json={'question': 'Что передо мной?', 'source_ids': [other_id]})
             assert fresh.json()['chat_id'] != chat_id
             assert 'other_field' in fresh.json()['answer']
