@@ -284,6 +284,20 @@ def test_lag_scan_reports_trend_and_bonferroni_adjustment():
     assert any("shared trend" in warning for warning in trend["warnings"])
 
 
+def test_lag_interpretation_uses_adjusted_significance():
+    ys = [0, 5, 7, 7, 8, 5, 7, 11]
+    rows = [{"group_0": f"2026-{i + 1:02d}-01", "x_value": i + 1, "y_value": y}
+            for i, y in enumerate(ys)]
+    check = RelationshipCheck.model_validate(relationship_payload(
+        max_lag=2, group_by=[{"field": "month", "granularity": "month"}]))
+    result = RelationshipImplementation(FakeSources(rows)).execute(check)
+
+    assert result["p_value"] < 0.05
+    assert result["adjusted_p_value"] > 0.05
+    assert result["statistically_significant"] is False
+    assert "not statistically significant" in result["interpretation"]
+
+
 @pytest.mark.parametrize("alpha", [0, 1, -0.1, 1.1])
 def test_relationship_rejects_invalid_alpha(alpha):
     with pytest.raises(ValidationError):
