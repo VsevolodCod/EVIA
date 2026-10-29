@@ -53,6 +53,8 @@ async def test_saved_dashboard_can_be_listed_reopened_and_built(tmp_path, monkey
     monkeypatch.setattr(module, "dashboard_engine", DashboardEngine(charts, dashboards))
     monkeypatch.setattr(module, "chart_executor", ChartExecutor.build_executor(sources, catalog, charts))
     try:
+        dashboards.set_origin_chat(dashboard_id, "chat-1")
+        dashboards.set_origin_chat(dashboard_id, "chat-2")
         async with AsyncClient(transport=ASGITransport(app=module.app), base_url="http://test") as client:
             ids = await client.get("/dashboards/ids")
             assert ids.status_code == 200
@@ -65,6 +67,7 @@ async def test_saved_dashboard_can_be_listed_reopened_and_built(tmp_path, monkey
             definition = await client.get(f"/dashboards/{dashboard_id}")
             assert definition.status_code == 200
             assert definition.json()["dashboard"]["charts"] == [{"chart_id": chart_id, "position": 0}]
+            assert definition.json()["origin_chat_id"] == "chat-1"
 
             chart_definition = await client.get(f"/charts/{chart_id}")
             assert chart_definition.status_code == 200

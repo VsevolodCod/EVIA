@@ -57,6 +57,17 @@ class DashboardORM(CatalogBase):
     )
 
 
+class DashboardOriginORM(CatalogBase):
+    """Optional link to the chat that first created a saved dashboard."""
+
+    __tablename__ = "dashboard_origins"
+
+    dashboard_id: Mapped[str] = mapped_column(
+        String(200), ForeignKey("dashboards.dashboard_id", ondelete="CASCADE"), primary_key=True
+    )
+    chat_id: Mapped[str] = mapped_column(String(36), nullable=False)
+
+
 class ChartORM(CatalogBase):
     """Сохранённое определение чарта."""
 
