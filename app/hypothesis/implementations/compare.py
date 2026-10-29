@@ -9,6 +9,7 @@ from app.hypothesis.base import (
     HypothesisImplementation,
     build_where,
     extract_rows,
+    numeric_expression,
     quote_identifier,
 )
 from app.hypothesis.models import CompareCheck
@@ -33,20 +34,22 @@ class CompareImplementation(HypothesisImplementation):
         if field is None:
             raise ValueError("Metric field is required")
 
+        numeric = numeric_expression(metric.field)
+
         if metric.aggregation == "count_distinct":
             return f"COUNT(DISTINCT {field})"
 
         if metric.aggregation == "sum":
-            return f"SUM(TRY_CAST({field} AS DOUBLE))"
+            return f"SUM({numeric})"
 
         if metric.aggregation == "avg":
-            return f"AVG(TRY_CAST({field} AS DOUBLE))"
+            return f"AVG({numeric})"
 
         if metric.aggregation == "min":
-            return f"MIN(TRY_CAST({field} AS DOUBLE))"
+            return f"MIN({numeric})"
 
         if metric.aggregation == "max":
-            return f"MAX(TRY_CAST({field} AS DOUBLE))"
+            return f"MAX({numeric})"
 
         raise ValueError(
             f"Unsupported aggregation: {metric.aggregation}"
@@ -62,8 +65,7 @@ class CompareImplementation(HypothesisImplementation):
 
         extra = ""
         if check.metric.aggregation == "avg" and check.metric.field:
-            field = quote_identifier(check.metric.field)
-            numeric = f"TRY_CAST({field} AS DOUBLE)"
+            numeric = numeric_expression(check.metric.field)
             extra = (f", COUNT({numeric}) AS sample_size, "
                      f"STDDEV_SAMP({numeric}) AS stddev")
         sql = f"SELECT {aggregate} AS metric_value{extra} FROM source{where}"

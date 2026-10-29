@@ -10,6 +10,7 @@ from app.hypothesis.base import (
     HypothesisImplementation,
     build_where,
     extract_rows,
+    numeric_expression,
     quote_identifier,
 )
 from app.hypothesis.models import (
@@ -44,20 +45,22 @@ class RelationshipImplementation(HypothesisImplementation):
                 f"Aggregation '{metric.aggregation}' requires a field"
             )
 
+        numeric = numeric_expression(metric.field)
+
         if metric.aggregation == "count_distinct":
             return f"COUNT(DISTINCT {field})"
 
         if metric.aggregation == "sum":
-            return f"SUM(TRY_CAST({field} AS DOUBLE))"
+            return f"SUM({numeric})"
 
         if metric.aggregation == "avg":
-            return f"AVG(TRY_CAST({field} AS DOUBLE))"
+            return f"AVG({numeric})"
 
         if metric.aggregation == "min":
-            return f"MIN(TRY_CAST({field} AS DOUBLE))"
+            return f"MIN({numeric})"
 
         if metric.aggregation == "max":
-            return f"MAX(TRY_CAST({field} AS DOUBLE))"
+            return f"MAX({numeric})"
 
         raise ValueError(
             f"Unsupported aggregation: {metric.aggregation}"

@@ -10,6 +10,7 @@ from app.hypothesis.base import (
     build_filter_expression,
     build_where,
     extract_rows,
+    numeric_expression,
     quote_identifier,
     sql_literal,
 )
@@ -456,7 +457,7 @@ def test_compare_builds_sum_sql_and_uses_both_groups():
     assert all(query["source_id"] == "sales" for query in sources.queries)
     assert all(query["row_limit"] == 1 for query in sources.queries)
 
-    assert 'SUM(TRY_CAST("amount" AS DOUBLE)) AS metric_value' in (
+    assert f'SUM({numeric_expression("amount")}) AS metric_value' in (
         sources.queries[0]["sql"]
     )
     assert '"period" = \'before\'' in sources.queries[0]["sql"]
@@ -552,10 +553,10 @@ def test_compare_empty_rows_produce_inconclusive_result():
     [
         ("count", "COUNT(*)"),
         ("count_distinct", 'COUNT(DISTINCT "amount")'),
-        ("sum", 'SUM(TRY_CAST("amount" AS DOUBLE))'),
-        ("avg", 'AVG(TRY_CAST("amount" AS DOUBLE))'),
-        ("min", 'MIN(TRY_CAST("amount" AS DOUBLE))'),
-        ("max", 'MAX(TRY_CAST("amount" AS DOUBLE))'),
+        ("sum", f'SUM({numeric_expression("amount")})'),
+        ("avg", f'AVG({numeric_expression("amount")})'),
+        ("min", f'MIN({numeric_expression("amount")})'),
+        ("max", f'MAX({numeric_expression("amount")})'),
     ],
 )
 def test_compare_aggregate_sql(aggregation, expected_sql):
@@ -615,8 +616,8 @@ def test_relationship_builds_grouped_aggregation_sql():
     sql = implementation._build_sql(check)
 
     assert 'DATE_TRUNC(\'month\', TRY_CAST("month" AS TIMESTAMP))' in sql
-    assert 'SUM(TRY_CAST("marketing_cost" AS DOUBLE)) AS x_value' in sql
-    assert 'SUM(TRY_CAST("revenue" AS DOUBLE)) AS y_value' in sql
+    assert f'SUM({numeric_expression("marketing_cost")}) AS x_value' in sql
+    assert f'SUM({numeric_expression("revenue")}) AS y_value' in sql
     assert '"region" = \'north\'' in sql
     assert "GROUP BY DATE_TRUNC" in sql
     assert "ORDER BY DATE_TRUNC" in sql
@@ -628,10 +629,10 @@ def test_relationship_builds_grouped_aggregation_sql():
     [
         ("count", "COUNT(*)"),
         ("count_distinct", 'COUNT(DISTINCT "amount")'),
-        ("sum", 'SUM(TRY_CAST("amount" AS DOUBLE))'),
-        ("avg", 'AVG(TRY_CAST("amount" AS DOUBLE))'),
-        ("min", 'MIN(TRY_CAST("amount" AS DOUBLE))'),
-        ("max", 'MAX(TRY_CAST("amount" AS DOUBLE))'),
+        ("sum", f'SUM({numeric_expression("amount")})'),
+        ("avg", f'AVG({numeric_expression("amount")})'),
+        ("min", f'MIN({numeric_expression("amount")})'),
+        ("max", f'MAX({numeric_expression("amount")})'),
     ],
 )
 def test_relationship_aggregate_sql(aggregation, expected_sql):

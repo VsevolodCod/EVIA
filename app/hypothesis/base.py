@@ -15,6 +15,12 @@ def quote_identifier(value: str) -> str:
     return '"' + value.replace('"', '""') + '"'
 
 
+def numeric_expression(field_name: str) -> str:
+    """Read numeric CSV values, including decimal commas, without coercing IDs."""
+    field = quote_identifier(field_name)
+    return f"TRY_CAST(NULLIF(REPLACE(TRIM(CAST({field} AS VARCHAR)), ',', '.'), '') AS DOUBLE)"
+
+
 def sql_literal(value: Any) -> str:
     if isinstance(value, bool):
         return "TRUE" if value else "FALSE"
