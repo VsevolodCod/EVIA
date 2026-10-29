@@ -46,13 +46,29 @@ def verifies(case: str, answer) -> bool:
         return all(name in answer.answer for name in ("period", "revenue", "segment"))
     if case == "overview":
         return all(fact in answer.answer for fact in ("3 строки", "3 поля", "2026-01-02", "2026-03-04"))
+
+    def is_six_hundred(value) -> bool:
+        try:
+            return Decimal(str(value)) == Decimal(600)
+        except (InvalidOperation, TypeError, ValueError):
+            return False
+
     for result in answer.results:
-        if result.rows and result.rows[0]:
-            try:
-                if Decimal(str(result.rows[0][0])) == Decimal(600):
-                    return True
-            except (InvalidOperation, TypeError, ValueError):
-                pass
+        if result.rows and result.rows[0] and is_six_hundred(result.rows[0][0]):
+            return True
+    for tool in answer.tool_results:
+        if tool.tool_name != "build_chart" or not tool.ok or not isinstance(tool.data, dict):
+            continue
+        definition = tool.data.get("definition") or {}
+        field = definition.get("field") or {}
+        result = tool.data.get("result") or {}
+        if (
+            tool.data.get("chart_type") == "kpi"
+            and definition.get("aggregate") == "sum"
+            and field.get("field") == "revenue"
+            and is_six_hundred(result.get("value"))
+        ):
+            return True
     return False
 
 
