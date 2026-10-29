@@ -411,6 +411,16 @@ async def chat_agent(
             history=chat.messages[:-1],
         )
 
+        if answer.conversation_trace:
+            for message in answer.conversation_trace:
+                chat.messages.append(
+                    ChatMessage(
+                        **message.model_dump(),
+                    )
+                )
+            # Сохраняем историю до обработки ответа.
+            await chat_manager.save(chat)
+
         response_data = answer.model_dump()
         response_data['chat_id'] = chat.chat_id
         response_data.setdefault('request_id', uuid4().hex)
@@ -424,7 +434,10 @@ async def chat_agent(
                 ChatMessage(
                     role="assistant",
                     content=response.answer,
-                    analysis_payload=AnalysisPayload(version=1, response=response.model_dump(mode='json')),
+                    analysis_payload=AnalysisPayload(
+                        version=1,
+                        response=response.model_dump(mode='json')
+                    ),
                 )
             )
             await chat_manager.save(chat)

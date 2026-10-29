@@ -153,7 +153,7 @@ def _overview_answer(schema: SourceSchema, raw_profile: dict) -> str:
             (field.name, column.temporal.minimum, column.temporal.maximum)
             for field in fields
             if (column := profile.columns.get(field.name)) is not None
-            and column.temporal is not None and column.temporal.count > 0
+               and column.temporal is not None and column.temporal.count > 0
         ]
         for name, minimum, maximum in periods:
             lines.append(f"Период по `{name}`: {minimum} — {maximum}.")
@@ -203,8 +203,7 @@ class AgentRuntime:
         # outcome='error'. При успешном выполнении значение изменится на статус ответа.
         outcome = 'error'
 
-        # Уникальный идентификатор запроса. Используется для связывания ответа,
-        # ошибок и записи о производительности.
+        # Уникальный идентификатор запроса. Используется для связывания ответа, ошибок и записи о производительности.
         request_id = uuid4().hex
 
         try:
@@ -267,11 +266,11 @@ class AgentRuntime:
                     profile = Profile.model_validate(profile_result.data).root
                     current = self.sources.catalog.get_source(selected.source_id)
                     stale = (
-                        current is None
-                        or current.snapshot_id != selected.snapshot_id
-                        or current.schema_version != selected.schema_version
-                        or schema.version != selected.schema_version
-                        or (isinstance(profile, FullProfile) and profile.snapshot_id != selected.snapshot_id)
+                            current is None
+                            or current.snapshot_id != selected.snapshot_id
+                            or current.schema_version != selected.schema_version
+                            or schema.version != selected.schema_version
+                            or (isinstance(profile, FullProfile) and profile.snapshot_id != selected.snapshot_id)
                     )
                     if stale:
                         message = "Источник изменился во время анализа. Повторите вопрос для новой версии."
@@ -364,6 +363,7 @@ class AgentRuntime:
                             if isinstance(self.llm, MockLLMProvider)
                             else "model"
                         ),
+                        conversation_trace=legacy.conversation_trace,
                     )
 
             # Запоминаем фактический статус результата для записи в лог.
@@ -426,12 +426,13 @@ class AgentRuntime:
                 f"\nДашборд, приложенный пользователем: {dashboard_id}"
             )
 
-        messages = (
+        messages: list[LLMMessage] = (
                 [LLMMessage(role="system", content=SYSTEM_PROMPT, )] +
                 [LLMMessage.model_validate(item.model_dump(include=set(LLMMessage.model_fields)))
                  for item in (history or [])] +
                 [LLMMessage(role="user", content=question + context, )]
         )
+        conversation_trace: list[LLMMessage] = []
 
         results: list[ToolResult] = []
         answer_parts: list[str] = []
@@ -471,8 +472,14 @@ class AgentRuntime:
                 if response.tool_calls or step == self.max_steps:
                     raise IncompleteModelOutput(step, results)
                 answer_parts.append(response.content)
-                messages.append(LLMMessage(role="assistant", content=response.content))
-                messages.append(
+                self._append_trace(
+                    messages,
+                    conversation_trace,
+                    LLMMessage(role="assistant", content=response.content)
+                )
+                self._append_trace(
+                    messages,
+                    conversation_trace,
                     LLMMessage(
                         role="user",
                         content="Продолжи ответ точно с места обрыва, без повторения уже написанного."
@@ -495,6 +502,7 @@ class AgentRuntime:
                     answer=answer,
                     steps=step,
                     tool_results=results,
+                    conversation_trace=conversation_trace
                 )
 
             answer_parts.clear()
@@ -519,7 +527,9 @@ class AgentRuntime:
 
             # Добавляем ответ модели в историю сообщений.
             # Чтобы понимать, что она вызвала, что получила какой-то результат
-            messages.append(
+            self._append_trace(
+                messages,
+                conversation_trace,
                 LLMMessage(
                     role="assistant",
                     content=response.content,
@@ -545,7 +555,9 @@ class AgentRuntime:
                 call_id = call.call_id or raw_call.get("id")
 
                 # Добавляем сообщение модели с информацией о вызове
-                messages.append(
+                self._append_trace(
+                    messages,
+                    conversation_trace,
                     LLMMessage(
                         role="tool",
                         name=call.name,
@@ -566,3 +578,12 @@ class AgentRuntime:
                         query_rejections = 0
         logger.warning("Достигнут лимит шагов агента. Завершение")
         raise AgentStepLimit(self.max_steps, results)
+
+    @staticmethod
+    def _append_trace(
+            messages: list[LLMMessage],
+            trace: list[LLMMessage],
+            message: LLMMessage,
+    ) -> None:
+        messages.append(message)
+        trace.append(message)

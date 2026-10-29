@@ -6,7 +6,7 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
-from app.chat_repository import ChatManager
+from app.chat_manager import ChatManager
 from app.db.chat.engine import create_chat_database, initialize_chat_database
 from app.models import ChatMessage, LLMResponse
 
@@ -235,7 +235,7 @@ async def test_chat_analysis_roundtrip_restart_source_changes_and_conflicts(tmp_
         history = (await client.get(f'/chats/{chat_id}')).json()
         assert history['source_id'] == source.source_id
         assert history['messages'][0]['analysis_payload'] is None
-        assert history['messages'][1]['analysis_payload'] == {'version': 1, 'response': answer}
+        assert history['messages'][3]['analysis_payload'] == {'version': 1, 'response': answer}
         assert (await client.get('/chats')).json()[0]['source_id'] == source.source_id
         switched = await client.post(endpoint, json={'question': 'Other?', 'source_ids': [other.source_id]})
         assert switched.status_code == 409
@@ -258,7 +258,7 @@ async def test_chat_analysis_roundtrip_restart_source_changes_and_conflicts(tmp_
             with catalog.session_factory.begin() as session:
                 session.execute(delete(DataSourceORM).where(DataSourceORM.source_id == source.source_id))
             archived = (await client.get(f'/chats/{chat_id}')).json()
-            assert archived['messages'][1]['analysis_payload']['response'] == answer
+            assert archived['messages'][3]['analysis_payload']['response'] == answer
             missing = await client.post(endpoint, json={'question': 'Now?'})
             assert missing.json()['status'] == 'error'
             assert (await client.get(f'/chats/{chat_id}')).json()['messages'][-1]['role'] == 'user'

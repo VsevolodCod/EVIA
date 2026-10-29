@@ -4,6 +4,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field, JsonValue
 
+
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -146,6 +147,12 @@ class AskResponse(BaseModel):
     tool_results: list[ToolResult] = Field(default_factory=list)
     chat_id: str | None = None
     timing: AgentTiming | None = None
+
+    # Внутренняя история вызовов инструментов для сохранения в чате.
+    conversation_trace: list[LLMMessage] | None = Field(
+        default_factory=list,
+        exclude=True,
+    )
 
 
 class AnalysisPayload(BaseModel):
