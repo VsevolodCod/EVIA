@@ -77,3 +77,43 @@ it("compacts long source identifiers and copies their full values", async () => 
   fireEvent.click(screen.getByRole("button", { name: "Скопировать полный source_id" }));
   await waitFor(() => expect(writeText).toHaveBeenCalledWith(sourceId));
 });
+
+it("shows hypothesis evidence in readable cards instead of raw JSON", () => {
+  render(<ToolResults results={[{ tool_name: "compare_groups", ok: true, data: {
+    statement: "Сравнение продаж",
+    results: [{ id: "comparison", method: "compare", status: "completed", error: null,
+      data: { left: { label: "До", value: 10 }, right: { label: "После", value: 20 },
+        delta: 10, change_percent: 100, assessment: "observed",
+        interpretation: "Разница не доказывает причинность." } }],
+  } }]} />);
+
+  expect(screen.getByText("Сравнение продаж")).toBeInTheDocument();
+  expect(screen.getByText("До")).toBeInTheDocument();
+  expect(screen.getByText("После")).toBeInTheDocument();
+  expect(screen.getByText("+10")).toBeInTheDocument();
+  expect(screen.getByText("Разница не доказывает причинность.")).toBeInTheDocument();
+  expect(screen.queryByText("Технические данные · compare_groups")).not.toBeInTheDocument();
+});
+
+it("shows uncertainty and adjusted lag evidence without a causality claim", () => {
+  render(<ToolResults results={[
+    { tool_name: "compare_groups", ok: true, data: { statement: "Средний чек", results: [{
+      id: "a", method: "compare", status: "completed", data: {
+        left: { label: "До", value: 10 }, right: { label: "После", value: 15 }, delta: 5,
+        uncertainty: { status: "estimated", method: "welch", left_count: 4, right_count: 4,
+          p_value: 0.002, confidence_interval: { level: 0.95, low: 3, high: 7 } },
+      },
+    }] } },
+    { tool_name: "analyze_relationship", ok: true, data: { statement: "Связь по месяцам", results: [{
+      id: "b", method: "relationship", status: "completed", data: {
+        correlation: 0.5, sample_size: 6, p_value: 0.03,
+        lag_results: [{ lag: 0, correlation: 0.5, adjusted_p_value: 0.09, sample_size: 6 },
+          { lag: 1, correlation: 0.8, adjusted_p_value: 0.01, sample_size: 5 }],
+      },
+    }] } },
+  ]} />);
+
+  expect(screen.getByText(/Доверительный интервал разницы/)).toBeInTheDocument();
+  expect(screen.getByText(/Лаг 1/)).toBeInTheDocument();
+  expect(screen.getAllByText(/p с поправкой/)).toHaveLength(2);
+});
