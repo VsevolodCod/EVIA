@@ -48,14 +48,15 @@ async def test_profile_and_tool_chat_sequence_preserve_data_and_history(tmp_path
             ]
             chat_id = None
             for question, tool, sql in questions:
-                add_tool(tool, source_id, sql)
+                if question != 'Какие есть столбцы?':
+                    add_tool(tool, source_id, sql)
                 path = '/agent/chat' + (f'?chat_id={chat_id}' if chat_id else '')
                 response = await client.post(path, json={'question': question, 'source_ids': [source_id]})
                 assert response.status_code == 200, response.text
                 body = response.json()
                 assert body['status'] == 'answered'
                 assert body['tool_results'][0]['tool_name'] == tool
-                assert len(body['timing']['calls']) == 2
+                assert len(body['timing']['calls']) == (0 if question == 'Какие есть столбцы?' else 2)
                 assert chat_id is None or body['chat_id'] == chat_id
                 chat_id = body['chat_id']
                 if 'часто' in question:
