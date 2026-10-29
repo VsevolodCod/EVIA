@@ -264,6 +264,25 @@ def test_lag_scan_does_not_join_across_missing_calendar_periods():
     assert any("missing periods" in warning for warning in result["warnings"])
 
 
+def test_lag_scan_reports_trend_and_bonferroni_adjustment():
+    values = [1, 3, 2, 5, 4, 7, 6, 8]
+    rows = [{"group_0": f"2026-{i + 1:02d}-01", "x_value": x,
+             "y_value": y}
+            for i, (x, y) in enumerate(zip(values, [2, 1, 4, 3, 6, 5, 8, 7]))]
+    check = RelationshipCheck.model_validate(relationship_payload(
+        max_lag=2, group_by=[{"field": "month", "granularity": "month"}]))
+    result = RelationshipImplementation(FakeSources(rows)).execute(check)
+    for lag in result["lag_results"]:
+        if lag["p_value"] is not None:
+            assert lag["adjusted_p_value"] == pytest.approx(min(1, lag["p_value"] * 3))
+
+    trend_rows = [{"group_0": f"2026-{i + 1:02d}-01", "x_value": i,
+                   "y_value": i * 2}
+                  for i in range(6)]
+    trend = RelationshipImplementation(FakeSources(trend_rows)).execute(check)
+    assert any("shared trend" in warning for warning in trend["warnings"])
+
+
 @pytest.mark.parametrize("alpha", [0, 1, -0.1, 1.1])
 def test_relationship_rejects_invalid_alpha(alpha):
     with pytest.raises(ValidationError):

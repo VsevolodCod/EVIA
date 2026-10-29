@@ -115,5 +115,5 @@ it("shows uncertainty and adjusted lag evidence without a causality claim", () =
 
   expect(screen.getByText(/Доверительный интервал разницы/)).toBeInTheDocument();
   expect(screen.getByText(/Лаг 1/)).toBeInTheDocument();
-  expect(screen.getByText(/p с поправкой/)).toBeInTheDocument();
+  expect(screen.getAllByText(/p с поправкой/)).toHaveLength(2);
 });

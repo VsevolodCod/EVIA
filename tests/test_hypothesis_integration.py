@@ -86,3 +86,19 @@ def test_average_comparison_reports_sample_sizes_and_uncertainty(tmp_path):
         assert uncertainty["p_value"] < 0.05
     finally:
         catalog.close()
+
+
+def test_invalid_hypothesis_field_is_an_error_not_a_successful_check(tmp_path):
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    sources = SourceService(tmp_path / "data", catalog)
+    source = sources.register_csv("sales.csv", b"period;amount\nbefore;10\nafter;20\n")
+    try:
+        result = build_tool_registry(catalog, sources).execute("compare_groups", {
+            "source_id": source.source_id, "metric_field": "missing",
+            "group_field": "period", "left_value": "before", "right_value": "after",
+        })
+        assert not result.ok
+        assert result.data is None
+        assert "field" in result.error.lower()
+    finally:
+        catalog.close()
