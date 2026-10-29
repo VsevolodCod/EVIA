@@ -56,7 +56,7 @@ async def test_schema_question_tracks_reimported_header_only_snapshot(tmp_path):
         assert answer.status == "answered"
         assert "new_name" in answer.answer and "amount" in answer.answer
         assert "old_name" not in answer.answer
-        assert answer.tool_results[0].data["version"] == updated.schema_version
+        assert answer.tool_results[0].data.version == updated.schema_version
         assert model.calls == 0
     finally:
         catalog.close()
