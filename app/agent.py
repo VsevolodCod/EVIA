@@ -73,16 +73,24 @@ SYSTEM_PROMPT = """
 
 def _asks_for_source_schema(question: str) -> bool:
     """Recognize requests for field names, without hijacking questions about values."""
-    normalized = " ".join(question.casefold().split())
+    normalized = " ".join(question.casefold().split()).rstrip(" ?!.")
     if re.search(r"значен|средн|сумм|график|распределен|частот|первые|дубликат", normalized):
         return False
     if re.search(r"\b(?:схем\w*|структур\w*)\b", normalized):
-        return bool(re.search(r"\b(?:какая|какую|покажи|назови|опиши)\b", normalized))
+        return bool(
+            re.search(r"\b(?:какая|какую|покажи|назови|опиши)\b", normalized)
+            and re.search(r"\b(?:источник\w*|данн\w*|таблиц\w*|csv)\b", normalized)
+        )
     if not re.search(r"\b(?:столбц\w*|колонк\w*|поле\w*|поля|полей)\b", normalized):
         return False
     return bool(
-        re.search(r"\b(?:какие|назови|перечисли|список|сколько)\b", normalized)
-        or re.search(r"^покажи\s+(?:мне\s+)?(?:все\s+)?(?:столбц|колонк|пол)", normalized)
+        re.search(r"\b(?:назови|перечисли|список|сколько|названия)\b", normalized)
+        or ("какие" in normalized.split() and "есть" in normalized.split())
+        or re.fullmatch(r"какие (?:у нас )?(?:столбцы|колонки|поля)", normalized)
+        or re.fullmatch(
+            r"покажи\s+(?:мне\s+)?(?:все\s+)?(?:столбцы|колонки|поля)"
+            r"(?:\s+(?:источника|данных|таблицы))?", normalized
+        )
     )
 
 
