@@ -32,6 +32,10 @@ class AgentStepLimit(IncompleteModelOutput):
     """The tool loop ended without a final model response."""
 
 
+class RepeatedQueryRejection(IncompleteModelOutput):
+    """The model tried invalid SQL twice without recovering."""
+
+
 def _referenced_sources(value):
     """Collect explicit source references from nested tool arguments."""
     if isinstance(value, dict):
@@ -300,6 +304,17 @@ class AgentRuntime:
 
                 # Отдельно обрабатываем ситуацию, когда модель не успела
                 # завершить генерацию ответа из-за ограничения длины вывода.
+                except RepeatedQueryRejection as exc:
+                    message = (
+                        "Запрос к данным дважды отклонён. Проверьте названия полей "
+                        "и условие запроса, затем повторите."
+                    )
+                    result = AgentResponse(
+                        request_id=request_id, status="error", answer=message,
+                        steps=exc.steps, tool_results=exc.tool_results, timing=timing,
+                        error=Error(code="QUERY_REJECTED", message=message,
+                                    request_id=request_id, retryable=True),
+                    )
                 except AgentStepLimit as exc:
                     message = "Достигнут лимит шагов агента. Расчёт не завершён; уточните запрос и повторите."
                     result = AgentResponse(
@@ -421,6 +436,7 @@ class AgentRuntime:
 
         results: list[ToolResult] = []
         answer_parts: list[str] = []
+        query_rejections = 0
 
         # Основный цикл агента
         for step in range(1, self.max_steps + 1):
@@ -601,5 +617,12 @@ class AgentRuntime:
                         ),
                     )
                 )
+                if call.name == "query_data":
+                    if result.error == "QUERY_REJECTED":
+                        query_rejections += 1
+                        if query_rejections >= 2:
+                            raise RepeatedQueryRejection(step, results)
+                    elif result.ok:
+                        query_rejections = 0
         logger.warning("Достигнут лимит шагов агента. Завершение")
         raise AgentStepLimit(self.max_steps, results)
