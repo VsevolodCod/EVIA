@@ -409,10 +409,6 @@ class AgentRuntime:
             # Выполняем инструменты
             for index, call in enumerate(response.tool_calls):
                 logger.info(f"Начато выполнение инструмента '{call.name}'")
-                # Скорее всего надо будет добавить тут асинхронность.
-                # Надо добавить проверку на корректность и обработку ошибок
-                # if call.name == "check_hypothesis":
-                #     logger.info(call.model_dump())
                 tool_started = perf_counter()
                 try:
                     referenced = set(_referenced_sources(call.arguments))

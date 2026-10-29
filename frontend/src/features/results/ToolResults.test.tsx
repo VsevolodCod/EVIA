@@ -77,3 +77,20 @@ it("compacts long source identifiers and copies their full values", async () => 
   fireEvent.click(screen.getByRole("button", { name: "Скопировать полный source_id" }));
   await waitFor(() => expect(writeText).toHaveBeenCalledWith(sourceId));
 });
+
+it("shows hypothesis evidence in readable cards instead of raw JSON", () => {
+  render(<ToolResults results={[{ tool_name: "compare_groups", ok: true, data: {
+    statement: "Сравнение продаж",
+    results: [{ id: "comparison", method: "compare", status: "completed", error: null,
+      data: { left: { label: "До", value: 10 }, right: { label: "После", value: 20 },
+        delta: 10, change_percent: 100, assessment: "observed",
+        interpretation: "Разница не доказывает причинность." } }],
+  } }]} />);
+
+  expect(screen.getByText("Сравнение продаж")).toBeInTheDocument();
+  expect(screen.getByText("До")).toBeInTheDocument();
+  expect(screen.getByText("После")).toBeInTheDocument();
+  expect(screen.getByText("+10")).toBeInTheDocument();
+  expect(screen.getByText("Разница не доказывает причинность.")).toBeInTheDocument();
+  expect(screen.queryByText("Технические данные · compare_groups")).not.toBeInTheDocument();
+});

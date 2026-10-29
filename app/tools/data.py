@@ -8,29 +8,28 @@ def register_data_tools(
     catalog: SchemaCatalog,
     sources: SourceService,
 ) -> None:
-    # не нужно ему выполнять sql запросы самому
-    # registry.register(
-    #     ToolDefinition(
-    #         name="query_data",
-    #         description=(
-    #             "Run one read-only analytical SELECT against a selected "
-    #             "source. Refer to the selected source as the table source."
-    #         ),
-    #         parameters={
-    #             "source_id": {"type": "string"},
-    #             "sql": {"type": "string", "minLength": 1},
-    #             "row_limit": {
-    #                 "type": "integer",
-    #                 "minimum": 1,
-    #                 "maximum": 10000,
-    #             },
-    #         },
-    #         required=["source_id", "sql"],
-    #         handler=lambda source_id, sql, row_limit=None: sources.query(
-    #             source_id, sql, row_limit=row_limit
-    #         ),
-    #     )
-    # )
+    registry.register(
+        ToolDefinition(
+            name="query_data",
+            description=(
+                "Run one read-only analytical SELECT against a selected "
+                "source. Refer to the selected source as the table source."
+            ),
+            parameters={
+                "source_id": {"type": "string"},
+                "sql": {"type": "string", "minLength": 1},
+                "row_limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10000,
+                },
+            },
+            required=["source_id", "sql"],
+            handler=lambda source_id, sql, row_limit=None: sources.query(
+                source_id, sql, row_limit=row_limit
+            ),
+        )
+    )
 
     registry.register(
         ToolDefinition(

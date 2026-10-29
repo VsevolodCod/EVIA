@@ -1,7 +1,7 @@
 from app.charts import ChartExecutor
 from app.schema_catalog import SchemaCatalog
 from app.source_service import SourceService
-from app.charts import ChartRepository
+from app.charts import ChartRepository, DashboardRepository
 
 from app.tools.base import ToolRegistry
 
