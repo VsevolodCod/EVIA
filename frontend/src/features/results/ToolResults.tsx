@@ -1,4 +1,4 @@
-import type { Row, ToolResult } from "../../api";
+import type { Answer, Row, ToolResult } from "../../api";
 import { Icon } from "../../components/Icon";
 import { ResultVisualization } from "./ResultVisualization";
 import { HypothesisEvidence, isHypothesisEvidence } from "./HypothesisEvidence";
@@ -38,7 +38,22 @@ function tabularRows(data: unknown): Row[] | null {
   return query.rows.map((row) => Object.fromEntries((row as unknown[]).map((value, index) => [names[index] as string, value])));
 }
 
-export function ToolResults({ results }: { results: ToolResult[] }) {
+function resultPassport(data: unknown) {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+  const result = data as Record<string, unknown>;
+  if (!Array.isArray(result.provenance) || !Array.isArray(result.rows)) return null;
+  const origin = result.provenance.find((value) => value && typeof value === "object" && !Array.isArray(value)) as Record<string, unknown> | undefined;
+  if (!origin || typeof origin.source_id !== "string" || typeof origin.snapshot_id !== "string") return null;
+  return {
+    source: origin.source_id,
+    snapshot: origin.snapshot_id,
+    schemaVersion: typeof origin.schema_version === "number" ? origin.schema_version : null,
+    shown: result.rows.length,
+    truncated: result.truncated === true,
+  };
+}
+
+export function ToolResults({ results, analysis }: { results: ToolResult[]; analysis?: Answer["analysis"] }) {
   if (!results.length)
     return (
       <div className="empty-table">
@@ -52,6 +67,9 @@ export function ToolResults({ results }: { results: ToolResult[] }) {
       {results.map((result, i) => {
         const rows = tabularRows(result.data);
         const csvTable = result.ok && exportableTools.has(result.tool_name) ? csvTableFrom(result.data) : null;
+        const passport = result.ok && result.tool_name === "query_data" ? resultPassport(result.data) : null;
+        const sql = results.filter((item) => item.tool_name === "query_data" && item.ok).length === 1
+          ? analysis?.sql : null;
         const hypothesis = result.ok &&
           (result.tool_name === "compare_groups" || result.tool_name === "analyze_relationship") &&
           isHypothesisEvidence(result.data) ? result.data : null;
@@ -75,6 +93,17 @@ export function ToolResults({ results }: { results: ToolResult[] }) {
                 : `В CSV попадут только ${csvTable.rows.length} строк, возвращённых сервером. Результат усечён.`}
             </p>}
           </div>}
+          {passport && <details className="tool-method result-passport">
+            <summary>Паспорт результата</summary>
+            <dl>
+              <div><dt>Источник</dt><dd>{passport.source}</dd></div>
+              <div><dt>Снимок данных</dt><dd>{passport.snapshot}</dd></div>
+              {passport.schemaVersion !== null && <div><dt>Версия схемы</dt><dd>{passport.schemaVersion}</dd></div>}
+              <div><dt>Возвращено строк</dt><dd>{passport.shown}</dd></div>
+              {sql && <div><dt>SQL</dt><dd><code>{sql}</code></dd></div>}
+            </dl>
+            {passport.truncated && <p>Показана только часть результата. Экспорт содержит только возвращённые строки.</p>}
+          </details>}
           {hypothesis ? <HypothesisEvidence evidence={hypothesis} /> : rows ? (
             <ResultVisualization
               rows={rows}

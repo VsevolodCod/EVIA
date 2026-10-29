@@ -48,6 +48,25 @@ it("offers export for returned SQL rows and labels a truncated result", () => {
   expect(screen.getByText(/только 1 строка, возвращённая сервером/)).toBeInTheDocument();
 });
 
+it("shows a per-result calculation passport without leaking internal paths", () => {
+  render(<ToolResults analysis={{ intent: "sum", sql: "SELECT SUM(revenue) FROM source", explanation: "Сумма выручки" }} results={[{
+    tool_name: "query_data", ok: true,
+    data: {
+      columns: [{ name: "revenue" }], rows: [["450.00"]], returned_rows: 1,
+      row_limit: 50, truncated: true,
+      provenance: [{ source_id: "source-1", snapshot_id: "snapshot-2", schema_version: 3,
+        internal_path: "/private/secret.csv" }],
+    },
+  }]} />);
+
+  fireEvent.click(screen.getByText("Паспорт результата"));
+  expect(screen.getByText("source-1")).toBeInTheDocument();
+  expect(screen.getByText("snapshot-2")).toBeInTheDocument();
+  expect(screen.getByText("SELECT SUM(revenue) FROM source")).toBeInTheDocument();
+  expect(screen.getByText(/Показана только часть результата/)).toBeInTheDocument();
+  expect(screen.queryByText(/private\/secret/)).not.toBeInTheDocument();
+});
+
 it("does not export source metadata or failed results", () => {
   render(<ToolResults results={[
     { tool_name: "list_sources", ok: true, data: [{ source_id: "abc" }] },
