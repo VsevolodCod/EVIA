@@ -63,7 +63,12 @@ async def test_schema_question_tracks_reimported_header_only_snapshot(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_question_about_column_values_still_uses_model(tmp_path):
+@pytest.mark.parametrize("question", [
+    "Какие значения в столбце revenue?",
+    "Какие колонки дают наибольшую выручку?",
+    "Покажи структуру выручки по месяцам",
+])
+async def test_analytical_questions_still_use_model(tmp_path, question):
     catalog = SchemaCatalog(tmp_path / "catalog.db")
     sources = SourceService(tmp_path / "data", catalog)
     source = sources.register_csv("sales.csv", b"month;revenue\nJanuary;10\n")
@@ -78,7 +83,7 @@ async def test_question_about_column_values_still_uses_model(tmp_path):
     model = Model()
     try:
         answer = await AgentRuntime(model, build_tool_registry(catalog, sources), sources=sources).ask(
-            "Какие значения в столбце revenue?", [source.source_id]
+            question, [source.source_id]
         )
         assert answer.answer_kind == "model"
         assert model.calls == 1
