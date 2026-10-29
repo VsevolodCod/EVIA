@@ -9,6 +9,7 @@ from decimal import Decimal, InvalidOperation
 from hashlib import sha256
 from pathlib import Path
 import re
+import shutil
 from typing import BinaryIO
 
 from app.data_sources.csv_format import SAMPLE_CHARS, detect_delimiter, read_header
@@ -17,6 +18,7 @@ from app.models import ImportReport
 
 MAX_CSV_BYTES = 512 * 1024 * 1024
 CHUNK_BYTES = 1024 * 1024
+IMPORT_RESERVE_BYTES = 16 * 1024 * 1024
 _INTEGER = re.compile(r"^[+-]?[0-9]+$")
 _DECIMAL = re.compile(r"^[+-]?(?:[0-9]+(?:[.,][0-9]+)?|[.,][0-9]+)$")
 _CALENDAR_DATE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
@@ -31,15 +33,35 @@ class CSVImportError(ValueError):
         self.status_code = status_code
 
 
+def require_import_space(directory: Path, additional_bytes: int, report: ImportReport) -> None:
+    """Best-effort headroom for originals, normalization and database writes.
+
+    This is an estimate, not a disk reservation; concurrent writes may still fail.
+    Keep a small reserve for catalog/WAL writes and cleanup.
+    """
+    if shutil.disk_usage(directory).free < additional_bytes + IMPORT_RESERVE_BYTES:
+        raise CSVImportError("Insufficient storage for CSV import", report, status_code=507)
+
+
 def copy_original(stream: BinaryIO, target: Path) -> ImportReport:
     """Copy in bounded chunks and hash the exact uploaded bytes."""
     report = ImportReport()
     digest = sha256()
+    if stream.seekable():
+        position = stream.tell()
+        remaining = stream.seek(0, 2) - position
+        stream.seek(position)
+        if remaining > MAX_CSV_BYTES:
+            raise CSVImportError("CSV exceeds the 512 MiB upload limit", report, status_code=413)
+        require_import_space(target.parent, max(0, remaining) * 4, report)
+    else:
+        require_import_space(target.parent, 0, report)
     with target.open("xb") as destination:
         while chunk := stream.read(CHUNK_BYTES):
             report.size_bytes += len(chunk)
             if report.size_bytes > MAX_CSV_BYTES:
                 raise CSVImportError("CSV exceeds the 512 MiB upload limit", report, status_code=413)
+            require_import_space(target.parent, len(chunk) + report.size_bytes * 3, report)
             destination.write(chunk)
             digest.update(chunk)
     report.sha256 = digest.hexdigest()
@@ -205,6 +227,8 @@ def _scan_with_encoding(original: Path, normalized: Path, encoding: str, report:
             writer.writerow(header)
             try:
                 for row in reader:
+                    if report.rows_read % 1024 == 0:
+                        require_import_space(normalized.parent, CHUNK_BYTES, report)
                     if not row:
                         report.blank_lines += 1
                         continue

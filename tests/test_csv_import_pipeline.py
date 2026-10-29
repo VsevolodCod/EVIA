@@ -436,3 +436,38 @@ def test_disk_full_during_materialization_preserves_previous_version(service, mo
     assert service.catalog.get_source(source.source_id).snapshot_id == source.snapshot_id
     assert service.preview(source.source_id) == [{"id": "1"}]
     assert set(service.data_dir.glob("*.csv")) == before
+
+
+def test_known_upload_size_is_checked_before_writing_original(tmp_path, monkeypatch):
+    import shutil
+    from types import SimpleNamespace
+    from app.csv_import import copy_original, CSVImportError, IMPORT_RESERVE_BYTES
+
+    target = tmp_path / "new.csv"
+    payload = b"id\n1\n"
+    # The original fits, but all copies plus the operational reserve do not.
+    monkeypatch.setattr(shutil, "disk_usage", lambda _: SimpleNamespace(
+        free=IMPORT_RESERVE_BYTES + len(payload) * 2,
+    ))
+    with pytest.raises(CSVImportError) as error:
+        copy_original(BytesIO(payload), target)
+    assert error.value.status_code == 507
+    assert not target.exists()
+
+
+def test_streaming_upload_checks_capacity_between_chunks(tmp_path, monkeypatch):
+    import shutil
+    from types import SimpleNamespace
+    from app.csv_import import copy_original, CSVImportError, IMPORT_RESERVE_BYTES
+
+    class NonSeekable(BytesIO):
+        def seekable(self):
+            return False
+
+    target = tmp_path / "stream.csv"
+    available = iter([IMPORT_RESERVE_BYTES + 100, IMPORT_RESERVE_BYTES + 1])
+    monkeypatch.setattr(shutil, "disk_usage", lambda _: SimpleNamespace(free=next(available)))
+    with pytest.raises(CSVImportError) as error:
+        copy_original(NonSeekable(b"id\n1\n"), target)
+    assert error.value.status_code == 507
+    assert target.read_bytes() == b""

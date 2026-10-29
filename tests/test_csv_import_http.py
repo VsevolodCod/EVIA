@@ -42,3 +42,26 @@ async def test_http_import_report_error_and_reimport_versions(tmp_path, monkeypa
             original = await client.get(f"/sources/{source_id}/versions/{snapshot_id}/download")
             assert original.status_code == 200
             assert original.content == first_bytes
+
+
+@pytest.mark.asyncio
+async def test_http_storage_exhaustion_is_507_without_internal_paths(tmp_path, monkeypatch):
+    import shutil
+    from types import SimpleNamespace
+
+    module = importlib.import_module("app.main")
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    service = SourceService(tmp_path / "data", catalog)
+    monkeypatch.setattr(module, "catalog", catalog)
+    monkeypatch.setattr(module, "source_service", service)
+    monkeypatch.setattr(module.settings, "chat_db_path", tmp_path / "chats.db")
+    async with module.app.router.lifespan_context(module.app):
+        monkeypatch.setattr(shutil, "disk_usage", lambda _: SimpleNamespace(free=1024))
+        async with AsyncClient(transport=ASGITransport(app=module.app), base_url="http://test") as client:
+            response = await client.post("/sources/csv", files={"file": ("sales.csv", b"id\n1\n", "text/csv")})
+            assert response.status_code == 507
+            assert response.json()["detail"]["message"] == "Insufficient storage for CSV import"
+            assert response.json()["detail"]["report"]["accepted_rows"] == 0
+            assert str(tmp_path) not in response.text
+            assert (await client.get("/sources")).json() == []
+    catalog.close()
