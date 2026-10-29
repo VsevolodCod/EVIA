@@ -419,6 +419,16 @@ async def chat_agent(
                 )
             )
             await chat_manager.save(chat)
+            if not temporary_chat:
+                for tool in response.tool_results:
+                    if tool.tool_name != "compose_dashboard" or not tool.ok or not isinstance(tool.data, dict):
+                        continue
+                    saved = tool.data.get("dashboard")
+                    if tool.data.get("success") is True and isinstance(saved, dict) and isinstance(saved.get("id"), str):
+                        try:
+                            dashboard_repository.set_origin_chat(saved["id"], chat.chat_id)
+                        except Exception:
+                            logger.exception("Could not link saved dashboard to originating chat")
 
         # Возвращаем обычный ответ агента вместе с идентификатором чата.
         return response
@@ -603,7 +613,7 @@ def get_dashboard_info(dashboard_id: str):
             detail="Could not retrieve dashboard",
         )
 
-    return result
+    return {**result, "origin_chat_id": dashboard_repository.origin_chat_id(dashboard_id)}
 
 
 @app.put("/dashboards/{dashboard_id}/order")

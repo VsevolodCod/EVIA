@@ -11,6 +11,38 @@ from app.db.chat.engine import create_chat_database, initialize_chat_database
 from app.models import Chat, ChatMessage
 
 
+@pytest.mark.asyncio
+async def test_chat_records_origin_for_new_saved_dashboard(manager, api_source, monkeypatch):
+    from app import main as module
+    from app.contracts.v1 import AgentResponse
+    from app.models import ToolResult
+
+    recorded = []
+
+    class Repository:
+        def set_origin_chat(self, dashboard_id, chat_id):
+            recorded.append((dashboard_id, chat_id))
+
+    class Agent:
+        async def ask(self, **_kwargs):
+            return AgentResponse(
+                request_id="origin-request", status="answered", answer="Отчёт сохранён", steps=1,
+                tool_results=[ToolResult(tool_name="compose_dashboard", ok=True, data={
+                    "success": True, "dashboard": {"id": "saved-dashboard"},
+                })],
+            )
+
+    monkeypatch.setattr(module, "dashboard_repository", Repository())
+    monkeypatch.setattr(module, "agent", Agent())
+    monkeypatch.setattr(module.app.state, "chat_manager", manager, raising=False)
+    async with AsyncClient(transport=ASGITransport(app=module.app), base_url="http://test") as client:
+        response = await client.post("/agent/chat", json={
+            "question": "Создай отчёт", "source_ids": [api_source],
+        })
+    assert response.status_code == 200
+    assert recorded == [("saved-dashboard", response.json()["chat_id"])]
+
+
 @pytest.fixture
 def api_source(tmp_path, monkeypatch):
     from app import main as module

@@ -13,7 +13,7 @@ from app.charts.models import (
     ChartReference,
     DashboardModel,
 )
-from app.db.catalog import DashboardORM, DashboardChartRefORM, ChartORM
+from app.db.catalog import DashboardORM, DashboardOriginORM, DashboardChartRefORM, ChartORM
 from app.ownership import owner_id
 
 
@@ -229,6 +229,28 @@ class DashboardRepository:
 
             return self._to_model(orm)
 
+    def origin_chat_id(self, dashboard_id: str) -> str | None:
+        """Only reveal an origin for a dashboard visible to the current owner."""
+        with self.session_maker() as session:
+            statement = (
+                select(DashboardOriginORM.chat_id)
+                .join(DashboardORM, DashboardORM.dashboard_id == DashboardOriginORM.dashboard_id)
+                .where(DashboardORM.dashboard_id == dashboard_id)
+            )
+            if owner_id() is not None:
+                statement = statement.where(DashboardORM.owner_id == owner_id())
+            return session.scalar(statement)
+
+    def set_origin_chat(self, dashboard_id: str, chat_id: str) -> None:
+        """Record the first originating chat; later edits do not replace it."""
+        with self.session_maker() as session:
+            with session.begin():
+                dashboard = session.get(DashboardORM, dashboard_id)
+                if dashboard is None or (owner_id() is not None and dashboard.owner_id != owner_id()):
+                    raise EntityNotFoundError("Dashboard not found")
+                if session.get(DashboardOriginORM, dashboard_id) is None:
+                    session.add(DashboardOriginORM(dashboard_id=dashboard_id, chat_id=chat_id))
+
     def update(self, dashboard: DashboardModel) -> DashboardModel:
         """Обновляет метаданные и полный список ссылок дашборда."""
 
@@ -276,6 +298,9 @@ class DashboardRepository:
                 if orm is None or (owner_id() is not None and orm.owner_id != owner_id()):
                     return False
 
+                origin = session.get(DashboardOriginORM, dashboard_id)
+                if origin is not None:
+                    session.delete(origin)
                 session.delete(orm)
                 session.flush()
                 return True

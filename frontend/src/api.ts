@@ -235,6 +235,7 @@ const savedDashboardDefinitionSchema = z.object({
 const savedDashboardInfoSchema = z.object({
   success: z.boolean(),
   dashboard: savedDashboardDefinitionSchema,
+  origin_chat_id: z.string().nullable().optional(),
 });
 const savedDashboardBuildSchema = z.object({
   success: z.boolean(),

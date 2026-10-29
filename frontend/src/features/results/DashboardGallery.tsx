@@ -4,7 +4,7 @@ import { ErrorNotice } from "../../components";
 import { SavedDashboard } from "./SavedDashboard";
 import "./dashboardGallery.css";
 
-type GalleryItem = SavedDashboardInfo["dashboard"];
+type GalleryItem = SavedDashboardInfo["dashboard"] & { origin_chat_id?: string | null };
 
 function chartsText(count: number) {
   const remainder = count % 100;
@@ -12,7 +12,7 @@ function chartsText(count: number) {
   return `${count} ${remainder > 10 && remainder < 20 ? "графиков" : digit === 1 ? "график" : digit > 1 && digit < 5 ? "графика" : "графиков"}`;
 }
 
-export function DashboardGallery({ onClose, onAttach }: { onClose: () => void; onAttach?: (id: string, title: string) => void }) {
+export function DashboardGallery({ onClose, onAttach, onOpenOrigin }: { onClose: () => void; onAttach?: (id: string, title: string) => void; onOpenOrigin?: (chatId: string) => boolean }) {
   const [revision, setRevision] = useState(0);
   const [items, setItems] = useState<GalleryItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,7 +37,7 @@ export function DashboardGallery({ onClose, onAttach }: { onClose: () => void; o
             if (controller.signal.aborted) return;
             failedDetails += batch.filter((result) => result.status === "rejected" || !result.value.success).length;
             setItems((previous) => [...previous, ...batch.flatMap((result) =>
-              result.status === "fulfilled" && result.value.success ? [result.value.dashboard] : [])]);
+              result.status === "fulfilled" && result.value.success ? [{ ...result.value.dashboard, origin_chat_id: result.value.origin_chat_id }] : [])]);
           }
           offset += ids.length;
           if (ids.length < 100) break;
@@ -97,6 +97,9 @@ export function DashboardGallery({ onClose, onAttach }: { onClose: () => void; o
     {selected && <div className="dashboard-gallery-open">
       <div className="dashboard-gallery-open-actions">
         {onAttach && <button type="button" className="dashboard-gallery-attach" onClick={() => onAttach(selected.id, selected.title)}>Обсудить этот отчёт в чате →</button>}
+        {selected.origin_chat_id && onOpenOrigin && <button type="button" onClick={() => {
+          if (!onOpenOrigin(selected.origin_chat_id!)) setError("Исходный диалог больше не доступен.");
+        }}>Открыть исходный диалог</button>}
         <button type="button" onClick={() => setDeleteId(selected.id)}>Удалить отчёт</button>
       </div>
       <SavedDashboard id={selected.id} editable />

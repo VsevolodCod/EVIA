@@ -469,6 +469,24 @@ export default function App({ account, onAccountChange, onLogout }: {
     setMobilePanel("analytics");
     if (!loadedChats.current.has(chat.chat_id)) void loadChatHistory(key, chat.chat_id);
   }
+  function openDashboardOrigin(chatId: string): boolean {
+    const chat = chatSummaries.find((item) => item.chat_id === chatId);
+    if (!chat) return false;
+    const sourceId = chat.source_id ?? chatSources[chat.chat_id];
+    if (!sourceId || !sources.some((item) => item.source_id === sourceId)) {
+      openArchivedChat(chat);
+      return true;
+    }
+    selectSource(sourceId);
+    activeConversations.current.set(sourceId, chatId);
+    setActiveIds((previous) => ({
+      ...previous,
+      [sourceId]: (histories[sourceId] ?? []).filter((entry) => entry.conversationId === chatId).at(-1)?.id,
+    }));
+    setView("results");
+    if (!loadedChats.current.has(chatId)) void loadChatHistory(sourceId, chatId);
+    return true;
+  }
   function newAnalysis() {
     if (window.matchMedia?.("(max-width: 640px)").matches) {
       openMobileUpload();
@@ -874,7 +892,7 @@ export default function App({ account, onAccountChange, onLogout }: {
             <span aria-hidden="true" />
           </div>
           {showDashboardGallery && mobileOverlay !== "upload" ? (
-            <DashboardGallery onClose={() => setShowDashboardGallery(false)} onAttach={source ? (id, title) => {
+            <DashboardGallery onClose={() => setShowDashboardGallery(false)} onOpenOrigin={openDashboardOrigin} onAttach={source ? (id, title) => {
               setAttachedDashboard({ id, title });
               setShowDashboardGallery(false);
               setMobilePanel("chat");
