@@ -83,6 +83,23 @@ class Settings:
             1, int(os.getenv("AGENT_MAX_STEPS", "5"))
         )
 
+        self.agent_max_steps = max(
+            1, int(os.getenv("AGENT_MAX_STEPS", "5"))
+        )
+
+        self.agent_llm_retry_max_attempts = max(
+            1, int(os.getenv("AGENT_LLM_RETRY_MAX_ATTEMPTS", "5"))
+        )
+        self.agent_llm_retry_base_delay_seconds = max(
+            0.0, float(os.getenv("AGENT_LLM_RETRY_BASE_DELAY_SECONDS", "0.3"))
+        )
+        self.agent_llm_retry_backoff_multiplier = max(
+            1.0, float(os.getenv("AGENT_LLM_RETRY_BACKOFF_MULTIPLIER", "2.0"))
+        )
+        self.agent_llm_retry_max_delay_seconds = max(
+            0.0, float(os.getenv("AGENT_LLM_RETRY_MAX_DELAY_SECONDS", "5.0"))
+        )
+
     def prepare_directories(self) -> None:
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.catalog_db_path.parent.mkdir(parents=True, exist_ok=True)

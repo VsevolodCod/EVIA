@@ -30,6 +30,7 @@ from app.db import create_chat_database, initialize_chat_database
 from app.llm.factory import create_llm_provider
 from app.models import AnalysisPayload, AskRequest, AskResponse, ChatMessage, DataSource, CSVVersion, Chat, ChatCreateRequest, ChatSummary, \
     ChatHistoryResponse
+from app.retry_agent import LLMRetryPolicy
 from app.schema_catalog import SchemaCatalog
 from app.source_service import SourceService
 from app.tools import build_tool_registry
@@ -88,11 +89,19 @@ tool_registry = build_tool_registry(
 # LLM и агент
 llm_provider = create_llm_provider(settings)
 
+retry_policy = LLMRetryPolicy(
+    max_attempts=settings.agent_llm_retry_max_attempts,
+    base_delay_seconds=settings.agent_llm_retry_base_delay_seconds,
+    backoff_multiplier=settings.agent_llm_retry_backoff_multiplier,
+    max_delay_seconds=settings.agent_llm_retry_max_delay_seconds,
+)
+
 agent = AgentRuntime(
     llm=llm_provider,
     tools=tool_registry,
     max_steps=settings.agent_max_steps,
     sources=source_service,
+    retry_policy=retry_policy,
 )
 
 
