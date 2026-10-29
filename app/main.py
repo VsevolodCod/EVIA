@@ -14,6 +14,7 @@ from fastapi import (
 )
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, JSONResponse
+from pydantic import BaseModel, Field
 from sqlalchemy import text
 
 from app.auth import AuthStore
@@ -547,6 +548,10 @@ async def delete_chat(
 # Dashboards API
 # ---------------------------------------------------------------------------
 
+class DashboardOrderRequest(BaseModel):
+    chart_ids: list[str] = Field(max_length=50)
+    expected_version: int = Field(ge=1)
+
 @app.get("/dashboards/ids")
 def list_dashboard_ids(
     limit: int = Query(default=100, ge=1, le=500),
@@ -599,6 +604,28 @@ def get_dashboard_info(dashboard_id: str):
         )
 
     return result
+
+
+@app.put("/dashboards/{dashboard_id}/order")
+def update_dashboard_order(dashboard_id: str, payload: DashboardOrderRequest):
+    try:
+        dashboard = dashboard_repository.reorder(
+            dashboard_id, payload.chart_ids, payload.expected_version
+        )
+    except ValueError as exc:
+        if str(exc) == "version_conflict":
+            raise HTTPException(status_code=409, detail="Dashboard changed; reload before saving") from None
+        raise HTTPException(status_code=400, detail="Chart order must contain existing charts exactly once") from None
+    if dashboard is None:
+        raise HTTPException(status_code=404, detail="Dashboard not found")
+    return {"success": True, "dashboard": dashboard.model_dump(mode="json")}
+
+
+@app.delete("/dashboards/{dashboard_id}")
+def delete_dashboard(dashboard_id: str):
+    if not dashboard_repository.delete(dashboard_id):
+        raise HTTPException(status_code=404, detail="Dashboard not found")
+    return {"success": True}
 
 
 # ---------------------------------------------------------------------------

@@ -126,7 +126,8 @@ export default function App({ account, onAccountChange, onLogout }: {
   >({});
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [view, setView] = useState<View>("overview");
-  const [showDashboardGallery, setShowDashboardGallery] = useState(false);
+  const [showDashboardGallery, setShowDashboardGallery] = useState(() =>
+    new URLSearchParams(window.location.search).has("dashboard"));
   const [attachedDashboard, setAttachedDashboard] = useState<{ id: string; title: string } | null>(null);
   const [uploadedId, setUploadedId] = useState<string | null>(null);
   const [uploadFailure, setUploadFailure] = useState<EviaState | null>(null);
@@ -336,6 +337,15 @@ export default function App({ account, onAccountChange, onLogout }: {
       historyControllers.current.delete(requestKey);
     }
   }
+  useEffect(() => {
+    if (showDashboardGallery) return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("dashboard")) {
+      url.searchParams.delete("dashboard");
+      window.history.replaceState({}, "", url);
+    }
+  }, [showDashboardGallery]);
+
   useEffect(() => {
     mounted.current = true;
     void loadSources();

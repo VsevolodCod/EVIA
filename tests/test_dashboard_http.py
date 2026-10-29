@@ -88,6 +88,45 @@ async def test_saved_dashboard_can_be_listed_reopened_and_built(tmp_path, monkey
 
 
 @pytest.mark.asyncio
+async def test_dashboard_order_and_delete_are_persisted_and_validated(tmp_path, monkeypatch):
+    module = importlib.import_module("app.main")
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    sources = SourceService(tmp_path / "data", catalog)
+    source = sources.register_csv("sales.csv", b"month,revenue\nJan,10\nFeb,20\n")
+    registry = build_tool_registry(catalog, sources)
+    chart_ids = []
+    for title, aggregate in (("Revenue", "sum"), ("Rows", "count")):
+        built = registry.execute("build_chart", {"definition": {
+            "type": "kpi", "title": title,
+            "field": {"source_id": source.source_id, "field": "revenue"},
+            "aggregate": aggregate,
+        }, "filters": []})
+        assert built.ok and built.data["success"]
+        chart_ids.append(built.data["chart_id"])
+    created = registry.execute("compose_dashboard", {"title": "Sales", "chart_ids": chart_ids})
+    assert created.ok and created.data["success"]
+    dashboard_id = created.data["dashboard"]["id"]
+    repository = DashboardRepository(catalog.session_factory)
+    monkeypatch.setattr(module, "dashboard_repository", repository)
+    try:
+        async with AsyncClient(transport=ASGITransport(app=module.app), base_url="http://test") as client:
+            url = f"/dashboards/{dashboard_id}/order"
+            assert (await client.put(url, json={"chart_ids": chart_ids[:1], "expected_version": 1})).status_code == 400
+            saved = await client.put(url, json={"chart_ids": chart_ids[::-1], "expected_version": 1})
+            assert saved.status_code == 200
+            assert saved.json()["dashboard"]["version"] == 2
+            assert [ref["chart_id"] for ref in saved.json()["dashboard"]["charts"]] == chart_ids[::-1]
+            assert (await client.put(url, json={"chart_ids": chart_ids, "expected_version": 1})).status_code == 409
+            assert [ref.chart_id for ref in repository.get_by_id(dashboard_id).charts] == chart_ids[::-1]
+            deleted = await client.delete(f"/dashboards/{dashboard_id}")
+            assert deleted.status_code == 200 and deleted.json() == {"success": True}
+            assert repository.get_by_id(dashboard_id) is None
+            assert (await client.delete(f"/dashboards/{dashboard_id}")).status_code == 404
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
 async def test_dashboard_context_is_forwarded_only_when_requested(monkeypatch):
     module = importlib.import_module("app.main")
 

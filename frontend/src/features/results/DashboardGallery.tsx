@@ -17,7 +17,9 @@ export function DashboardGallery({ onClose, onAttach }: { onClose: () => void; o
   const [items, setItems] = useState<GalleryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(() => new URLSearchParams(window.location.search).get("dashboard"));
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -52,6 +54,33 @@ export function DashboardGallery({ onClose, onAttach }: { onClose: () => void; o
   }, [revision]);
 
   const selected = items.find((item) => item.id === selectedId);
+  function select(id: string) {
+    setSelectedId(id);
+    const url = new URL(window.location.href);
+    url.searchParams.set("dashboard", id);
+    window.history.pushState({}, "", url);
+  }
+
+  async function removeSelected() {
+    if (!deleteId) return;
+    setDeleting(true);
+    try {
+      await api.deleteDashboard(deleteId);
+      setItems((previous) => previous.filter((item) => item.id !== deleteId));
+      if (selectedId === deleteId) {
+        setSelectedId(null);
+        const url = new URL(window.location.href);
+        url.searchParams.delete("dashboard");
+        window.history.replaceState({}, "", url);
+      }
+      setDeleteId(null);
+      setError("");
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      setDeleting(false);
+    }
+  }
   return <section className="dashboard-gallery" aria-label="Сохранённые отчёты">
     <header className="dashboard-gallery-heading">
       <div><span>Рабочее пространство</span><h1>Сохранённые отчёты</h1><p>Графики и показатели, которые EVIA сохранила после анализа.</p></div>
@@ -61,13 +90,21 @@ export function DashboardGallery({ onClose, onAttach }: { onClose: () => void; o
     {loading && <p className="dashboard-gallery-status" role="status">Загружаем отчёты…</p>}
     {!loading && !error && !items.length && <div className="dashboard-gallery-empty"><h2>Пока нет сохранённых отчётов</h2><p>Попросите EVIA построить дашборд по выбранному источнику — готовый отчёт появится здесь.</p></div>}
     {items.length > 0 && <div className="dashboard-gallery-list" aria-label="Список отчётов">
-      {items.map((item) => <button key={item.id} type="button" className={selectedId === item.id ? "selected" : ""} aria-pressed={selectedId === item.id} onClick={() => setSelectedId(item.id)}>
+      {items.map((item) => <button key={item.id} type="button" className={selectedId === item.id ? "selected" : ""} aria-pressed={selectedId === item.id} onClick={() => select(item.id)}>
         <span className="dashboard-gallery-tile" aria-hidden="true">▥</span><span><strong>{item.title}</strong><small>{chartsText(item.charts.length)}{item.summary ? ` · ${item.summary}` : ""}</small></span><span aria-hidden="true">→</span>
       </button>)}
     </div>}
     {selected && <div className="dashboard-gallery-open">
-      {onAttach && <button type="button" className="dashboard-gallery-attach" onClick={() => onAttach(selected.id, selected.title)}>Обсудить этот отчёт в чате →</button>}
-      <SavedDashboard id={selected.id} />
+      <div className="dashboard-gallery-open-actions">
+        {onAttach && <button type="button" className="dashboard-gallery-attach" onClick={() => onAttach(selected.id, selected.title)}>Обсудить этот отчёт в чате →</button>}
+        <button type="button" onClick={() => setDeleteId(selected.id)}>Удалить отчёт</button>
+      </div>
+      <SavedDashboard id={selected.id} editable />
     </div>}
+    {deleteId && <div className="dashboard-gallery-confirm-backdrop"><div role="dialog" aria-modal="true" aria-label="Удалить отчёт" className="dashboard-gallery-confirm">
+      <h2>Удалить отчёт?</h2><p>Отчёт исчезнет из списка. Это действие нельзя отменить.</p>
+      <div><button type="button" disabled={deleting} onClick={() => setDeleteId(null)}>Отмена</button>
+        <button type="button" disabled={deleting} onClick={() => void removeSelected()}>{deleting ? "Удаляем…" : "Удалить"}</button></div>
+    </div></div>}
   </section>;
 }
