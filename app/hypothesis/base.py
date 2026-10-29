@@ -97,9 +97,14 @@ def extract_rows(result: Any) -> list[dict[str, Any]]:
 
     normalized: list[dict[str, Any]] = []
 
+    columns = getattr(result, "columns", None)
+    names = [column.name for column in columns] if columns is not None else None
+
     for row in rows:
         if isinstance(row, dict):
             normalized.append(row)
+        elif isinstance(row, list) and names is not None and len(row) == len(names):
+            normalized.append(dict(zip(names, row)))
         elif hasattr(row, "model_dump"):
             normalized.append(row.model_dump())
         else:

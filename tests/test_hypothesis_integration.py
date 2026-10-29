@@ -41,7 +41,7 @@ async def test_agent_compares_groups_from_selected_csv(tmp_path, scripted_llm):
         assert answer.status == "answered"
         result = answer.tool_results[0]
         assert result.ok, result.error
-        assert result.data["results"][0]["status"] == "completed"
+        assert result.data["results"][0]["status"] == "completed", result.data["results"][0]["error"]
         assert result.data["results"][0]["data"]["delta"] == 10
     finally:
         catalog.close()

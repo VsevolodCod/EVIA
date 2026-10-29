@@ -22,7 +22,9 @@ class RelationshipImplementation(HypothesisImplementation):
     method = "relationship"
     model = RelationshipCheck
 
-    MAX_GROUPS = 10_000
+    # SourceService caps a query at 10_000 rows; reserve one sentinel row
+    # to detect that a grouping exceeded the supported size.
+    MAX_GROUPS = 9_999
     PREVIEW_GROUPS = 20
 
     @staticmethod

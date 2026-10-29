@@ -636,7 +636,7 @@ def test_relationship_reports_pearson_correlation_and_interval():
     assert result["confidence_interval"]["level"] == 0.95
     assert len(result["preview"]) == 4
     assert result["preview"][0]["group"] == {"month": "2026-01"}
-    assert sources.queries[0]["row_limit"] == 10_001
+    assert sources.queries[0]["row_limit"] == RelationshipImplementation.MAX_GROUPS + 1
 
 
 def test_relationship_excludes_null_and_non_finite_values():
@@ -689,7 +689,7 @@ def test_relationship_rejects_more_than_max_groups():
     implementation = RelationshipImplementation(FakeSources(rows))
     check = RelationshipCheck.model_validate(relationship_payload())
 
-    with pytest.raises(ValueError, match="more than 10000 groups"):
+    with pytest.raises(ValueError, match="more than 9999 groups"):
         implementation.execute(check)
 
 
