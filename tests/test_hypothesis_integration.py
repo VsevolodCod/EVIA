@@ -19,6 +19,10 @@ def test_hypothesis_tools_use_simple_model_contract_and_preserve_sql_tool(tmp_pa
             assert name in tools
             assert "$ref" not in str(tools[name])
             assert "oneOf" not in str(tools[name])
+        assert {"baseline_value", "comparison_value"}.issubset(
+            tools["compare_groups"]["properties"]
+        )
+        assert "left_value" not in tools["compare_groups"]["properties"]
     finally:
         catalog.close()
 
