@@ -6,7 +6,7 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
-from app.chat_repository import ChatManager
+from app.chat_manager import ChatManager
 from app.db.chat.engine import create_chat_database, initialize_chat_database
 from app.models import ChatMessage, LLMResponse
 

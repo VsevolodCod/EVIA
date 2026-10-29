@@ -3,7 +3,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, RootModel, model_validator
 
-from app.models import AskResponse, DataSource, SourceSchema
+from app.models import AskResponse, DataSource, SourceSchema, LLMMessage
 
 Identifier = Annotated[str, Field(min_length=1, max_length=200)]
 GrainKey = Annotated[list[Identifier], Field(min_length=1, max_length=3)]
@@ -238,6 +238,11 @@ class AgentResponse(AskResponse):
     error: Error | None = None
     artifact_ids: list[Identifier] = Field(default_factory=list)
     job_id: Identifier | None = None
+
+    conversation_trace: list[LLMMessage] | None = Field(
+        default_factory=list,
+        exclude=True,
+    )
 
     @model_validator(mode='after')
     def consistent_status(self):
