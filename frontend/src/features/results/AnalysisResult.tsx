@@ -146,9 +146,9 @@ export function AnalysisResult({ entry, onOpenChat }: { entry?: Entry; onOpenCha
           {otherResults.length > 0 && (result || generated || savedId || generatedCharts.length ? (
             <details className="analysis-details">
               <summary>Таблица и детали расчёта</summary>
-              <ToolResults results={otherResults} />
+              <ToolResults results={otherResults} analysis={entry?.answer?.analysis} />
             </details>
-          ) : <ToolResults results={otherResults} />)}
+          ) : <ToolResults results={otherResults} analysis={entry?.answer?.analysis} />)}
         </>
       ) : (
         <div className="analytics-empty">

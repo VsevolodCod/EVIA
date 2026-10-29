@@ -904,6 +904,11 @@
 .tool-method p {
   margin-top: 8px;
 }
+.result-passport { font-size: 13px; }
+.result-passport dl { display: grid; gap: 6px; margin: 10px 0 0; }
+.result-passport dl div { display: grid; grid-template-columns: minmax(110px, 150px) minmax(0, 1fr); gap: 12px; }
+.result-passport dt { color: var(--muted); }
+.result-passport dd { margin: 0; overflow-wrap: anywhere; color: var(--ink); }
 .analytics-report > .data-table,
 .analytics-report > .pane-heading {
   background: #fff;
