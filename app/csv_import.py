@@ -52,6 +52,7 @@ def copy_original(stream: BinaryIO, target: Path) -> ImportReport:
         remaining = stream.seek(0, 2) - position
         stream.seek(position)
         if remaining > MAX_CSV_BYTES:
+            report.size_bytes = remaining
             raise CSVImportError("CSV exceeds the 512 MiB upload limit", report, status_code=413)
         require_import_space(target.parent, max(0, remaining) * 4, report)
     else:
