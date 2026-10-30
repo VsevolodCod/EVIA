@@ -298,3 +298,24 @@ it("explains full server storage without reporting rows as imported", async () =
   await expect(api.upload(new File(["id\n1\n2"], "sales.csv")))
     .rejects.toThrow("На сервере недостаточно места");
 });
+
+it("reports real upload byte progress and waits for CSV processing", async () => {
+  const updates: number[] = [];
+  class UploadXHR {
+    upload: { onprogress?: (event: { lengthComputable: boolean; loaded: number; total: number }) => void; onload?: () => void } = {};
+    status = 200;
+    responseText = JSON.stringify(source);
+    onload?: () => void;
+    open = vi.fn();
+    setRequestHeader = vi.fn();
+    send = vi.fn(() => {
+      this.upload.onprogress?.({ lengthComputable: true, loaded: 5, total: 10 });
+      this.upload.onload?.();
+      this.onload?.();
+    });
+  }
+  vi.stubGlobal("XMLHttpRequest", UploadXHR);
+  const uploaded = await api.upload(new File(["id\n1\n"], "sales.csv"), undefined, undefined, (percent) => updates.push(percent));
+  expect(uploaded.source_id).toBe("a");
+  expect(updates).toEqual([50, 100]);
+});

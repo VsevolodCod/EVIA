@@ -349,6 +349,10 @@ async function request<T>(
       0,
     );
   }
+  return readResponse(response, validator);
+}
+
+async function readResponse<T>(response: Response, validator: z.ZodType<T>): Promise<T> {
   if (!response.ok) {
     if (response.status === 401) window.dispatchEvent(new Event("evia:unauthorized"));
     if (response.status === 507) throw new ApiError(
@@ -397,6 +401,40 @@ async function request<T>(
       "Сервер вернул неподдерживаемый формат данных. Обновите страницу или проверьте версию сервиса.",
     );
   return result.data;
+}
+
+function uploadWithProgress(body: FormData, signal: AbortSignal | undefined, onProgress: (percent: number) => void): Promise<Source> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const detach = () => signal?.removeEventListener("abort", abort);
+    const abort = () => xhr.abort();
+    xhr.open("POST", "/sources/csv");
+    xhr.setRequestHeader("Accept", "application/json");
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable && event.total > 0)
+        onProgress(Math.min(99, Math.round((event.loaded / event.total) * 100)));
+    };
+    xhr.upload.onload = () => onProgress(100);
+    xhr.onload = () => {
+      detach();
+      void readResponse(new Response(xhr.responseText, { status: xhr.status }), sourceSchema).then(resolve, reject);
+    };
+    xhr.onerror = () => {
+      detach();
+      reject(new ApiError("Нет связи с сервером. Повторите загрузку CSV.", 0));
+    };
+    xhr.onabort = () => {
+      detach();
+      reject(new DOMException("Upload aborted", "AbortError"));
+    };
+    signal?.addEventListener("abort", abort, { once: true });
+    if (signal?.aborted) {
+      detach();
+      reject(new DOMException("Upload aborted", "AbortError"));
+      return;
+    }
+    xhr.send(body);
+  });
 }
 const path = (id: string) => `/sources/${encodeURIComponent(id)}`;
 export const api = {
@@ -452,10 +490,11 @@ export const api = {
     request(`${path(id)}/preview?limit=100`, rowsSchema, { signal }),
   profile: (id: string, signal?: AbortSignal) =>
     request(`${path(id)}/profile`, profileSchema, { signal }),
-  upload: (file: File, signal?: AbortSignal, sourceId?: string) => {
+  upload: (file: File, signal?: AbortSignal, sourceId?: string, onProgress?: (percent: number) => void) => {
     const body = new FormData();
     body.append("file", file);
     if (sourceId) body.append("source_id", sourceId);
+    if (onProgress) return uploadWithProgress(body, signal, onProgress);
     return request("/sources/csv", sourceSchema, {
       method: "POST",
       body,

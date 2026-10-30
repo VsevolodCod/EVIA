@@ -132,6 +132,7 @@ export default function App({ account, onAccountChange, onLogout }: {
   const [uploadedId, setUploadedId] = useState<string | null>(null);
   const [uploadFailure, setUploadFailure] = useState<EviaState | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [uploadError, setUploadError] = useState("");
   const [failedFile, setFailedFile] = useState<File | null>(null);
   const [selectedUploadFile, setSelectedUploadFile] = useState<File | null>(null);
@@ -540,10 +541,11 @@ export default function App({ account, onAccountChange, onLogout }: {
       return;
     }
     setUploading(true);
+    setUploadProgress(0);
     const controller = new AbortController();
     uploadController.current = controller;
     try {
-      const created = await api.upload(file, controller.signal, sourceId);
+      const created = await api.upload(file, controller.signal, sourceId, setUploadProgress);
       if (controller.signal.aborted) return;
       sourceController.current?.abort();
       setSourcesLoading(false);
@@ -562,7 +564,10 @@ export default function App({ account, onAccountChange, onLogout }: {
         setFailedFile(file);
       }
     } finally {
-      if (!controller.signal.aborted) setUploading(false);
+      if (!controller.signal.aborted) {
+        setUploading(false);
+        setUploadProgress(null);
+      }
     }
   }
   async function send(question: string, retryId?: string) {
@@ -753,7 +758,7 @@ export default function App({ account, onAccountChange, onLogout }: {
               disabled={uploading}
             >
               <Icon name="plus" size={16} />
-              {uploading ? "Загружаем CSV…" : "Добавить CSV"}
+              {uploading ? uploadProgress === 100 ? "Обрабатываем CSV…" : `Загружаем CSV · ${uploadProgress ?? 0}%` : "Добавить CSV"}
             </button>
             <button
               className={`postgres-nav ${!source && sourceSetup === "postgres" ? "selected" : ""}`}
@@ -937,7 +942,7 @@ export default function App({ account, onAccountChange, onLogout }: {
                 aria-label={mobileOverlay === "upload" ? "Загрузка CSV" : "Добавление источника"}
               >
                 {!sourcesLoading && <WelcomeGreeting greeting={welcomeGreeting} activeState={mascotState} />}
-                <h1>{uploading ? "Загрузка CSV…" : "Добавьте CSV"}</h1>
+                <h1>{uploading ? uploadProgress === 100 ? "Обрабатываем CSV…" : `Загрузка CSV · ${uploadProgress ?? 0}%` : "Добавьте CSV"}</h1>
                 <p>Перетащите файл сюда или выберите его с устройства</p>
                 {selectedUploadFile && <div className="upload-selected-file">
                   <Icon name="file" size={18} />
@@ -955,7 +960,7 @@ export default function App({ account, onAccountChange, onLogout }: {
                   disabled={uploading}
                 >
                   <Icon name="upload" />
-                  {uploading ? "Загружаем…" : selectedUploadFile ? "Загрузить файл" : "Выбрать CSV"}
+                  {uploading ? uploadProgress === 100 ? "Обрабатываем…" : `Загружаем · ${uploadProgress ?? 0}%` : selectedUploadFile ? "Загрузить файл" : "Выбрать CSV"}
                 </button>
                 <small>UTF-8, UTF-16 или Windows-1251 · до 512 МиБ</small>
               </section>
