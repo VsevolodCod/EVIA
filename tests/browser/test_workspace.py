@@ -187,6 +187,10 @@ def test_profile_overview_drilldown_search_and_responsive_layout(server):
             page.locator('.report-builder').evaluate('(element) => { element.scrollTop = 300 }')
             assert page.locator('.report-builder').evaluate('(element) => element.scrollTop') > 0
             assert panel.bounding_box()['y'] < initial_top - 50
+            page.emulate_media(media='print')
+            expect(panel).to_be_hidden()
+            expect(report).to_be_visible()
+            page.emulate_media(media='screen')
             page.get_by_role('button', name='Закрыть отчёт').click()
             page.set_viewport_size({'width': 1440, 'height': 1000})
             for width in [1280, 1024, 768, 390]:
