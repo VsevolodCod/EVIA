@@ -35,6 +35,7 @@
 .report-document th { background: #eef6f0; color: #234e37; }
 .report-document caption { margin-bottom: 6px; text-align: left; color: #597263; font-size: 11px; }
 .report-table-wrap { overflow-x: auto; }
+.report-table-wrap table + table { margin-top: 12px; }
 .report-note { color: #64776d; font-size: 11px !important; }
 .report-calculation { padding: 13px 0; border-top: 1px solid #dce8e0; break-inside: avoid-page; }
 .report-calculation .markdown { overflow-wrap: anywhere; }

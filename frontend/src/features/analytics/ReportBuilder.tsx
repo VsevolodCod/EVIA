@@ -43,14 +43,15 @@ function tableFrom(result: ToolResult): { columns: string[]; rows: unknown[][]; 
 }
 
 function ReportTable({ columns, rows, caption }: { columns: string[]; rows: unknown[][]; caption: string }) {
-  const shownColumns = columns.slice(0, 8);
-  const shownRows = rows.slice(0, 15);
+  const groups = Array.from({ length: Math.ceil(columns.length / 8) }, (_, index) =>
+    columns.slice(index * 8, (index + 1) * 8));
   return <div className="report-table-wrap">
-    <table><caption>{caption}</caption><thead><tr>{shownColumns.map((name, index) => <th key={`${name}-${index}`}>{name}</th>)}</tr></thead>
-      <tbody>{shownRows.map((row, index) => <tr key={index}>{shownColumns.map((_, column) =>
-        <td key={column}>{readable(row[column])}</td>)}</tr>)}</tbody></table>
-    {(columns.length > shownColumns.length || rows.length > shownRows.length) &&
-      <p className="report-note">Показаны {shownRows.length} из {rows.length} строк и {shownColumns.length} из {columns.length} столбцов.</p>}
+    {groups.map((group, groupIndex) => <table key={groupIndex}>
+      <caption>{caption}{groups.length > 1 ? ` · поля ${groupIndex * 8 + 1}–${groupIndex * 8 + group.length} из ${columns.length}` : ""}</caption>
+      <thead><tr>{group.map((name, index) => <th key={`${name}-${index}`}>{name}</th>)}</tr></thead>
+      <tbody>{rows.map((row, index) => <tr key={index}>{group.map((_, column) =>
+        <td key={column}>{readable(row[groupIndex * 8 + column])}</td>)}</tr>)}</tbody>
+    </table>)}
   </div>;
 }
 
@@ -89,6 +90,7 @@ export function ReportBuilder({ source, schema, rows, profile, entries, onClose 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const selected = available.filter((entry) => selectedIds.includes(entry.id));
   const fields = schema.objects.flatMap((object) => object.fields);
+  const previewColumns = fields.length ? fields.map((field) => field.name) : Object.keys(rows[0] ?? {});
   const rowCount = sourceCount(schema);
   const pie = useMemo(() => sourcePie(schema, rows), [schema, rows]);
   const problems = profile ? Object.entries(profile.columns).flatMap(([name, column]) => {
@@ -149,8 +151,8 @@ export function ReportBuilder({ source, schema, rows, profile, entries, onClose 
         </tbody></table> : <p>Схема источника пуста.</p>}
       </section>
       <section className="report-section"><h2>Первые строки</h2>
-        {rows.length ? <ReportTable columns={fields.map((field) => field.name)}
-          rows={rows.slice(0, 5).map((row) => fields.map((field) => row[field.name]))}
+        {rows.length ? <ReportTable columns={previewColumns}
+          rows={rows.slice(0, 5).map((row) => previewColumns.map((name) => row[name]))}
           caption={`Показаны первые ${Math.min(rows.length, 5)} строки предпросмотра`} /> : <p>В предпросмотре нет строк.</p>}
         <p className="report-note">Предпросмотр не заменяет полный набор данных.</p>
       </section>

@@ -71,3 +71,18 @@ it("adds selected AI calculations to the report and prints without private tool 
   expect(document.title).toBe(oldTitle);
   print.mockRestore();
 });
+
+it("keeps every returned calculation row and column, splitting wide tables for PDF", () => {
+  const columns = Array.from({ length: 9 }, (_, index) => ({ name: `metric_${index + 1}` }));
+  const longCalculation: Entry = { ...calculation, answer: { ...calculation.answer!, tool_results: [{
+    tool_name: "query_data", ok: true,
+    data: { columns, rows: Array.from({ length: 16 }, (_, index) =>
+      columns.map((_, column) => column === 8 ? `last-${index + 1}` : index + 1)) },
+  }] } };
+  render(<ReportBuilder source={source} schema={schema} rows={[]} profile={profile}
+    entries={[longCalculation]} onClose={() => undefined} />);
+  fireEvent.click(screen.getByRole("checkbox", { name: /Какая выручка/ }));
+  const report = screen.getByRole("article", { name: "PDF-отчёт" });
+  expect(within(report).getByRole("columnheader", { name: "metric_9" })).toBeInTheDocument();
+  expect(within(report).getByText("last-16")).toBeInTheDocument();
+});
