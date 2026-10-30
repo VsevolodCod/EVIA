@@ -18,6 +18,7 @@ const build: SavedDashboardBuild = {
 
 it("renders saved charts in their stored order and refreshes on request", async () => {
   const load = vi.spyOn(api, "dashboardBuild").mockResolvedValue(build);
+  const refresh = vi.spyOn(api, "refreshDashboard").mockResolvedValue(build);
   const dashboard = dashboardFromBuild(build);
   expect(dashboard.cards.map((card) => card.title)).toEqual(["Выручка", "По месяцам"]);
   render(<SavedDashboard id="report-1" />);
@@ -25,7 +26,8 @@ it("renders saved charts in their stored order and refreshes on request", async 
   expect(screen.getByText("30")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Обновить данные" }));
   expect(await screen.findByText("Выручка")).toBeInTheDocument();
-  expect(load).toHaveBeenCalledTimes(2);
+  expect(load).toHaveBeenCalledTimes(1);
+  expect(refresh).toHaveBeenCalledTimes(1);
   vi.restoreAllMocks();
 });
 
@@ -45,15 +47,15 @@ it("keeps a failed saved chart visible instead of calling the dashboard empty", 
 });
 
 it("keeps the previous result visible when refresh fails", async () => {
-  const load = vi.spyOn(api, "dashboardBuild")
-    .mockResolvedValueOnce(build)
-    .mockRejectedValueOnce(new Error("Сервис недоступен"));
+  const load = vi.spyOn(api, "dashboardBuild").mockResolvedValue(build);
+  const refresh = vi.spyOn(api, "refreshDashboard").mockRejectedValue(new Error("Сервис недоступен"));
   render(<SavedDashboard id="report-1" />);
   expect(await screen.findByText("Выручка")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Обновить данные" }));
   await waitFor(() => expect(screen.getByText(/Показаны предыдущие данные/)).toBeInTheDocument());
   expect(screen.getByText("30")).toBeInTheDocument();
-  expect(load).toHaveBeenCalledTimes(2);
+  expect(load).toHaveBeenCalledTimes(1);
+  expect(refresh).toHaveBeenCalledTimes(1);
   vi.restoreAllMocks();
 });
 
@@ -69,5 +71,18 @@ it("persists changed chart order and renders it immediately", async () => {
   fireEvent.click(screen.getByRole("button", { name: "Опустить Выручка" }));
   await waitFor(() => expect(save).toHaveBeenCalledWith("report-1", ["trend", "total"], 1));
   await waitFor(() => expect(screen.getByRole("button", { name: "Поднять Выручка" })).not.toBeDisabled());
+  vi.restoreAllMocks();
+});
+
+it("shows a stale saved result and refreshes it explicitly", async () => {
+  const old = { ...build, stale: true };
+  vi.spyOn(api, "dashboardBuild").mockResolvedValue(old);
+  const refresh = vi.spyOn(api, "refreshDashboard").mockResolvedValue({ ...build, stale: false });
+  render(<SavedDashboard id="report-1" />);
+  expect(await screen.findByText(/Источник изменился/)).toBeInTheDocument();
+  expect(screen.getByText("30")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Обновить данные" }));
+  await waitFor(() => expect(refresh).toHaveBeenCalledWith("report-1", expect.any(AbortSignal)));
+  await waitFor(() => expect(screen.queryByText(/Источник изменился/)).not.toBeInTheDocument());
   vi.restoreAllMocks();
 });

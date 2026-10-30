@@ -85,6 +85,18 @@ class ChartORM(CatalogBase):
     owner_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
 
 
+class ChartSnapshotORM(CatalogBase):
+    """Last explicitly accepted calculation for a saved chart."""
+
+    __tablename__ = "chart_snapshots"
+    chart_id: Mapped[str] = mapped_column(
+        String(200), ForeignKey("charts.chart_id", ondelete="CASCADE"), primary_key=True
+    )
+    result: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    source_versions: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    captured_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+
+
 class DashboardChartRefORM(CatalogBase):
     """Связь дашборда с чартом и позиция чарта в дашборде."""
 

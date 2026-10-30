@@ -13,6 +13,7 @@ from fastapi import (
     UploadFile,
 )
 from fastapi.concurrency import run_in_threadpool
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import text
@@ -42,6 +43,7 @@ from app.web import mount_frontend
 from app.charts.engine import DashboardEngine
 from app.charts.executor import ChartExecutor
 from app.charts.repositories import ChartRepository, DashboardRepository
+from app.charts.snapshots import source_versions
 
 # Логирование и настройки
 setup_logging()
@@ -734,7 +736,17 @@ def build_saved_chart(chart_id: str):
 
 @app.get("/dashboards/{dashboard_id}/build")
 def build_dashboard(dashboard_id: str):
-    """Выполняет все чарты дашборда в порядке их расположения."""
+    """Read the stored result; old untracked charts are captured on first open."""
+    return _dashboard_build(dashboard_id, refresh=False)
+
+
+@app.post("/dashboards/{dashboard_id}/refresh")
+def refresh_dashboard(dashboard_id: str):
+    """Recalculate all charts and publish only if every chart succeeded."""
+    return _dashboard_build(dashboard_id, refresh=True)
+
+
+def _dashboard_build(dashboard_id: str, *, refresh: bool):
 
     try:
         dashboard = dashboard_repository.get_by_id(dashboard_id)
@@ -746,6 +758,9 @@ def build_dashboard(dashboard_id: str):
             )
 
         chart_results = []
+        pending_snapshots = {}
+        stale = False
+        source_catalog = getattr(getattr(chart_executor, "sources", None), "catalog", catalog)
 
         for ref in sorted(dashboard.charts, key=lambda item: item.position):
             chart = chart_repository.get_by_id(ref.chart_id)
@@ -763,17 +778,35 @@ def build_dashboard(dashboard_id: str):
                 continue
 
             try:
-                result = chart_executor.execute(
-                    chart_id=chart.chart_id,
-                )
+                definition = chart.definition.model_dump(mode="json")
+                saved = None if refresh else chart_repository.get_snapshot(chart.chart_id)
+                if saved is None:
+                    before = source_versions(source_catalog, definition)
+                    result = chart_executor.execute(chart_id=chart.chart_id)
+                    if before != source_versions(source_catalog, definition):
+                        raise ValueError("Source changed during dashboard build")
+                    result = jsonable_encoder(result)
+                    pending_snapshots[chart.chart_id] = (result, before)
+                    versions = before
+                    captured_at = None
+                    chart_stale = False
+                else:
+                    result = saved["result"]
+                    versions = saved["source_versions"]
+                    captured_at = saved["captured_at"]
+                    chart_stale = versions != source_versions(source_catalog, definition)
+                stale |= chart_stale
 
                 chart_results.append({
                     "chart_id": chart.chart_id,
                     "position": ref.position,
                     "success": True,
                     "chart_type": chart.definition.type,
-                    "definition": chart.definition.model_dump(mode="json"),
+                    "definition": definition,
                     "result": result,
+                    "source_versions": versions,
+                    "captured_at": captured_at,
+                    "stale": chart_stale,
                 })
 
             except Exception as exc:
@@ -794,8 +827,14 @@ def build_dashboard(dashboard_id: str):
                     },
                 })
 
+        if refresh and not all(item["success"] for item in chart_results):
+            raise HTTPException(status_code=409, detail="Dashboard refresh failed; saved results remain available")
+        if pending_snapshots:
+            chart_repository.save_snapshots(pending_snapshots)
+
         return {
             "success": all(item["success"] for item in chart_results),
+            "stale": stale,
             "dashboard": dashboard.model_dump(mode="json"),
             "charts": chart_results,
         }
