@@ -71,3 +71,16 @@ it("persists changed chart order and renders it immediately", async () => {
   await waitFor(() => expect(screen.getByRole("button", { name: "Поднять Выручка" })).not.toBeDisabled());
   vi.restoreAllMocks();
 });
+
+it("shows a stale saved result and refreshes it explicitly", async () => {
+  const old = { ...build, stale: true };
+  vi.spyOn(api, "dashboardBuild").mockResolvedValue(old);
+  const refresh = vi.spyOn(api, "refreshDashboard").mockResolvedValue({ ...build, stale: false });
+  render(<SavedDashboard id="report-1" />);
+  expect(await screen.findByText(/Источник изменился/)).toBeInTheDocument();
+  expect(screen.getByText("30")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Обновить данные" }));
+  await waitFor(() => expect(refresh).toHaveBeenCalledWith("report-1", expect.any(AbortSignal)));
+  await waitFor(() => expect(screen.queryByText(/Источник изменился/)).not.toBeInTheDocument());
+  vi.restoreAllMocks();
+});

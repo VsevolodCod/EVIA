@@ -240,3 +240,67 @@ async def test_chart_build_hides_internal_errors(monkeypatch):
     assert response.status_code == 400
     assert "PRIVATE_DB_URI" not in response.text
     assert "/data/internal" not in response.text
+
+
+@pytest.mark.asyncio
+async def test_saved_dashboard_keeps_its_result_until_explicit_refresh(tmp_path, monkeypatch):
+    module = importlib.import_module("app.main")
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    sources = SourceService(tmp_path / "data", catalog)
+    source = sources.register_csv("sales.csv", b"revenue\n10\n20\n")
+    registry = build_tool_registry(catalog, sources)
+    chart = registry.execute("build_chart", {"definition": {
+        "type": "kpi", "title": "Revenue",
+        "field": {"source_id": source.source_id, "field": "revenue"}, "aggregate": "sum",
+    }})
+    assert chart.ok and chart.data["success"]
+    dashboard = registry.execute("compose_dashboard", {
+        "title": "Sales", "chart_ids": [chart.data["chart_id"]],
+    })
+    assert dashboard.ok and dashboard.data["success"]
+    dashboard_id = dashboard.data["dashboard"]["id"]
+    monkeypatch.setattr(module, "chart_repository", ChartRepository(catalog.session_factory))
+    monkeypatch.setattr(module, "dashboard_repository", DashboardRepository(catalog.session_factory))
+    monkeypatch.setattr(module, "chart_executor", ChartExecutor.build_executor(sources, catalog, module.chart_repository))
+    async with AsyncClient(transport=ASGITransport(app=module.app), base_url="http://test") as client:
+        before = (await client.get(f"/dashboards/{dashboard_id}/build")).json()
+        assert before["charts"][0]["result"]["value"] == 30
+        assert before["stale"] is False
+        sources.register_csv("sales.csv", b"revenue\n100\n200\n", source_id=source.source_id)
+        stale = (await client.get(f"/dashboards/{dashboard_id}/build")).json()
+        assert stale["charts"][0]["result"]["value"] == 30
+        assert stale["stale"] is True
+        refreshed = await client.post(f"/dashboards/{dashboard_id}/refresh")
+        assert refreshed.status_code == 200
+        assert refreshed.json()["charts"][0]["result"]["value"] == 300
+        assert refreshed.json()["stale"] is False
+        assert (await client.get(f"/dashboards/{dashboard_id}/build")).json()["charts"][0]["result"]["value"] == 300
+    catalog.close()
+
+
+@pytest.mark.asyncio
+async def test_failed_dashboard_refresh_keeps_previous_result(tmp_path, monkeypatch):
+    module = importlib.import_module("app.main")
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    sources = SourceService(tmp_path / "data", catalog)
+    source = sources.register_csv("sales.csv", b"revenue\n10\n")
+    registry = build_tool_registry(catalog, sources)
+    chart = registry.execute("build_chart", {"definition": {
+        "type": "kpi", "title": "Revenue", "field": {"source_id": source.source_id, "field": "revenue"},
+        "aggregate": "sum",
+    }})
+    dashboard = registry.execute("compose_dashboard", {
+        "title": "Sales", "chart_ids": [chart.data["chart_id"]],
+    })
+    dashboard_id = dashboard.data["dashboard"]["id"]
+    monkeypatch.setattr(module, "chart_repository", ChartRepository(catalog.session_factory))
+    monkeypatch.setattr(module, "dashboard_repository", DashboardRepository(catalog.session_factory))
+    monkeypatch.setattr(module, "chart_executor", ChartExecutor.build_executor(sources, catalog, module.chart_repository))
+    async with AsyncClient(transport=ASGITransport(app=module.app), base_url="http://test") as client:
+        before = (await client.get(f"/dashboards/{dashboard_id}/build")).json()
+        monkeypatch.setattr(module.chart_executor, "execute", lambda **_: (_ for _ in ()).throw(ValueError("private schema")))
+        failed = await client.post(f"/dashboards/{dashboard_id}/refresh")
+        assert failed.status_code == 409
+        assert "private schema" not in failed.text
+        assert (await client.get(f"/dashboards/{dashboard_id}/build")).json()["charts"][0]["result"] == before["charts"][0]["result"]
+    catalog.close()
