@@ -52,13 +52,23 @@ function savedChatSources(): Record<string, string> {
 function entriesFromMessages(chatId: string, messages: ChatMessage[]): Entry[] {
   const entries: Entry[] = [];
   let user: ChatMessage | undefined;
-  for (const message of messages) {
+  for (const [index, message] of messages.entries()) {
     if (message.role === "user") {
+      // The agent stores this internal continuation prompt in its trace. It is
+      // not a new question from the person who owns the chat.
+      if (user && message.content === "Продолжи ответ точно с места обрыва, без повторения уже написанного.") continue;
       user = message;
       continue;
     }
     if (message.role === "assistant" && user) {
       const restored = storedAnalysis(message);
+      // Tool calls and partial model output precede the saved final answer.
+      // Neither is a standalone response to the user's question.
+      if (restored.kind !== "restored" && (
+        message.tool_calls?.length || !message.content.trim() ||
+        (messages[index + 1]?.role === "user" &&
+          messages[index + 1]?.content === "Продолжи ответ точно с места обрыва, без повторения уже написанного.")
+      )) continue;
       entries.push({
         id: user.message_id,
         conversationId: chatId,
