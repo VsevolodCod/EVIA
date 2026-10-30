@@ -44,6 +44,7 @@ function sourceRowCount(schema: SourceSchema) {
 export function SourceInspector({
   source,
   entry,
+  reportEntries = [],
   view,
   setView,
   onOpenChat,
@@ -51,6 +52,7 @@ export function SourceInspector({
 }: {
   source: Source;
   entry?: Entry;
+  reportEntries?: Entry[];
   view: View;
   setView: (view: View) => void;
   onOpenChat?: () => void;
@@ -183,6 +185,8 @@ export function SourceInspector({
                 profile={current.profile}
                 fullSourceRows={sourceRowCount(current.schema)}
                 onOpenData={() => setView("preview")}
+                source={source}
+                reportEntries={reportEntries}
               />
             ) : view === "profile" ? (
               model ? <ProfileColumns

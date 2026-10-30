@@ -916,6 +916,7 @@ export default function App({ account, onAccountChange, onLogout }: {
             <SourceInspector
               source={source}
               entry={activeEntry}
+              reportEntries={history}
               view={view}
               setView={setView}
               onOpenChat={() => setMobilePanel("chat")}
