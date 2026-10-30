@@ -30,6 +30,22 @@ def test_scatter_preserves_declared_axis_units_in_saved_result(tmp_path):
         catalog.close()
 
 
+def test_oversized_chart_result_cannot_fill_catalog_volume(tmp_path):
+    import pytest
+    from app.charts.repositories import ChartRepository
+
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    charts = ChartRepository(catalog.session_factory)
+    chart = charts.create_from_definition({
+        "type": "kpi", "title": "Revenue", "field": {"source_id": "sales", "field": "revenue"},
+        "aggregate": "sum",
+    })
+    with pytest.raises(ValueError, match="too large"):
+        charts.save_snapshots({chart.chart_id: ({"value": "x" * (3 * 1024 * 1024)}, {})})
+    assert charts.get_snapshot(chart.chart_id) is None
+    catalog.close()
+
+
 def test_saved_chart_rebuild_honors_its_persisted_filters(tmp_path):
     catalog = SchemaCatalog(tmp_path / "catalog.db")
     sources = SourceService(tmp_path / "data", catalog)
