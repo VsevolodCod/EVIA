@@ -3,6 +3,24 @@ import userEvent from "@testing-library/user-event";
 import { ResultVisualization } from "./ResultVisualization";
 import { ToolResults } from "./ToolResults";
 
+it("shows a separate pie chart with grouped categories and percentages", () => {
+  render(<ResultVisualization rows={[{ category: "A", amount: 2 }, { category: "A", amount: 1 },
+    { category: "B", amount: 3 }]} label="Результат" />);
+  fireEvent.click(screen.getByRole("button", { name: "Круговая" }));
+  const chart = screen.getByRole("img", { name: /Круговая диаграмма: amount по category/ });
+  expect(chart).toBeInTheDocument();
+  expect(screen.getByText(/A.*50%/)).toBeInTheDocument();
+  expect(screen.getByText(/B.*50%/)).toBeInTheDocument();
+});
+
+it("does not offer a pie chart for negative or zero-only values", () => {
+  const { rerender } = render(<ResultVisualization rows={[{ category: "A", amount: -1 },
+    { category: "B", amount: 2 }]} label="Результат" />);
+  expect(screen.queryByRole("button", { name: "Круговая" })).not.toBeInTheDocument();
+  rerender(<ResultVisualization rows={[{ category: "A", amount: 0 }, { category: "B", amount: 0 }]} label="Результат" />);
+  expect(screen.queryByRole("button", { name: "Круговая" })).not.toBeInTheDocument();
+});
+
 it("keeps all thirteen categories when switching between table, bars and line", () => {
   const rows = Array.from({ length: 13 }, (_, i) => ({ category: `Категория ${i + 1}`, amount: i + 1 }));
   render(<ResultVisualization rows={rows} label="Результат" />);
