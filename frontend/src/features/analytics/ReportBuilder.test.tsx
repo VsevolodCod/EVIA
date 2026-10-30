@@ -86,3 +86,23 @@ it("keeps every returned calculation row and column, splitting wide tables for P
   expect(within(report).getByRole("columnheader", { name: "metric_9" })).toBeInTheDocument();
   expect(within(report).getByText("last-16")).toBeInTheDocument();
 });
+
+it("prints all rows of a selected generated table and opens chart formulas", () => {
+  const dashboardEntry: Entry = { ...calculation, answer: { ...calculation.answer!, tool_results: [{
+    tool_name: "create_dashboard", ok: true, data: { version: 1, title: "Панель", cards: [
+      { id: "bar", type: "bar", title: "Выручка", status: "success",
+        definition: { type: "bar", title: "Выручка", x: { source_id: "sales", field: "month" },
+          y: { source_id: "sales", field: "revenue", aggregate: "sum" } },
+        data: { x: { field: "month" }, y: { field: "revenue" }, points: [{ x: "Янв", y: 120 }] } },
+      { id: "table", type: "table", title: "Детали", status: "success",
+        definition: { type: "table", title: "Детали", fields: [{ source_id: "sales", field: "month" }] },
+        data: { columns: ["month"], rows: Array.from({ length: 30 }, (_, index) => ({ month: `row-${index + 1}` })) } },
+    ] },
+  }] } };
+  render(<ReportBuilder source={source} schema={schema} rows={[]} profile={profile}
+    entries={[dashboardEntry]} onClose={() => undefined} />);
+  fireEvent.click(screen.getByRole("checkbox", { name: /Какая выручка/ }));
+  const report = screen.getByRole("article", { name: "PDF-отчёт" });
+  expect(within(report).getByText("row-30")).toBeInTheDocument();
+  expect(within(report).getByText("SUM(revenue)")).toBeInTheDocument();
+});

@@ -328,7 +328,7 @@ function ResultTable({ card }: { card: Card }) {
   </>;
 }
 
-function GeneratedCard({ card, preference }: { card: Card; preference: PalettePreference }) {
+function GeneratedCard({ card, preference, expandPassport = false }: { card: Card; preference: PalettePreference; expandPassport?: boolean }) {
   const [view, setView] = useState<"line" | "bar">(card.type === "line" ? "line" : "bar");
   useEffect(() => setView(card.type === "line" ? "line" : "bar"), [card.id, card.type]);
   const grouped = card.status === "success" && (card.type === "line" || card.type === "bar");
@@ -349,7 +349,7 @@ function GeneratedCard({ card, preference }: { card: Card; preference: PalettePr
             : activeType === "pie" ? <ResultPie card={card} />
             : activeType === "scatter" ? <ResultScatter card={card} color={preference.colors[0]} />
               : activeType === "table" ? <ResultTable card={card} /> : null}
-    {passport && <details className="generated-passport">
+    {passport && <details className="generated-passport" open={expandPassport || undefined}>
       <summary>Паспорт расчёта</summary>
       <dl><div><dt>Формула</dt><dd>{passport.formula}</dd></div><div><dt>Источник</dt><dd>{passport.source}</dd></div><div><dt>Период</dt><dd>{passport.period}</dd></div>
         {passport.filters.length > 0 && <div><dt>Фильтры</dt><dd>{passport.filters.join("; ")}</dd></div>}
@@ -361,7 +361,7 @@ function GeneratedCard({ card, preference }: { card: Card; preference: PalettePr
   </section>;
 }
 
-export function GeneratedDashboard({ dashboard, scope, sourceLabel }: { dashboard: Dashboard; scope: string; sourceLabel?: string }) {
+export function GeneratedDashboard({ dashboard, scope, sourceLabel, expandPassports = false }: { dashboard: Dashboard; scope: string; sourceLabel?: string; expandPassports?: boolean }) {
   const [showPalette, setShowPalette] = useState(false);
   const supplied = (() => { try { return dashboard.palette ? validatePalette(dashboard.palette) : defaultPalette.colors; } catch { return defaultPalette.colors; } })();
   const [preference, setPreference] = useState<PalettePreference>(() => loadPalette(scope) ?? { colors: supplied, gradient: false });
@@ -383,7 +383,7 @@ export function GeneratedDashboard({ dashboard, scope, sourceLabel }: { dashboar
     </div>
     {showPalette && <PaletteEditor colors={preference.colors} gradient={preference.gradient} onChange={changePalette} onClose={() => setShowPalette(false)} />}
     <div className="generated-grid">
-      {dashboard.cards.map((card) => <GeneratedCard key={card.id} card={card} preference={preference} />)}
+      {dashboard.cards.map((card) => <GeneratedCard key={card.id} card={card} preference={preference} expandPassport={expandPassports} />)}
     </div>
   </div>;
 }

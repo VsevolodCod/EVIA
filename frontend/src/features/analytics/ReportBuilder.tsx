@@ -42,6 +42,17 @@ function tableFrom(result: ToolResult): { columns: string[]; rows: unknown[][]; 
   return { columns: columns as string[], rows: query.rows as unknown[][], truncated: query.truncated === true };
 }
 
+function generatedTable(data: unknown): { columns: string[]; rows: unknown[][]; truncated: boolean } | null {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+  const table = data as { columns?: unknown; rows?: unknown; limit_reached?: unknown };
+  if (!Array.isArray(table.columns) || !Array.isArray(table.rows) ||
+    !table.columns.every((name) => typeof name === "string") ||
+    !table.rows.every((row) => row && typeof row === "object" && !Array.isArray(row))) return null;
+  const columns = table.columns as string[];
+  return { columns, rows: table.rows.map((row) => columns.map((name) => (row as Record<string, unknown>)[name])),
+    truncated: table.limit_reached === true };
+}
+
 function ReportTable({ columns, rows, caption }: { columns: string[]; rows: unknown[][]; caption: string }) {
   const groups = Array.from({ length: Math.ceil(columns.length / 8) }, (_, index) =>
     columns.slice(index * 8, (index + 1) * 8));
@@ -181,7 +192,15 @@ export function ReportBuilder({ source, schema, rows, profile, entries, onClose 
             return <div key={resultIndex}>
               {table && <><ReportTable columns={table.columns} rows={table.rows} caption={`Результат расчёта ${resultIndex + 1}`} />
                 {table.truncated && <p className="report-note">Сервер вернул усечённый результат; полный объём не входит в отчёт.</p>}</>}
-              {chart && <GeneratedDashboard dashboard={chart} scope={`report-${entry.id}-${resultIndex}`} />}
+              {chart && <>{chart.cards.some((card) => card.type !== "table") &&
+                <GeneratedDashboard dashboard={{ ...chart, cards: chart.cards.filter((card) => card.type !== "table") }}
+                  scope={`report-${entry.id}-${resultIndex}`} expandPassports />}
+                {chart.cards.filter((card) => card.type === "table").map((card) => {
+                  const savedTable = generatedTable(card.data);
+                  return savedTable && <div key={card.id}><ReportTable columns={savedTable.columns} rows={savedTable.rows}
+                    caption={card.title} />{savedTable.truncated &&
+                    <p className="report-note">Таблица ограничена сервером; в отчёте все возвращённые строки.</p>}</div>;
+                })}</>}
             </div>;
           })}
         </div>)}
