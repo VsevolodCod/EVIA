@@ -35,7 +35,7 @@ from app.retry_agent import LLMRetryPolicy
 from app.schema_catalog import SchemaCatalog
 from app.source_service import SourceService
 from app.tools import build_tool_registry
-from app.core.logging import setup_logging
+from app.core.logging import current_request_id, request_logging_middleware, setup_logging
 from app.chat_manager import ChatManager, ChatNotFoundError, ChatSourceConflictError
 from app.contracts.v1 import Profile
 from app.web import mount_frontend
@@ -162,6 +162,8 @@ app = FastAPI(
     description="Local-first foundation for an AI-Native BI platform.",
     lifespan=lifespan,
 )
+
+app.middleware("http")(request_logging_middleware)
 
 
 @app.middleware("http")
@@ -353,7 +355,8 @@ async def ask_agent(body: AskRequest):
         raise
 
     except Exception as exc:
-        logger.exception("Agent execution failed")
+        logger.error("Agent execution failed request_id=%s error_type=%s",
+                     current_request_id.get(), type(exc).__name__)
         raise HTTPException(
             status_code=502,
             detail=f"Agent execution failed: {type(exc).__name__}",
@@ -476,7 +479,8 @@ async def chat_agent(
         ) from exc
 
     except Exception as exc:
-        logger.exception("Chat agent execution failed")
+        logger.error("Chat agent execution failed request_id=%s error_type=%s",
+                     current_request_id.get(), type(exc).__name__)
         raise HTTPException(
             status_code=502,
             detail=f"Agent execution failed: {type(exc).__name__}",

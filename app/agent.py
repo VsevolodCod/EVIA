@@ -10,9 +10,12 @@ from app.source_service import SourceService
 from app.models import (
     AskResponse,
     LLMMessage,
-    ToolResult, ChatMessage, AgentTiming, SourceSchema,
+    ToolCall, ToolResult, ChatMessage, AgentTiming, SourceSchema,
 )
 from app.tools import ToolRegistry
+from app.core.logging import current_request_id
+from app.charts.repositories import ChartRepository, DashboardRepository
+from app.charts.snapshots import source_ids as chart_source_ids
 from app.retry_agent import LLMRetryPolicy, LLMRetryExhausted, call_with_retry
 import logging
 
@@ -46,6 +49,35 @@ def _referenced_sources(value):
     elif isinstance(value, list):
         for child in value:
             yield from _referenced_sources(child)
+
+
+def _artifact_sources(call: ToolCall, sources: SourceService | None) -> set[str]:
+    """Resolve indirect chart/dashboard IDs before enforcing source scope."""
+    if sources is None or not isinstance(call.arguments, dict):
+        return set()
+    if call.name not in {
+        "compose_dashboard", "add_charts_to_dashboard", "remove_chart_from_dashboard",
+        "get_dashboard_info", "get_dashboard",
+    }:
+        return set()
+    charts = ChartRepository(sources.catalog.session_factory)
+    dashboards = DashboardRepository(sources.catalog.session_factory)
+    chart_ids: set[str] = set()
+    if isinstance(call.arguments.get("chart_id"), str):
+        chart_ids.add(call.arguments["chart_id"])
+    if isinstance(call.arguments.get("chart_ids"), list):
+        chart_ids.update(value for value in call.arguments["chart_ids"] if isinstance(value, str))
+    dashboard_id = call.arguments.get("dashboard_id")
+    if isinstance(dashboard_id, str):
+        dashboard = dashboards.get_by_id(dashboard_id)
+        if dashboard is not None:
+            chart_ids.update(ref.chart_id for ref in dashboard.charts)
+    referenced: set[str] = set()
+    for chart_id in chart_ids:
+        chart = charts.get_by_id(chart_id)
+        if chart is not None:
+            referenced.update(chart_source_ids(chart.definition.model_dump(mode="json")))
+    return referenced
 
 
 SYSTEM_PROMPT = """
@@ -204,7 +236,7 @@ class AgentRuntime:
         outcome = 'error'
 
         # Уникальный идентификатор запроса. Используется для связывания ответа, ошибок и записи о производительности.
-        request_id = uuid4().hex
+        request_id = current_request_id.get() or uuid4().hex
 
         try:
             # Получаем источник, только если выбран ровно один.
@@ -539,10 +571,10 @@ class AgentRuntime:
 
             # Выполняем инструменты
             for index, call in enumerate(response.tool_calls):
-                logger.info(f"Начато выполнение инструмента '{call.name}'")
+                logger.info("Agent tool call request_id=%s step=%d", current_request_id.get(), step)
                 tool_started = perf_counter()
                 try:
-                    referenced = set(_referenced_sources(call.arguments))
+                    referenced = set(_referenced_sources(call.arguments)) | _artifact_sources(call, self.sources)
                     if source_ids and not referenced.issubset(source_ids):
                         result = ToolResult(tool_name=call.name, ok=False, error="SOURCE_SCOPE_VIOLATION")
                     else:
