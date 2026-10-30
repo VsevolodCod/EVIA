@@ -101,6 +101,7 @@ export function Dashboard({
   const [showPalette, setShowPalette] = useState(false);
   const [showMobileExport, setShowMobileExport] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
+  useEffect(() => setReportOpen(false), [source?.source_id]);
   const fallbackPreference: PalettePreference = { colors: defaultPalette.colors, gradient: false };
   const [preference, setPreference] = useState<PalettePreference>(() => loadPalette(scope) ?? fallbackPreference);
   useEffect(() => setPreference(loadPalette(scope) ?? fallbackPreference), [scope]);

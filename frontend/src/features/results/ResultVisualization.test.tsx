@@ -9,8 +9,8 @@ it("shows a separate pie chart with grouped categories and percentages", () => {
   fireEvent.click(screen.getByRole("button", { name: "Круговая" }));
   const chart = screen.getByRole("img", { name: /Круговая диаграмма: amount по category/ });
   expect(chart).toBeInTheDocument();
-  expect(screen.getByText(/A.*50%/)).toBeInTheDocument();
-  expect(screen.getByText(/B.*50%/)).toBeInTheDocument();
+  expect(screen.getAllByText(/A.*50%/).length).toBeGreaterThan(0);
+  expect(screen.getAllByText(/B.*50%/).length).toBeGreaterThan(0);
 });
 
 it("does not offer a pie chart for negative or zero-only values", () => {

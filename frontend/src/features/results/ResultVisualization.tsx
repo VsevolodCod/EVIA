@@ -127,6 +127,6 @@ export function ResultVisualization({ rows, label, copyableIdentifierColumns, co
     {selectedView === "table" || !data ? <DataTable rows={rows} label={label} copyableIdentifierColumns={copyableIdentifierColumns} />
       : selectedView === "pie" && pie ? <><PieChart slices={pie} label={`Круговая диаграмма: ${valueField} по ${labelField}`} />
         {data.points.some((point) => point.value === null) && <p className="result-visualization-note">Пустые и нечисловые значения не включены в доли.</p>}</>
-      : <ResultChart key={`${valueField}\u0000${labelField}`} data={data} type={selectedView} />}
+      : <ResultChart key={`${valueField}\u0000${labelField}`} data={data} type={selectedView === "line" ? "line" : "bar"} />}
   </div>;
 }

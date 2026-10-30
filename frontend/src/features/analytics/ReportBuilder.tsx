@@ -76,6 +76,12 @@ function sourcePie(schema: SourceSchema, rows: Row[]) {
   return slices ? { field: field.name, slices } : null;
 }
 
+function shortConclusion(answer: string) {
+  const plain = answer.replace(/[`*_#>\[\]]/g, " ").replace(/\s+/g, " ").trim();
+  if (plain.length <= 180) return plain;
+  return `${plain.slice(0, 177).trimEnd()}…`;
+}
+
 export function ReportBuilder({ source, schema, rows, profile, entries, onClose }: Props) {
   const available = entries.filter((entry) => entry.state === "success" && entry.answer &&
     entry.answer.status !== "error" && entry.answer.status !== "clarification" &&
@@ -131,6 +137,9 @@ export function ReportBuilder({ source, schema, rows, profile, entries, onClose 
         </div>
         <p>Снимок данных: {source.snapshot_id ?? "не указан"}. Выбранных выводов EVIA: {selected.length}.</p>
         <p>Профиль качества: {profile?.coverage === "full" ? "Весь источник" : profile ? `Выборка из ${numberText(profile.sample_size)} строк` : "не загружен"}.</p>
+        {selected.length > 0 && <div className="report-key-findings"><h3>Ключевые выводы</h3><ul>
+          {selected.map((entry) => <li key={entry.id}><strong>{entry.question}</strong> — {shortConclusion(entry.answer?.answer ?? "")}</li>)}
+        </ul></div>}
       </section>
       <section className="report-section"><h2>Состав данных</h2>
         {fields.length ? <table><thead><tr><th>Поле</th><th>Тип</th><th>Пропуски</th></tr></thead><tbody>

@@ -56,12 +56,13 @@
 
 @media print {
   body:has(.report-builder) .source-workspace-heading,
-  body:has(.report-builder) .dashboard > :not(.report-builder),
+  body:has(.report-builder) .analytics-report > .dashboard > :not(.report-builder),
   body:has(.report-builder) .report-builder-panel { display: none !important; }
   body:has(.report-builder) .report-builder { display: block !important; position: static !important; inset: auto !important; overflow: visible !important; padding: 0 !important; background: none !important; }
   body:has(.report-builder) .report-document { display: block !important; width: 100% !important; margin: 0 !important; padding: 0 !important; border-radius: 0 !important; box-shadow: none !important; }
   body:has(.report-builder) .report-section,
-  body:has(.report-builder) .report-table-wrap { break-inside: auto; overflow: visible !important; }
+  body:has(.report-builder) .report-table-wrap,
+  body:has(.report-builder) .report-calculation { break-inside: auto; overflow: visible !important; }
   body:has(.report-builder) .report-document h2,
   body:has(.report-builder) .report-document h3 { break-after: avoid; }
   body:has(.report-builder) .report-document tr,

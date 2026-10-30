@@ -45,7 +45,7 @@ it("builds a source report with schema, sample, quality scope and import issues"
   expect(within(report).getByText("Продажи")).toBeInTheDocument();
   expect(within(report).getByText("Янв")).toBeInTheDocument();
   expect(within(report).getByText(/revenue: 1 пропуск/)).toBeInTheDocument();
-  expect(within(report).getByText(/Весь источник/)).toBeInTheDocument();
+  expect(within(report).getAllByText(/Весь источник/).length).toBeGreaterThan(0);
   expect(within(report).getByText(/Отклонено строк при импорте: 1/)).toBeInTheDocument();
   expect(within(report).queryByText("Какая выручка?")).not.toBeInTheDocument();
 });
@@ -59,10 +59,10 @@ it("adds selected AI calculations to the report and prints without private tool 
   expect(screen.queryByRole("checkbox", { name: /Сбой/ })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("checkbox", { name: /Какая выручка/ }));
   const report = screen.getByRole("article", { name: "PDF-отчёт" });
-  expect(within(report).getByText("Какая выручка?")).toBeInTheDocument();
+  expect(within(report).getByRole("heading", { name: /Какая выручка/ })).toBeInTheDocument();
   expect(within(report).getByText("Выручка составила 120.")).toBeInTheDocument();
   expect(within(report).getByText("SELECT SUM(revenue) FROM sales")).toBeInTheDocument();
-  expect(within(report).getByText("120")).toBeInTheDocument();
+  expect(within(report).getAllByText("120").length).toBeGreaterThan(0);
   expect(report).not.toHaveTextContent("/secret/private.csv");
   fireEvent.click(screen.getByRole("button", { name: "Сохранить в PDF" }));
   expect(print).toHaveBeenCalledOnce();
