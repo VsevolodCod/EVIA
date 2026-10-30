@@ -254,11 +254,11 @@ def register_chart_tools(
 
         try:
             definition_payload = parsed_definition.model_dump(mode="json")
-            before = source_versions(executor.sources.catalog, definition_payload)
+            before = source_versions(executor.sources.catalog, definition_payload, sources=executor.sources)
             result = executor.execute(
                 chart_id=chart.chart_id,
             )
-            if before != source_versions(executor.sources.catalog, definition_payload):
+            if before != source_versions(executor.sources.catalog, definition_payload, sources=executor.sources):
                 raise ValueError("Source changed while building chart")
             charts.save_snapshots({chart.chart_id: (result, before)})
         except Exception:

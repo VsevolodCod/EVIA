@@ -760,7 +760,8 @@ def _dashboard_build(dashboard_id: str, *, refresh: bool):
         chart_results = []
         pending_snapshots = {}
         stale = False
-        source_catalog = getattr(getattr(chart_executor, "sources", None), "catalog", catalog)
+        executor_sources = getattr(chart_executor, "sources", None)
+        source_catalog = getattr(executor_sources, "catalog", catalog)
 
         for ref in sorted(dashboard.charts, key=lambda item: item.position):
             chart = chart_repository.get_by_id(ref.chart_id)
@@ -781,9 +782,11 @@ def _dashboard_build(dashboard_id: str, *, refresh: bool):
                 definition = chart.definition.model_dump(mode="json")
                 saved = None if refresh else chart_repository.get_snapshot(chart.chart_id)
                 if saved is None:
-                    before = source_versions(source_catalog, definition)
+                    before = source_versions(source_catalog, definition, sources=executor_sources)
+                    if any(version.get("schema_status") == "unavailable" for version in before.values()):
+                        raise ValueError("Live source schema is unavailable")
                     result = chart_executor.execute(chart_id=chart.chart_id)
-                    if before != source_versions(source_catalog, definition):
+                    if before != source_versions(source_catalog, definition, sources=executor_sources):
                         raise ValueError("Source changed during dashboard build")
                     result = jsonable_encoder(result)
                     pending_snapshots[chart.chart_id] = (result, before)
@@ -794,7 +797,9 @@ def _dashboard_build(dashboard_id: str, *, refresh: bool):
                     result = saved["result"]
                     versions = saved["source_versions"]
                     captured_at = saved["captured_at"]
-                    chart_stale = versions != source_versions(source_catalog, definition)
+                    chart_stale = versions != source_versions(
+                        source_catalog, definition, sources=executor_sources,
+                    )
                 stale |= chart_stale
 
                 chart_results.append({
