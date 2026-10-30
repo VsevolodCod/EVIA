@@ -66,6 +66,7 @@ it("labels sample-based quality findings without claiming the full source is cle
   expect(within(report).getByText(/2 пропуска/)).toBeInTheDocument();
   expect(report).toHaveTextContent("По выборке из 2 строк");
   expect(report).not.toHaveTextContent("Весь источник");
+  expect(screen.queryByText("Добавить ответы EVIA")).not.toBeInTheDocument();
 });
 
 it("adds selected AI calculations to the report and prints without private tool metadata", () => {

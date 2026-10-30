@@ -138,15 +138,15 @@ export function ReportBuilder({ source, schema, rows, profile, entries, onClose 
       <header className="report-builder-head"><h2>PDF-отчёт</h2>
         <button type="button" aria-label="Закрыть отчёт" onClick={onClose}>✕</button></header>
       <div className="report-builder-controls">
-        <div className="report-builder-selection"><h3>Добавить ответы EVIA</h3>
-          {available.length ? <><div className="report-builder-selection-actions">
+        {available.length > 0 && <div className="report-builder-selection"><h3>Добавить ответы EVIA</h3>
+          <div className="report-builder-selection-actions">
             <button type="button" onClick={() => setSelectedIds(available.map((entry) => entry.id))}>Выбрать все</button>
             <button type="button" onClick={() => setSelectedIds([])}>Снять выбор</button>
           </div>{available.map((entry) => <label key={entry.id} className="report-builder-choice">
             <input type="checkbox" checked={selectedIds.includes(entry.id)} onChange={(event) =>
               setSelectedIds((ids) => event.target.checked ? [...ids, entry.id] : ids.filter((id) => id !== entry.id))} />
-            <span>{entry.question}</span></label>)}</> : <p>Готовых ответов по этому источнику пока нет.</p>}
-        </div>
+            <span>{entry.question}</span></label>)}
+        </div>}
         <button type="button" className="report-builder-print" onClick={printReport}>Сохранить в PDF</button>
       </div>
     </div>
