@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import json
 from uuid import uuid4
 from typing import Any
 
@@ -19,6 +20,7 @@ from app.ownership import owner_id
 
 
 SessionMaker = sessionmaker[Session]
+MAX_CHART_SNAPSHOT_BYTES = 2 * 1024 * 1024
 
 
 class RepositoryError(Exception):
@@ -177,6 +179,9 @@ class ChartRepository:
 
     def save_snapshots(self, values: dict[str, tuple[dict[str, Any], dict[str, Any]]]) -> None:
         """Publish all successfully refreshed chart results in one transaction."""
+        for result, _ in values.values():
+            if len(json.dumps(result, ensure_ascii=False).encode("utf-8")) > MAX_CHART_SNAPSHOT_BYTES:
+                raise ValueError("Chart result is too large to save")
         with self.session_maker.begin() as session:
             for chart_id in values:
                 chart = session.get(ChartORM, chart_id)
