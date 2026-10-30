@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.hypothesis.engine import HypothesisEngine
-from app.tools.base import ToolDefinition, ToolRegistry
+from app.tools.base import InvalidSourceFieldError, ToolDefinition, ToolRegistry
 
 
 def _is_numeric_type(type_name: str) -> bool:
@@ -19,7 +19,7 @@ def register_hypothesis_tools(registry: ToolRegistry, sources: Any) -> None:
     def run_one(payload: dict[str, Any]) -> dict[str, Any]:
         result = engine.run(payload)
         if result["results"][0]["status"] != "completed":
-            raise ValueError("Hypothesis check failed; verify the selected source and field names.")
+            raise InvalidSourceFieldError
         return result
 
     def compare_groups(

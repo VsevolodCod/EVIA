@@ -1,9 +1,15 @@
 from collections.abc import Callable
 from typing import Any
 
+from jsonschema import Draft202012Validator
+
 from app.models import ToolResult
 from app.postgresql_sql import PostgresQueryError
 from app.safe_sql import SafeQueryError
+
+
+class InvalidSourceFieldError(Exception):
+    """Safe, fixed error for a requested field absent from the source schema."""
 
 
 class ToolDefinition:
@@ -25,6 +31,12 @@ class ToolDefinition:
         self.parameters = parameters
         self.handler = handler
         self.required = required or []
+        self._validator = Draft202012Validator({
+            "type": "object",
+            "properties": self.parameters,
+            "required": self.required,
+            "additionalProperties": False,
+        })
 
     def public_schema(self) -> dict[str, Any]:
         return {
@@ -91,21 +103,13 @@ class ToolRegistry:
                 error="Arguments must be an object",
             )
 
-        unknown = set(arguments) - set(tool.parameters)
-        missing = set(tool.required) - set(arguments)
-
-        if unknown:
+        # Validate the full nested contract server-side. Provider-side JSON
+        # schemas are hints, not an authorization or validation boundary.
+        if not tool._validator.is_valid(arguments):
             return ToolResult(
                 tool_name=name,
                 ok=False,
-                error=f"Unexpected arguments: {sorted(unknown)}",
-            )
-
-        if missing:
-            return ToolResult(
-                tool_name=name,
-                ok=False,
-                error=f"Missing arguments: {sorted(missing)}",
+                error="INVALID_TOOL_ARGUMENTS",
             )
 
         try:
@@ -115,15 +119,24 @@ class ToolRegistry:
                 ok=True,
                 data=result,
             )
+        except InvalidSourceFieldError:
+            return ToolResult(
+                tool_name=name,
+                ok=False,
+                error="INVALID_SOURCE_FIELD",
+            )
         except (SafeQueryError, PostgresQueryError) as exc:
             return ToolResult(
                 tool_name=name,
                 ok=False,
                 error=exc.code,
             )
-        except Exception as exc:
+        except Exception:
+            # Driver exceptions and validation messages can contain DSNs,
+            # credentials, file paths or raw source values. Tool results are
+            # also sent back to the model, so never echo exception text here.
             return ToolResult(
                 tool_name=name,
                 ok=False,
-                error=f"{type(exc).__name__}: {exc}",
+                error="TOOL_EXECUTION_FAILED",
             )
