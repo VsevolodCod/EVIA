@@ -48,7 +48,8 @@ export function SavedDashboard({ id, editable = false }: { id: string; editable?
     const controller = new AbortController();
     setState((previous) => previous?.id === id && previous.build
       ? { ...previous, refreshing: true, error: undefined } : null);
-    void api.dashboardBuild(id, controller.signal).then((build) => {
+    const load = revision === 0 ? api.dashboardBuild(id, controller.signal) : api.refreshDashboard(id, controller.signal);
+    void load.then((build) => {
       if (!controller.signal.aborted) setState({ id, build, updatedAt: Date.now() });
     }).catch((error) => {
       if (!controller.signal.aborted) setState((previous) => ({
@@ -90,6 +91,7 @@ export function SavedDashboard({ id, editable = false }: { id: string; editable?
   return <section className="saved-dashboard" aria-label="Сохранённый дашборд">
     <div className="saved-dashboard-toolbar"><span>Сохранённый дашборд{current.updatedAt ? ` · обновлён ${new Date(current.updatedAt).toLocaleString("ru-RU")}` : ""}</span><button type="button" disabled={current.refreshing} onClick={() => setRevision((value) => value + 1)}>{current.refreshing ? "Обновляем…" : "Обновить данные"}</button></div>
     {current.error && <ErrorNotice message={current.build ? `${current.error} Показаны предыдущие данные.` : current.error} onRetry={() => setRevision((value) => value + 1)} label="Повторить загрузку дашборда" />}
+    {current.build.stale && <p role="status">Источник изменился. Показан сохранённый результат; нажмите «Обновить данные» для пересчёта.</p>}
     {current.refreshing && <p role="status">Обновляем графики…</p>}
     {!current.build.success && <p role="status">Часть графиков не обновилась. Остальные результаты доступны ниже.</p>}
     {editable && ordered.length > 1 && <div className="saved-dashboard-order" aria-label="Порядок графиков">
@@ -104,7 +106,7 @@ export function SavedDashboard({ id, editable = false }: { id: string; editable?
         </div>;
       })}
     </div>}
-    {dashboard.cards.length ? <GeneratedDashboard dashboard={dashboard} scope={`saved-${id}`} sourceLabel={current.build!.success ? "Карточки пересчитаны по текущим данным" : "Часть карточек не удалось пересчитать"} />
+    {dashboard.cards.length ? <GeneratedDashboard dashboard={dashboard} scope={`saved-${id}`} sourceLabel={current.build!.success ? "Сохранённый результат" : "Часть карточек недоступна"} />
       : <p className="dashboard-empty">В этом дашборде пока нет графиков.</p>}
   </section>;
 }

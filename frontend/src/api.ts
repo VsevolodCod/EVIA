@@ -239,6 +239,7 @@ const savedDashboardInfoSchema = z.object({
 });
 const savedDashboardBuildSchema = z.object({
   success: z.boolean(),
+  stale: z.boolean().optional(),
   dashboard: savedDashboardDefinitionSchema,
   charts: z.array(z.object({
     chart_id: z.string(),
@@ -247,6 +248,9 @@ const savedDashboardBuildSchema = z.object({
     chart_type: z.string().optional(),
     definition: z.unknown().optional(),
     result: z.unknown().optional(),
+    source_versions: z.record(z.string(), z.object({ snapshot_id: z.string().nullable(), schema_version: z.number().nullable() })).optional(),
+    captured_at: z.string().nullable().optional(),
+    stale: z.boolean().optional(),
     error: z.object({ code: z.string(), message: z.string() }).optional(),
   })),
 });
@@ -402,6 +406,8 @@ export const api = {
     request(`/dashboards/${encodeURIComponent(id)}`, savedDashboardInfoSchema, { signal }),
   dashboardBuild: (id: string, signal?: AbortSignal) =>
     request(`/dashboards/${encodeURIComponent(id)}/build`, savedDashboardBuildSchema, { signal }),
+  refreshDashboard: (id: string, signal?: AbortSignal) =>
+    request(`/dashboards/${encodeURIComponent(id)}/refresh`, savedDashboardBuildSchema, { method: "POST", signal }),
   dashboardOrder: (id: string, chartIds: string[], expectedVersion: number) =>
     request(`/dashboards/${encodeURIComponent(id)}/order`, savedDashboardInfoSchema, {
       method: "PUT", headers: { "Content-Type": "application/json" },

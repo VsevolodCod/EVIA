@@ -10,6 +10,7 @@ from app.charts.models import (
     DashboardFilter,
 )
 from app.charts.repositories import ChartRepository
+from app.charts.snapshots import source_versions
 from app.tools.base import ToolDefinition, ToolRegistry
 
 
@@ -252,9 +253,14 @@ def register_chart_tools(
         )
 
         try:
+            definition_payload = parsed_definition.model_dump(mode="json")
+            before = source_versions(executor.sources.catalog, definition_payload)
             result = executor.execute(
                 chart_id=chart.chart_id,
             )
+            if before != source_versions(executor.sources.catalog, definition_payload):
+                raise ValueError("Source changed while building chart")
+            charts.save_snapshots({chart.chart_id: (result, before)})
         except Exception:
             # A failed attempt must not leave an artifact that a retry can add
             # to a dashboard. Error details can contain schema names, so keep

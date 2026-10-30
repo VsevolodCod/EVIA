@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from uuid import uuid4
 from typing import Any
 
@@ -13,7 +14,7 @@ from app.charts.models import (
     ChartReference,
     DashboardModel,
 )
-from app.db.catalog import DashboardORM, DashboardOriginORM, DashboardChartRefORM, ChartORM
+from app.db.catalog import DashboardORM, DashboardOriginORM, DashboardChartRefORM, ChartORM, ChartSnapshotORM
 from app.ownership import owner_id
 
 
@@ -148,9 +149,49 @@ class ChartRepository:
                 if orm is None or (owner_id() is not None and orm.owner_id != owner_id()):
                     return False
 
+                snapshot = session.get(ChartSnapshotORM, chart_id)
+                if snapshot is not None:
+                    session.delete(snapshot)
+                    session.flush()
                 session.delete(orm)
                 session.flush()
                 return True
+
+    def get_snapshot(self, chart_id: str) -> dict[str, Any] | None:
+        with self.session_maker() as session:
+            statement = (
+                select(ChartSnapshotORM)
+                .join(ChartORM, ChartORM.chart_id == ChartSnapshotORM.chart_id)
+                .where(ChartSnapshotORM.chart_id == chart_id)
+            )
+            if owner_id() is not None:
+                statement = statement.where(ChartORM.owner_id == owner_id())
+            snapshot = session.scalar(statement)
+            if snapshot is None:
+                return None
+            return {
+                "result": snapshot.result,
+                "source_versions": snapshot.source_versions,
+                "captured_at": snapshot.captured_at.isoformat() + "Z",
+            }
+
+    def save_snapshots(self, values: dict[str, tuple[dict[str, Any], dict[str, Any]]]) -> None:
+        """Publish all successfully refreshed chart results in one transaction."""
+        with self.session_maker.begin() as session:
+            for chart_id in values:
+                chart = session.get(ChartORM, chart_id)
+                if chart is None or (owner_id() is not None and chart.owner_id != owner_id()):
+                    raise EntityNotFoundError("Chart not found")
+            for chart_id, (result, versions) in values.items():
+                snapshot = session.get(ChartSnapshotORM, chart_id)
+                if snapshot is None:
+                    session.add(ChartSnapshotORM(
+                        chart_id=chart_id, result=result, source_versions=versions,
+                    ))
+                else:
+                    snapshot.result = result
+                    snapshot.source_versions = versions
+                    snapshot.captured_at = datetime.utcnow()
 
 
 class DashboardRepository:
