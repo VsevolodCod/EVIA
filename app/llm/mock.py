@@ -26,7 +26,7 @@ class MockLLMProvider(LLMProvider):
                         tool_calls=[
                             ToolCall(
                                 name="preview_data",
-                                arguments={"source_id": source_id, "limit": 12},
+                                arguments={"source_id": source_id, "limit": 10},
                                 call_id="mock-preview-source",
                             )
                         ],
