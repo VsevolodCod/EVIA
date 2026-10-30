@@ -15,6 +15,29 @@ const source = (id: string) => ({
   created_at: "2026-10-16",
   schema_version: 1,
 });
+
+function mockCsvUpload(result: object, automatic = true) {
+  const requests: FakeXHR[] = [];
+  class FakeXHR {
+    upload: { onprogress?: (event: { lengthComputable: boolean; loaded: number; total: number }) => void; onload?: () => void } = {};
+    status = 200;
+    responseText = JSON.stringify(result);
+    onload?: () => void;
+    open = vi.fn();
+    setRequestHeader = vi.fn();
+    send = vi.fn(() => {
+      requests.push(this);
+      this.upload.onprogress?.({ lengthComputable: true, loaded: 1, total: 2 });
+      if (automatic) queueMicrotask(() => this.respond());
+    });
+    respond() {
+      this.upload.onload?.();
+      this.onload?.();
+    }
+  }
+  vi.stubGlobal("XMLHttpRequest", FakeXHR);
+  return requests;
+}
 const schema = (id: string) => ({
   source_id: id,
   version: 1,
@@ -553,6 +576,7 @@ it("opens a separate CSV upload screen from the home action", async () => {
 
 it("previews a selected mobile CSV before uploading it", async () => {
   setup();
+  const uploads = mockCsvUpload(source("C"));
   vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true }));
   render(<App />);
   fireEvent.click(screen.getByRole("button", { name: "Добавить источник" }));
@@ -564,7 +588,7 @@ it("previews a selected mobile CSV before uploading it", async () => {
   expect(screen.getByText("orders.csv")).toBeInTheDocument();
   expect(vi.mocked(fetch).mock.calls.some(([url]) => url === "/sources/csv")).toBe(false);
   fireEvent.click(screen.getByRole("button", { name: "Загрузить файл" }));
-  await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url]) => url === "/sources/csv")).toBe(true));
+  await waitFor(() => expect(uploads).toHaveLength(1));
 });
 
 it("opens a dismissible CSV sheet without fictitious analysis steps", async () => {
@@ -733,15 +757,11 @@ it("does not show implementation-status controls in the workspace header", async
   expect(localStorage.getItem("linza.quiet")).toBeNull();
 });
 it("uploads a CSV, selects the returned source and loads its real preview", async () => {
+  const uploads = mockCsvUpload(source("uploaded"));
   const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
     if (url === "/health")
       return Response.json({ status: "ok", llm_provider: "mock" });
     if (url === "/sources") return Response.json([]);
-    if (url === "/sources/csv") {
-      expect(init?.body).toBeInstanceOf(FormData);
-      expect((init?.body as FormData).get("file")).toBeInstanceOf(File);
-      return Response.json(source("uploaded"));
-    }
     if (url.endsWith("/schema")) return Response.json(schema("uploaded"));
     if (url.includes("/preview"))
       return Response.json([{ product: "uploaded-value" }]);
@@ -761,6 +781,7 @@ it("uploads a CSV, selects the returned source and loads its real preview", asyn
     },
   });
   expect(await screen.findByRole("heading", { name: "Источник uploaded" })).toBeInTheDocument();
+  expect(uploads).toHaveLength(1);
   fireEvent.click(screen.getByRole("button", { name: /^Данные$/ }));
   expect(await screen.findByText("uploaded-value")).toBeInTheDocument();
   expect(
@@ -862,15 +883,7 @@ it("shows thinking, cancellation, retry and the finished answer as real mascot s
 });
 it("shows CSV upload state until the actual response and then uploaded state", async () => {
   setup();
-  const base = vi.mocked(fetch).getMockImplementation()!;
-  let finish!: (r: Response) => void;
-  vi.mocked(fetch).mockImplementation((url, init) =>
-    url === "/sources/csv"
-      ? new Promise((resolve) => {
-          finish = resolve;
-        })
-      : base(url, init),
-  );
+  const uploads = mockCsvUpload(source("C"), false);
   const { container } = render(<App />);
   await select("A");
   fireEvent.change(screen.getByLabelText("Загрузить CSV"), {
@@ -879,7 +892,8 @@ it("shows CSV upload state until the actual response and then uploaded state", a
   expect(
     container.querySelector('[data-evia-state="uploading"]'),
   ).toBeInTheDocument();
-  await act(async () => finish(Response.json(source("C"))));
+  expect(uploads).toHaveLength(1);
+  await act(async () => uploads[0].respond());
   expect(
     container.querySelector('[data-evia-state="uploaded"]'),
   ).toBeInTheDocument();
