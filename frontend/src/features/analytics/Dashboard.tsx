@@ -192,13 +192,13 @@ export function Dashboard({
       entries={reportEntries} onClose={() => setReportOpen(false)} />}
     <div className="dashboard-top">
       <div><h2>{title}</h2>{context === "result" && <p>{sourceLabel}</p>}</div>
-      <div className="dashboard-actions"><button onClick={exportCsv}>{context === "source" ? "Скачать предпросмотр" : "Скачать результат"}</button><button className="desktop-export" onClick={exportPdf}>Печать / PDF</button><button className="mobile-export-trigger" onClick={() => setShowMobileExport(true)}>Ещё</button></div>
+      <div className="dashboard-actions"><button onClick={exportCsv}>{context === "source" ? "Скачать предпросмотр" : "Скачать результат"}</button><button className="desktop-export" onClick={exportPdf}>{source ? "Собрать PDF-отчёт" : "Печать / PDF"}</button><button className="mobile-export-trigger" onClick={() => setShowMobileExport(true)}>Ещё</button></div>
     </div>
     {showMobileExport && <div className="mobile-export-backdrop" onClick={() => setShowMobileExport(false)}>
       <section className="mobile-export-sheet" aria-label="Экспорт результатов" onClick={(event) => event.stopPropagation()}>
         <div className="mobile-export-heading"><h2>Экспорт результатов</h2><button aria-label="Закрыть экспорт" onClick={() => setShowMobileExport(false)}>✕</button></div>
         <button className="mobile-export-option" onClick={exportCsv}><span>CSV</span><span><strong>Скачать CSV</strong><small>{context === "source" ? "Строки из предпросмотра" : "Строки результата"}</small></span><b>↓</b></button>
-        <button className="mobile-export-option" onClick={exportPdf}><span>PDF</span><span><strong>Печать / PDF</strong><small>Сохраните PDF в окне печати</small></span><b>↗</b></button>
+        <button className="mobile-export-option" onClick={exportPdf}><span>PDF</span><span><strong>{source ? "Собрать PDF-отчёт" : "Печать / PDF"}</strong><small>{source ? "Выберите выводы и сохраните файл" : "Сохраните PDF в окне печати"}</small></span><b>↗</b></button>
         <button className="mobile-export-option" onClick={() => { setShowMobileExport(false); setShowPalette(true); }}><span>●</span><span><strong>Цвета графиков</strong><small>Настроить палитру</small></span><b>↗</b></button>
       </section>
     </div>}

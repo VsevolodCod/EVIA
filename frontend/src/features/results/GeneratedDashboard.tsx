@@ -280,6 +280,7 @@ function ResultPie({ card }: { card: Card }) {
   const slices = pieChartData(chart.points.map((point) => ({ label: String(point.x ?? "Нет подписи"), value: numeric(point.y) })));
   if (!slices) return <p className="generated-empty">Для круговой диаграммы нужны положительные значения без отрицательных долей.</p>;
   return <><PieChart slices={slices} label={`${card.title}: доли ${chart.yLabel} по ${chart.xLabel}`} />
+    {chart.points.some((point) => numeric(point.y) === 0) && <p className="generated-limit-note">Нулевые категории не образуют сектор.</p>}
     <div className="generated-axis-label">{chart.xLabel} · {chart.yLabel}</div></>;
 }
 

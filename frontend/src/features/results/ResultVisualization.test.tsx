@@ -28,6 +28,13 @@ it("labels pie shares from a truncated server result as partial", () => {
   expect(screen.getByText(/Доли рассчитаны только по возвращённым строкам/)).toBeInTheDocument();
 });
 
+it("explains why a zero-valued category has no pie slice", () => {
+  render(<ResultVisualization rows={[{ category: "A", amount: 5 }, { category: "B", amount: 0 }]}
+    label="Результат" />);
+  fireEvent.click(screen.getByRole("button", { name: "Круговая" }));
+  expect(screen.getByText(/Нулевые категории не образуют сектор/)).toBeInTheDocument();
+});
+
 it("keeps all thirteen categories when switching between table, bars and line", () => {
   const rows = Array.from({ length: 13 }, (_, i) => ({ category: `Категория ${i + 1}`, amount: i + 1 }));
   render(<ResultVisualization rows={rows} label="Результат" />);
