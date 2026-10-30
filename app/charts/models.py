@@ -141,6 +141,20 @@ class BarCard(LineCard):
     type: Literal["bar"] = "bar"
 
 
+class PieCard(LineCard):
+    """Complete category shares from a nonnegative SUM or COUNT."""
+
+    type: Literal["pie"] = "pie"
+
+    @model_validator(mode="after")
+    def validate_pie(self):
+        if self.x.type != "category" or self.series is not None:
+            raise ValueError("Pie chart requires one categorical axis without series")
+        if self.y.aggregate not in {"sum", "count"}:
+            raise ValueError("Pie chart requires SUM or COUNT")
+        return self
+
+
 class ScatterAxis(FieldRef):
     label: str | None = Field(default=None, max_length=200)
     format: ValueFormat = Field(default_factory=ValueFormat)
@@ -166,7 +180,7 @@ class TableCard(ChartBase):
 
 
 ChartDefinition = Annotated[
-    KPICard | LineCard | BarCard | ScatterCard | TableCard,
+    KPICard | LineCard | BarCard | PieCard | ScatterCard | TableCard,
     Field(discriminator="type"),
 ]
 

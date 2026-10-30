@@ -21,6 +21,13 @@ it("does not offer a pie chart for negative or zero-only values", () => {
   expect(screen.queryByRole("button", { name: "Круговая" })).not.toBeInTheDocument();
 });
 
+it("labels pie shares from a truncated server result as partial", () => {
+  render(<ResultVisualization rows={[{ category: "A", amount: 1 }, { category: "B", amount: 1 }]}
+    label="Результат" truncated />);
+  fireEvent.click(screen.getByRole("button", { name: "Круговая" }));
+  expect(screen.getByText(/Доли рассчитаны только по возвращённым строкам/)).toBeInTheDocument();
+});
+
 it("keeps all thirteen categories when switching between table, bars and line", () => {
   const rows = Array.from({ length: 13 }, (_, i) => ({ category: `Категория ${i + 1}`, amount: i + 1 }));
   render(<ResultVisualization rows={rows} label="Результат" />);

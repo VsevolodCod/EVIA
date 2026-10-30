@@ -109,6 +109,7 @@ export function ToolResults({ results, analysis }: { results: ToolResult[]; anal
               rows={rows}
               label={`Результат ${result.tool_name}`}
               columns={chartColumns(result.data)}
+              truncated={Boolean(result.data && typeof result.data === "object" && !Array.isArray(result.data) && "truncated" in result.data && result.data.truncated === true)}
               copyableIdentifierColumns={result.tool_name === "list_sources" ? ["source_id", "snapshot_id"] : undefined}
             />
           ) : result.data !== null && result.data !== undefined ? (

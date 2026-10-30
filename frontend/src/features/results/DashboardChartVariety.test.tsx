@@ -41,6 +41,24 @@ it("accepts generated and saved chart payloads without dropping new types", () =
   expect(dashboardFromBuild(build).cards.map(card => card.type)).toEqual(["bar", "scatter", "table"]);
 });
 
+it("keeps a server-built pie chart through save and renders its full shares", () => {
+  const pie = { id: "pie", type: "pie" as const, title: "Доли выручки", status: "success" as const,
+    definition: { type: "pie", title: "Доли выручки", x: { source_id: "sales", field: "category" },
+      y: { source_id: "sales", field: "amount", aggregate: "sum" } },
+    data: { x: { field: "category" }, y: { field: "amount" },
+      points: [{ x: "A", y: 30 }, { x: "B", y: 70 }], limit_reached: false } };
+  expect(generatedChartFrom({ tool_name: "build_chart", ok: true,
+    data: { success: true, chart_id: "pie", definition: pie.definition, result: pie.data } })?.cards[0].type).toBe("pie");
+  const build: SavedDashboardBuild = { success: true,
+    dashboard: { id: "saved", title: "Панель", version: 1, charts: [{ chart_id: "pie", position: 0 }] },
+    charts: [{ chart_id: "pie", position: 0, success: true, chart_type: "pie", definition: pie.definition, result: pie.data }] };
+  expect(dashboardFromBuild(build).cards[0].type).toBe("pie");
+  render(<GeneratedDashboard dashboard={{ version: 1, title: "Панель", cards: [pie] }} scope="pie-test" />);
+  expect(screen.getByRole("img", { name: /Доли выручки: доли amount по category/ })).toBeInTheDocument();
+  expect(screen.getAllByText(/A: 30%/).length).toBeGreaterThan(0);
+  expect(screen.getAllByText(/B: 70%/).length).toBeGreaterThan(0);
+});
+
 it("labels separate bar series instead of making duplicate categories ambiguous", () => {
   const bar = { ...cards[0], definition: { ...cards[0].definition, series: { source_id: "sales", field: "region" } },
     data: { ...cards[0].data, points: [

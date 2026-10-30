@@ -92,11 +92,12 @@ function ResultChart({ data, type }: { data: ResultChartData; type: "bar" | "lin
   </div>;
 }
 
-export function ResultVisualization({ rows, label, copyableIdentifierColumns, columns }: {
+export function ResultVisualization({ rows, label, copyableIdentifierColumns, columns, truncated = false }: {
   rows: Row[];
   label: string;
   copyableIdentifierColumns?: readonly string[];
   columns?: readonly ChartColumn[];
+  truncated?: boolean;
 }) {
   const { fields, measures } = useMemo(() => chartFields(rows, columns, copyableIdentifierColumns), [rows, columns, copyableIdentifierColumns]);
   const [selectedMeasure, setMeasure] = useState("");
@@ -126,6 +127,7 @@ export function ResultVisualization({ rows, label, copyableIdentifierColumns, co
     </nav> : <p className="result-visualization-note">{measures.length > 1 ? "Выберите показатель для графика. Идентификаторы используются только для подписей." : "Для графика нужен числовой показатель и поле для подписей."}</p>}
     {selectedView === "table" || !data ? <DataTable rows={rows} label={label} copyableIdentifierColumns={copyableIdentifierColumns} />
       : selectedView === "pie" && pie ? <><PieChart slices={pie} label={`Круговая диаграмма: ${valueField} по ${labelField}`} />
+        {truncated && <p className="result-visualization-note">Доли рассчитаны только по возвращённым строкам. Результат усечён сервером.</p>}
         {data.points.some((point) => point.value === null) && <p className="result-visualization-note">Пустые и нечисловые значения не включены в доли.</p>}</>
       : <ResultChart key={`${valueField}\u0000${labelField}`} data={data} type={selectedView === "line" ? "line" : "bar"} />}
   </div>;
