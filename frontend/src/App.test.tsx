@@ -235,6 +235,9 @@ it("reopens a server conversation after reload without mixing it into another so
       source_id: "A",
       messages: [
         { message_id: "question-a", role: "user", content: "Покажи продажи", created_at: "2026-10-18T08:00:00Z" },
+        { message_id: "trace-a", role: "assistant", content: "Сначала проверю данные", tool_calls: [{ id: "call-a" }], created_at: "2026-10-18T08:00:00Z" },
+        { message_id: "tool-a", role: "tool", content: "{\"rows\":[[300]]}", created_at: "2026-10-18T08:00:00Z" },
+        { message_id: "continue-a", role: "user", content: "Продолжи ответ точно с места обрыва, без повторения уже написанного.", created_at: "2026-10-18T08:00:00Z" },
         { message_id: "answer-a", role: "assistant", content: "Продажи выросли.", created_at: "2026-10-18T08:00:01Z", analysis_payload: {
           version: 1, response: {
             answer: "Продажи выросли.", steps: 1, request_id: "saved-request", answer_kind: "computed",
@@ -248,7 +251,7 @@ it("reopens a server conversation after reload without mixing it into another so
           },
         } },
       ],
-      total_messages: 2,
+      total_messages: 5,
       next_offset: null,
       next_before: null,
       has_more: false,

@@ -211,6 +211,7 @@ const chatMessageSchema = z.object({
   message_id: z.string().min(1),
   role: z.enum(["user", "assistant", "system", "tool"]),
   content: z.string(),
+  tool_calls: z.array(z.unknown()).nullable().optional(),
   analysis_payload: analysisPayloadSchema.nullable().optional(),
   created_at: z.string(),
   response: answerSchema.nullable().optional(),
