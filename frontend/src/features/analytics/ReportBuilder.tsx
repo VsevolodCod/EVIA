@@ -94,6 +94,13 @@ function shortConclusion(answer: string) {
   return `${plain.slice(0, 177).trimEnd()}…`;
 }
 
+function counted(noun: [string, string, string], value: number) {
+  const lastTwo = value % 100;
+  const last = value % 10;
+  return `${numberText(value)} ${lastTwo >= 11 && lastTwo <= 14 ? noun[2] :
+    last === 1 ? noun[0] : last >= 2 && last <= 4 ? noun[1] : noun[2]}`;
+}
+
 export function ReportBuilder({ source, schema, rows, profile, entries, onClose }: Props) {
   const available = entries.filter((entry) => entry.state === "success" && entry.answer &&
     entry.answer.status !== "error" && entry.answer.status !== "clarification" &&
@@ -104,13 +111,17 @@ export function ReportBuilder({ source, schema, rows, profile, entries, onClose 
   const previewColumns = fields.length ? fields.map((field) => field.name) : Object.keys(rows[0] ?? {});
   const rowCount = sourceCount(schema);
   const pie = useMemo(() => sourcePie(schema, rows), [schema, rows]);
+  const affectedFields = profile ? Object.values(profile.columns).filter((column) => {
+    const exact = profile.coverage === "full" && hasExactStats(column);
+    return (exact ? column.null_count + column.empty_count : column.sample_null_count) > 0;
+  }).length : null;
   const problems = profile ? Object.entries(profile.columns).flatMap(([name, column]) => {
     const exact = profile.coverage === "full" && hasExactStats(column);
     const missing = exact ? column.null_count : column.sample_null_count;
     const empty = exact ? column.empty_count : 0;
     return [
-      ...(missing ? [`${name}: ${numberText(missing)} пропуск${missing === 1 ? "" : "ов"}`] : []),
-      ...(empty ? [`${name}: ${numberText(empty)} пустых строк`] : []),
+      ...(missing ? [`${name}: ${counted(["пропуск", "пропуска", "пропусков"], missing)}`] : []),
+      ...(empty ? [`${name}: ${counted(["пустое значение", "пустых значения", "пустых значений"], empty)}`] : []),
     ];
   }) : [];
   const reportDate = new Date().toLocaleDateString("ru-RU");
@@ -124,32 +135,30 @@ export function ReportBuilder({ source, schema, rows, profile, entries, onClose 
 
   return <div className="report-builder" role="dialog" aria-modal="true" aria-label="Составить PDF-отчёт">
     <div className="report-builder-panel">
-      <header className="report-builder-head"><div><h2>Отчёт по источнику</h2><p>Выберите выводы EVIA, которые хотите включить в PDF.</p></div>
+      <header className="report-builder-head"><h2>PDF-отчёт</h2>
         <button type="button" aria-label="Закрыть отчёт" onClick={onClose}>✕</button></header>
       <div className="report-builder-controls">
-        <div className="report-builder-selection"><h3>Расчёты и выводы EVIA</h3>
-          {available.length ? <><div className="report-builder-selection-actions">
+        {available.length > 0 && <div className="report-builder-selection"><h3>Добавить ответы EVIA</h3>
+          <div className="report-builder-selection-actions">
             <button type="button" onClick={() => setSelectedIds(available.map((entry) => entry.id))}>Выбрать все</button>
             <button type="button" onClick={() => setSelectedIds([])}>Снять выбор</button>
           </div>{available.map((entry) => <label key={entry.id} className="report-builder-choice">
             <input type="checkbox" checked={selectedIds.includes(entry.id)} onChange={(event) =>
               setSelectedIds((ids) => event.target.checked ? [...ids, entry.id] : ids.filter((id) => id !== entry.id))} />
-            <span>{entry.question}</span></label>)}</> : <p>Для этого источника пока нет готовых ответов EVIA. Базовый отчёт можно сохранить уже сейчас.</p>}
-        </div>
+            <span>{entry.question}</span></label>)}
+        </div>}
         <button type="button" className="report-builder-print" onClick={printReport}>Сохранить в PDF</button>
       </div>
     </div>
     <article className="report-document" aria-label="PDF-отчёт">
-      <header className="report-document-header"><span>EVIA · АНАЛИТИЧЕСКИЙ ОТЧЁТ</span><h1>{source.name}</h1><p>Подготовлено {reportDate}</p></header>
+      <header className="report-document-header"><div className="report-document-brand"><strong>EVIA</strong><span>Отчёт по данным</span></div>
+        <h1>{source.name}</h1><p>{source.source_type === "csv" ? "CSV" : "PostgreSQL"} · {reportDate}</p></header>
       <section className="report-section"><h2>Краткая сводка</h2>
         <div className="report-facts">
-          <div><span>Источник</span><strong>{source.source_type === "csv" ? "CSV" : "PostgreSQL"}</strong></div>
-          <div><span>Строк</span><strong>{rowCount === null ? "Неизвестно" : numberText(rowCount)}</strong></div>
-          <div><span>Столбцов</span><strong>{numberText(fields.length)}</strong></div>
-          <div><span>Версия схемы</span><strong>{schema.version}</strong></div>
+          <div><span>Строк</span><strong className="report-fact-value">{rowCount === null ? "—" : numberText(rowCount)}</strong></div>
+          <div><span>Столбцов</span><strong className="report-fact-value">{numberText(fields.length)}</strong></div>
+          <div><span>Поля с пропусками</span><strong className="report-fact-value">{affectedFields === null ? "—" : numberText(affectedFields)}</strong></div>
         </div>
-        <p>Снимок данных: {source.snapshot_id ?? "не указан"}. Выбранных выводов EVIA: {selected.length}.</p>
-        <p>Профиль качества: {profile?.coverage === "full" ? "Весь источник" : profile ? `Выборка из ${numberText(profile.sample_size)} строк` : "не загружен"}.</p>
         {selected.length > 0 && <div className="report-key-findings"><h3>Ключевые выводы</h3><ul>
           {selected.map((entry) => <li key={entry.id}><strong>{entry.question}</strong> — {shortConclusion(entry.answer?.answer ?? "")}</li>)}
         </ul></div>}
@@ -164,23 +173,21 @@ export function ReportBuilder({ source, schema, rows, profile, entries, onClose 
       <section className="report-section"><h2>Первые строки</h2>
         {rows.length ? <ReportTable columns={previewColumns}
           rows={rows.slice(0, 5).map((row) => previewColumns.map((name) => row[name]))}
-          caption={`Показаны первые ${Math.min(rows.length, 5)} строки предпросмотра`} /> : <p>В предпросмотре нет строк.</p>}
-        <p className="report-note">Предпросмотр не заменяет полный набор данных.</p>
+          caption={`Первые ${Math.min(rows.length, 5)} из ${rowCount === null ? "доступных" : numberText(rowCount)} строк`} /> : <p>Строк для просмотра нет.</p>}
       </section>
       <section className="report-section"><h2>Качество данных</h2>
-        {profile ? <><p>Охват: {profile.coverage === "full" ? "Весь источник" : `выборка из ${numberText(profile.sample_size)} строк`}.</p>
-          {problems.length ? <ul>{problems.map((problem) => <li key={problem}>{problem}</li>)}</ul>
-            : <p>В доступном профиле пропуски и пустые значения не обнаружены.</p>}
-          <p className="report-note">Проверены пропуски и пустые значения; корректность содержимого и бизнес-правила отдельно не подтверждались.</p></>
-          : <p>Профиль качества не загружен; делать вывод об отсутствии проблем нельзя.</p>}
-        {source.import_report && <div className="report-import"><h3>Импорт CSV</h3>
-          <p>Принято строк: {numberText(source.import_report.accepted_rows)}. Отклонено строк при импорте: {numberText(source.import_report.rejected_rows)}.</p>
+        {profile ? <>{profile.coverage === "sample" && <p className="report-scope-note">По выборке из {numberText(profile.sample_size)} строк.</p>}
+          {problems.length ? <ul className="report-quality-issues">{problems.map((problem) => <li key={problem}>{problem}</li>)}</ul>
+            : <p>Пропусков и пустых значений не найдено{profile.coverage === "sample" ? " в выборке" : ""}.</p>}</>
+          : <p>Данные о пропусках пока недоступны.</p>}
+        {source.import_report && (source.import_report.rejected_rows > 0 || source.import_report.warnings.length > 0) && <div className="report-import"><h3>Импорт CSV</h3>
+          {source.import_report.rejected_rows > 0 && <p>Отклонено строк при импорте: {numberText(source.import_report.rejected_rows)}.</p>}
           {source.import_report.warnings.length > 0 && <ul>{source.import_report.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>}
         </div>}
       </section>
       {pie && <section className="report-section"><h2>Распределение: {pie.field}</h2>
         <PieChart slices={pie.slices} label={`Круговая диаграмма по полю ${pie.field}`} />
-        <p className="report-note">Доли рассчитаны только по строкам предпросмотра ({numberText(rows.length)}), без пустых значений.</p></section>}
+        <p className="report-note">По первым {numberText(rows.length)} строкам, без пустых значений.</p></section>}
       {selected.length > 0 && <section className="report-section report-ai"><h2>Расчёты и выводы EVIA</h2>
         {selected.map((entry, index) => <div className="report-calculation" key={entry.id}>
           <h3>{index + 1}. {entry.question}</h3>

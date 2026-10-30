@@ -38,16 +38,35 @@ const calculation: Entry = { id: "answer-1", question: "Какая выручк�
     } }],
   } };
 
-it("builds a source report with schema, sample, quality scope and import issues", () => {
+it("shows useful source facts and issues without technical identifiers or duplicate status text", () => {
   render(<ReportBuilder source={source} schema={schema} rows={[{ month: "Янв", revenue: 120 }, { month: "Фев", revenue: null }]}
     profile={profile} entries={[calculation]} onClose={() => undefined} />);
   const report = screen.getByRole("article", { name: "PDF-отчёт" });
   expect(within(report).getByText("Продажи")).toBeInTheDocument();
   expect(within(report).getByText("Янв")).toBeInTheDocument();
   expect(within(report).getByText(/revenue: 1 пропуск/)).toBeInTheDocument();
-  expect(within(report).getAllByText(/Весь источник/).length).toBeGreaterThan(0);
+  expect(within(report).getByText("1", { selector: ".report-fact-value" })).toBeInTheDocument();
   expect(within(report).getByText(/Отклонено строк при импорте: 1/)).toBeInTheDocument();
+  expect(report).not.toHaveTextContent("snapshot-2");
+  expect(report).not.toHaveTextContent("Версия схемы");
+  expect(report).not.toHaveTextContent("Выбранных выводов EVIA");
+  expect(report).not.toHaveTextContent("Профиль качества: Весь источник");
+  expect(report).not.toHaveTextContent("Предпросмотр не заменяет полный набор данных");
+  expect(screen.getByRole("dialog", { name: "Составить PDF-отчёт" })).not.toHaveTextContent("Выберите выводы EVIA");
   expect(within(report).queryByText("Какая выручка?")).not.toBeInTheDocument();
+});
+
+it("labels sample-based quality findings without claiming the full source is clean", () => {
+  const sampled: Profile = { coverage: "sample", sample_size: 2, sample_limit: 500, note: "", columns: {
+    month: { sample_non_null_count: 2, sample_null_count: 0, distinct_sample_values: 2, top_values: [] },
+    revenue: { sample_non_null_count: 0, sample_null_count: 2, distinct_sample_values: 0, top_values: [] },
+  } };
+  render(<ReportBuilder source={source} schema={schema} rows={[]} profile={sampled} entries={[]} onClose={() => undefined} />);
+  const report = screen.getByRole("article", { name: "PDF-отчёт" });
+  expect(within(report).getByText(/2 пропуска/)).toBeInTheDocument();
+  expect(report).toHaveTextContent("По выборке из 2 строк");
+  expect(report).not.toHaveTextContent("Весь источник");
+  expect(screen.queryByText("Добавить ответы EVIA")).not.toBeInTheDocument();
 });
 
 it("adds selected AI calculations to the report and prints without private tool metadata", () => {

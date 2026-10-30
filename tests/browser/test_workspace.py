@@ -177,6 +177,22 @@ def test_profile_overview_drilldown_search_and_responsive_layout(server):
             expect(page.get_by_text('Заполненность источника', exact=True)).to_be_visible()
             expect(page.get_by_role('textbox', name='Ваш вопрос')).to_be_in_viewport()
             page.screenshot(path=str(artifacts / 'analytics-overview-desktop.png'), full_page=True)
+            page.set_viewport_size({'width': 1440, 'height': 600})
+            page.get_by_role('button', name='Собрать PDF-отчёт').click()
+            report = page.get_by_role('article', name='PDF-отчёт')
+            expect(report).not_to_contain_text('Снимок данных:')
+            expect(report).not_to_contain_text('Версия схемы')
+            panel = page.locator('.report-builder-panel')
+            initial_top = panel.bounding_box()['y']
+            page.locator('.report-builder').evaluate('(element) => { element.scrollTop = 300 }')
+            assert page.locator('.report-builder').evaluate('(element) => element.scrollTop') > 0
+            assert panel.bounding_box()['y'] < initial_top - 50
+            page.emulate_media(media='print')
+            expect(panel).to_be_hidden()
+            expect(report).to_be_visible()
+            page.emulate_media(media='screen')
+            page.get_by_role('button', name='Закрыть отчёт').click()
+            page.set_viewport_size({'width': 1440, 'height': 1000})
             for width in [1280, 1024, 768, 390]:
                 page.set_viewport_size({'width': width, 'height': 844})
                 assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), f'Overflow at {width}px'
