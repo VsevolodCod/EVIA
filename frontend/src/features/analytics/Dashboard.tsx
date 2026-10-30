@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import type { Profile, Row, SourceSchema } from "../../api";
+import type { Profile, Row, Source, SourceSchema } from "../../api";
+import type { Entry } from "../chat/types";
 import { hasExactStats, numberText, percentText } from "../sources/profileModel";
 import { buildDashboardModel, type ChartValue } from "./dashboardModel";
 import { defaultPalette, loadPalette, savePalette, seriesColor, type PalettePreference } from "./palette";
 import { PaletteEditor } from "./PaletteEditor";
 import { DataTable } from "../results/DataTable";
 import { serializeCsv } from "../results/csvExport";
+import { ReportBuilder } from "./ReportBuilder";
 import "./dashboard.css";
 import "./dashboardPrint.css";
 import "./dashboardControls.css";
@@ -80,6 +82,8 @@ export function Dashboard({
   context = "source",
   fullSourceRows,
   onOpenData,
+  source,
+  reportEntries = [],
 }: {
   title: string;
   sourceLabel: string;
@@ -90,10 +94,14 @@ export function Dashboard({
   context?: "source" | "result";
   fullSourceRows?: number | null;
   onOpenData?: () => void;
+  source?: Source;
+  reportEntries?: Entry[];
 }) {
   const model = useMemo(() => buildDashboardModel(schema, rows), [schema, rows]);
   const [showPalette, setShowPalette] = useState(false);
   const [showMobileExport, setShowMobileExport] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  useEffect(() => setReportOpen(false), [source?.source_id]);
   const fallbackPreference: PalettePreference = { colors: defaultPalette.colors, gradient: false };
   const [preference, setPreference] = useState<PalettePreference>(() => loadPalette(scope) ?? fallbackPreference);
   useEffect(() => setPreference(loadPalette(scope) ?? fallbackPreference), [scope]);
@@ -157,6 +165,10 @@ export function Dashboard({
   );
   const exportPdf = () => {
     setShowMobileExport(false);
+    if (context === "source" && source) {
+      setReportOpen(true);
+      return;
+    }
     const previousTitle = document.title;
     document.title = `EVIA — ${title}`;
     window.addEventListener("afterprint", () => { document.title = previousTitle; }, { once: true });
@@ -176,15 +188,17 @@ export function Dashboard({
   };
 
   return <div className="dashboard" data-testid="print-report" data-print-report="true" style={{ "--dashboard-primary": primary, "--dashboard-secondary": secondary } as React.CSSProperties}>
+    {reportOpen && source && <ReportBuilder source={source} schema={schema} rows={rows} profile={profile}
+      entries={reportEntries} onClose={() => setReportOpen(false)} />}
     <div className="dashboard-top">
       <div><h2>{title}</h2>{context === "result" && <p>{sourceLabel}</p>}</div>
-      <div className="dashboard-actions"><button onClick={exportCsv}>{context === "source" ? "Скачать предпросмотр" : "Скачать результат"}</button><button className="desktop-export" onClick={exportPdf}>Печать / PDF</button><button className="mobile-export-trigger" onClick={() => setShowMobileExport(true)}>Ещё</button></div>
+      <div className="dashboard-actions"><button onClick={exportCsv}>{context === "source" ? "Скачать предпросмотр" : "Скачать результат"}</button><button className="desktop-export" onClick={exportPdf}>{source ? "Собрать PDF-отчёт" : "Печать / PDF"}</button><button className="mobile-export-trigger" onClick={() => setShowMobileExport(true)}>Ещё</button></div>
     </div>
     {showMobileExport && <div className="mobile-export-backdrop" onClick={() => setShowMobileExport(false)}>
       <section className="mobile-export-sheet" aria-label="Экспорт результатов" onClick={(event) => event.stopPropagation()}>
         <div className="mobile-export-heading"><h2>Экспорт результатов</h2><button aria-label="Закрыть экспорт" onClick={() => setShowMobileExport(false)}>✕</button></div>
         <button className="mobile-export-option" onClick={exportCsv}><span>CSV</span><span><strong>Скачать CSV</strong><small>{context === "source" ? "Строки из предпросмотра" : "Строки результата"}</small></span><b>↓</b></button>
-        <button className="mobile-export-option" onClick={exportPdf}><span>PDF</span><span><strong>Печать / PDF</strong><small>Сохраните PDF в окне печати</small></span><b>↗</b></button>
+        <button className="mobile-export-option" onClick={exportPdf}><span>PDF</span><span><strong>{source ? "Собрать PDF-отчёт" : "Печать / PDF"}</strong><small>{source ? "Выберите выводы и сохраните файл" : "Сохраните PDF в окне печати"}</small></span><b>↗</b></button>
         <button className="mobile-export-option" onClick={() => { setShowMobileExport(false); setShowPalette(true); }}><span>●</span><span><strong>Цвета графиков</strong><small>Настроить палитру</small></span><b>↗</b></button>
       </section>
     </div>}

@@ -3,6 +3,7 @@ import type { Row } from "../../api";
 export type ChartColumn = { name: string; data_type?: string; is_identifier_candidate?: boolean };
 export type ChartPoint = { label: string; value: number | null };
 export type ResultChartData = { labelField: string; valueField: string; points: ChartPoint[] };
+export type PieSlice = { label: string; percent: number; value: number };
 
 const numericTypes = new Set(["integer", "number", "decimal", "numeric", "float", "double", "real", "bigint", "smallint"]);
 const identifierName = /(^|[^\p{L}\p{N}])(id|uuid|guid|code|key|код|номер|идентификатор)($|[^\p{L}\p{N}])/iu;
@@ -57,4 +58,33 @@ export function chartDomain(points: ChartPoint[]) {
   }
   if (minimum === maximum) maximum = 1;
   return { minimum, maximum };
+}
+
+export function pieChartData(points: ChartPoint[]): PieSlice[] | null {
+  // A negative value makes the meaning of a slice ambiguous. Missing values
+  // are omitted from the proportion, never silently treated as zero.
+  if (points.some((point) => point.value !== null && point.value < 0)) return null;
+  const positive = points.filter((point): point is { label: string; value: number } =>
+    point.value !== null && point.value > 0);
+  if (!positive.length) return null;
+  const maximum = Math.max(...positive.map((point) => point.value));
+  // Scaling first avoids overflowing the sum for very large finite values.
+  const grouped = new Map<string, { value: number; weight: number }>();
+  for (const point of positive) {
+    const previous = grouped.get(point.label) ?? { value: 0, weight: 0 };
+    grouped.set(point.label, {
+      value: previous.value + point.value,
+      weight: previous.weight + point.value / maximum,
+    });
+  }
+  const sorted = [...grouped].map(([label, value]) => ({ label, ...value }))
+    .sort((left, right) => right.weight - left.weight || left.label.localeCompare(right.label, "ru"));
+  const visible = sorted.length > 8
+    ? [...sorted.slice(0, 7), {
+      label: "Остальные", value: sorted.slice(7).reduce((total, slice) => total + slice.value, 0),
+      weight: sorted.slice(7).reduce((total, slice) => total + slice.weight, 0),
+    }]
+    : sorted;
+  const totalWeight = sorted.reduce((total, slice) => total + slice.weight, 0);
+  return visible.map(({ label, value, weight }) => ({ label, value, percent: weight / totalWeight * 100 }));
 }

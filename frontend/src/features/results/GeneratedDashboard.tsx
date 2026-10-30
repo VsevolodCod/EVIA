@@ -2,16 +2,18 @@ import { useEffect, useId, useState } from "react";
 import type { ToolResult } from "../../api";
 import { PaletteEditor } from "../analytics/PaletteEditor";
 import { DataTable } from "./DataTable";
+import { PieChart } from "./ResultVisualization";
+import { pieChartData } from "./resultChartModel";
 import { defaultPalette, loadPalette, savePalette, validatePalette, type PalettePreference } from "../analytics/palette";
 import "../analytics/dashboard.css";
 import "../analytics/dashboardPrint.css";
 import "./generatedDashboard.css";
 
-type ChartType = "kpi" | "line" | "bar" | "scatter" | "table";
+type ChartType = "kpi" | "line" | "bar" | "pie" | "scatter" | "table";
 type Card = { id: string; type: ChartType; title: string; status: "success" | "error"; definition?: unknown; data?: unknown; error?: { code?: string; message?: string } };
 export type Dashboard = { version: 1; title: string; palette?: string[] | null; cards: Card[] };
 type Point = { x: string | number | null; y: string | number | null; series?: string | number | null };
-const chartTypes: ChartType[] = ["kpi", "line", "bar", "scatter", "table"];
+const chartTypes: ChartType[] = ["kpi", "line", "bar", "pie", "scatter", "table"];
 
 function object(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -165,7 +167,7 @@ function calculationPassport(card: Card): { source: string; formula: string; per
     formula,
     period: filters.length ? "Применены фильтры" : "Весь источник без фильтров",
     filters,
-    grouping: (definition.type === "line" || definition.type === "bar") && x && typeof x.field === "string"
+    grouping: (definition.type === "line" || definition.type === "bar" || definition.type === "pie") && x && typeof x.field === "string"
       ? `${typeof x.time_grain === "string" ? grains[x.time_grain] ?? x.time_grain : "По исходным значениям"}: ${x.field}`
       : undefined,
     snapshot: object(provenance) && typeof provenance.snapshot_id === "string" ? provenance.snapshot_id : undefined,
@@ -270,6 +272,18 @@ function ResultBar({ card, colors }: { card: Card; colors: string[] }) {
   </>;
 }
 
+function ResultPie({ card }: { card: Card }) {
+  const chart = lineData(card.data);
+  if (!chart || !chart.points.length) return <p className="generated-empty">Нет категорий для круговой диаграммы.</p>;
+  if (object(card.data) && card.data.limit_reached === true)
+    return <p className="generated-empty">Доли не показаны: результат ограничен и не включает все категории.</p>;
+  const slices = pieChartData(chart.points.map((point) => ({ label: String(point.x ?? "Нет подписи"), value: numeric(point.y) })));
+  if (!slices) return <p className="generated-empty">Для круговой диаграммы нужны положительные значения без отрицательных долей.</p>;
+  return <><PieChart slices={slices} label={`${card.title}: доли ${chart.yLabel} по ${chart.xLabel}`} />
+    {chart.points.some((point) => numeric(point.y) === 0) && <p className="generated-limit-note">Нулевые категории не образуют сектор.</p>}
+    <div className="generated-axis-label">{chart.xLabel} · {chart.yLabel}</div></>;
+}
+
 function ResultScatter({ card, color }: { card: Card; color: string }) {
   const chart = lineData(card.data);
   const xFormat = axisFormat(card, "x");
@@ -314,14 +328,14 @@ function ResultTable({ card }: { card: Card }) {
   </>;
 }
 
-function GeneratedCard({ card, preference }: { card: Card; preference: PalettePreference }) {
+function GeneratedCard({ card, preference, expandPassport = false }: { card: Card; preference: PalettePreference; expandPassport?: boolean }) {
   const [view, setView] = useState<"line" | "bar">(card.type === "line" ? "line" : "bar");
   useEffect(() => setView(card.type === "line" ? "line" : "bar"), [card.id, card.type]);
   const grouped = card.status === "success" && (card.type === "line" || card.type === "bar");
   const activeType = grouped ? view : card.type;
   const passport = card.status === "success" ? calculationPassport(card) : null;
   return <section className={`dashboard-card generated-card generated-${activeType}-card`}>
-    <div className="chart-heading"><h3>{card.title}</h3>{card.status === "success" && <small>{({ kpi: "Показатель", line: "Динамика", bar: "Сравнение", scatter: "Связь", table: "Таблица" } as const)[activeType]}</small>}</div>
+    <div className="chart-heading"><h3>{card.title}</h3>{card.status === "success" && <small>{({ kpi: "Показатель", line: "Динамика", bar: "Сравнение", pie: "Доли", scatter: "Связь", table: "Таблица" } as const)[activeType]}</small>}</div>
     {grouped && <div className="generated-view-switch" role="group" aria-label={`Вид графика «${card.title}»`}
       title="Линия и столбцы показывают те же вычисленные группы. Точки и таблица требуют нового расчёта исходных строк.">
       <button type="button" aria-pressed={view === "line"} onClick={() => setView("line")}>Линия</button>
@@ -332,9 +346,10 @@ function GeneratedCard({ card, preference }: { card: Card; preference: PalettePr
           card.data.format ?? (object(card.definition) ? card.definition.format : null))}</strong>
         : activeType === "line" ? <ResultLine card={card} colors={preference.colors} gradient={preference.gradient} />
           : activeType === "bar" ? <ResultBar card={card} colors={preference.colors} />
+            : activeType === "pie" ? <ResultPie card={card} />
             : activeType === "scatter" ? <ResultScatter card={card} color={preference.colors[0]} />
               : activeType === "table" ? <ResultTable card={card} /> : null}
-    {passport && <details className="generated-passport">
+    {passport && <details className="generated-passport" open={expandPassport || undefined}>
       <summary>Паспорт расчёта</summary>
       <dl><div><dt>Формула</dt><dd>{passport.formula}</dd></div><div><dt>Источник</dt><dd>{passport.source}</dd></div><div><dt>Период</dt><dd>{passport.period}</dd></div>
         {passport.filters.length > 0 && <div><dt>Фильтры</dt><dd>{passport.filters.join("; ")}</dd></div>}
@@ -346,7 +361,7 @@ function GeneratedCard({ card, preference }: { card: Card; preference: PalettePr
   </section>;
 }
 
-export function GeneratedDashboard({ dashboard, scope, sourceLabel }: { dashboard: Dashboard; scope: string; sourceLabel?: string }) {
+export function GeneratedDashboard({ dashboard, scope, sourceLabel, expandPassports = false }: { dashboard: Dashboard; scope: string; sourceLabel?: string; expandPassports?: boolean }) {
   const [showPalette, setShowPalette] = useState(false);
   const supplied = (() => { try { return dashboard.palette ? validatePalette(dashboard.palette) : defaultPalette.colors; } catch { return defaultPalette.colors; } })();
   const [preference, setPreference] = useState<PalettePreference>(() => loadPalette(scope) ?? { colors: supplied, gradient: false });
@@ -368,7 +383,7 @@ export function GeneratedDashboard({ dashboard, scope, sourceLabel }: { dashboar
     </div>
     {showPalette && <PaletteEditor colors={preference.colors} gradient={preference.gradient} onChange={changePalette} onClose={() => setShowPalette(false)} />}
     <div className="generated-grid">
-      {dashboard.cards.map((card) => <GeneratedCard key={card.id} card={card} preference={preference} />)}
+      {dashboard.cards.map((card) => <GeneratedCard key={card.id} card={card} preference={preference} expandPassport={expandPassports} />)}
     </div>
   </div>;
 }

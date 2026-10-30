@@ -16,11 +16,14 @@ from app.charts.errors import (
 )
 from app.charts.implementations.kpi import KPIImplementation
 from app.charts.implementations.line import LineImplementation
+from app.charts.implementations.pie import PieImplementation
+from app.charts.errors import ChartExecutionError
 from app.charts.models import (
-    DashboardFilter,
+    DashboardFilter, PieCard,
     DashboardSpec,
     FieldRef, ChartModel, KPICard, LineCard,
 )
+from app.tools.charts import _get_chart_models
 from app.charts.query_planner import QueryPlanner
 from app.models import (
     DataSource,
@@ -185,6 +188,33 @@ def planner(catalog):
 # ---------------------------------------------------------------------
 # 1. Модели и валидация спецификации
 # ---------------------------------------------------------------------
+
+def test_pie_chart_is_discoverable_and_uses_complete_nonnegative_groups(sources, planner):
+    assert _get_chart_models()["pie"] is PieCard
+    card = PieCard.model_validate({
+        "type": "pie", "title": "Доли выручки", "limit": 5,
+        "x": {"source_id": "sales", "field": "category", "type": "category"},
+        "y": {"source_id": "sales", "field": "revenue", "aggregate": "sum"},
+    })
+    result = PieImplementation(sources, planner).execute(card, [])
+    assert result["points"] == [{"x": "A", "y": 300}, {"x": "B", "y": 150}]
+    assert result["limit_reached"] is False
+    assert sources.queries[-1][2] == 6
+
+
+def test_pie_chart_rejects_partial_or_negative_proportions(sources, planner):
+    base = {
+        "type": "pie", "title": "Доли выручки",
+        "x": {"source_id": "sales", "field": "category"},
+        "y": {"source_id": "sales", "field": "revenue", "aggregate": "sum"},
+    }
+    with pytest.raises(ChartExecutionError, match="more categories"):
+        PieImplementation(sources, planner).execute(PieCard.model_validate({**base, "limit": 1}), [])
+    sources.connection.execute("UPDATE source SET revenue = -1000 WHERE category = 'A'")
+    with pytest.raises(ChartExecutionError, match="nonnegative"):
+        PieImplementation(sources, planner).execute(PieCard.model_validate(base), [])
+    with pytest.raises(ValidationError, match="categorical axis"):
+        PieCard.model_validate({**base, "x": {"source_id": "sales", "field": "revenue", "type": "number"}})
 
 def test_dashboard_spec_accepts_kpi_and_line():
     spec = DashboardSpec.model_validate(

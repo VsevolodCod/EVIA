@@ -1,11 +1,35 @@
 import { useMemo, useState } from "react";
 import type { Row } from "../../api";
 import { DataTable } from "./DataTable";
-import { chartDomain, chartFields, resultChartData, type ChartColumn, type ResultChartData } from "./resultChartModel";
+import { chartDomain, chartFields, pieChartData, resultChartData, type ChartColumn, type ResultChartData, type PieSlice } from "./resultChartModel";
 import "./resultVisualization.css";
 
-type View = "table" | "bar" | "line";
+type View = "table" | "bar" | "line" | "pie";
 const PAGE_SIZE = 50;
+const pieColors = ["#087c57", "#3aa984", "#70c5a6", "#b0ddc8", "#e8ae55", "#d87a6b", "#7a93cf", "#9d82ba"];
+
+export function PieChart({ slices, label }: { slices: PieSlice[]; label: string }) {
+  const circumference = 2 * Math.PI * 82;
+  let offset = 0;
+  return <div className="result-pie" role="img" aria-label={label}>
+    <svg viewBox="0 0 220 220" aria-hidden="true">
+      <circle cx="110" cy="110" r="82" fill="none" stroke="#e9f0eb" strokeWidth="34" />
+      {slices.map((slice, index) => {
+        const start = offset;
+        offset += slice.percent / 100;
+        return <circle key={`${slice.label}-${index}`} cx="110" cy="110" r="82" fill="none"
+          stroke={pieColors[index]} strokeWidth="34" transform="rotate(-90 110 110)"
+          strokeDasharray={`${slice.percent / 100 * circumference} ${circumference}`}
+          strokeDashoffset={-start * circumference}>
+          <title>{`${slice.label}: ${slice.percent.toLocaleString("ru-RU", { maximumFractionDigits: 1 })}%`}</title>
+        </circle>;
+      })}
+    </svg>
+    <ul className="result-pie-legend">{slices.map((slice, index) =>
+      <li key={`${slice.label}-${index}`}><i style={{ backgroundColor: pieColors[index] }} />
+        <span>{slice.label}: {slice.percent.toLocaleString("ru-RU", { maximumFractionDigits: 1 })}%</span></li>)}</ul>
+  </div>;
+}
 
 function ResultChart({ data, type }: { data: ResultChartData; type: "bar" | "line" }) {
   const [position, setPosition] = useState({ data, page: 0 });
@@ -68,11 +92,12 @@ function ResultChart({ data, type }: { data: ResultChartData; type: "bar" | "lin
   </div>;
 }
 
-export function ResultVisualization({ rows, label, copyableIdentifierColumns, columns }: {
+export function ResultVisualization({ rows, label, copyableIdentifierColumns, columns, truncated = false }: {
   rows: Row[];
   label: string;
   copyableIdentifierColumns?: readonly string[];
   columns?: readonly ChartColumn[];
+  truncated?: boolean;
 }) {
   const { fields, measures } = useMemo(() => chartFields(rows, columns, copyableIdentifierColumns), [rows, columns, copyableIdentifierColumns]);
   const [selectedMeasure, setMeasure] = useState("");
@@ -81,7 +106,9 @@ export function ResultVisualization({ rows, label, copyableIdentifierColumns, co
   const labelFields = fields.filter(field => field !== valueField);
   const labelField = labelFields.includes(selectedLabel) ? selectedLabel : labelFields.find(field => !measures.includes(field)) ?? labelFields[0] ?? "";
   const data = useMemo(() => valueField && labelField ? resultChartData(rows, valueField, labelField) : null, [rows, valueField, labelField]);
+  const pie = useMemo(() => data ? pieChartData(data.points) : null, [data]);
   const [view, setView] = useState<View>("table");
+  const selectedView = view === "pie" && !pie ? "table" : view;
   return <div className="result-visualization">
     {measures.length > 0 && fields.length > 1 && <div className="result-chart-fields">
       <label>Показатель<select value={valueField} onChange={event => setMeasure(event.target.value)}>
@@ -93,10 +120,16 @@ export function ResultVisualization({ rows, label, copyableIdentifierColumns, co
       </select></label>
     </div>}
     {data ? <nav className="result-view-toggle" aria-label="Представление результата">
-      <button aria-pressed={view === "table"} onClick={() => setView("table")}>Таблица</button>
-      <button aria-pressed={view === "bar"} onClick={() => setView("bar")}>Столбцы</button>
-      <button aria-pressed={view === "line"} onClick={() => setView("line")}>Линия</button>
+      <button type="button" aria-pressed={selectedView === "table"} onClick={() => setView("table")}>Таблица</button>
+      <button type="button" aria-pressed={selectedView === "bar"} onClick={() => setView("bar")}>Столбцы</button>
+      <button type="button" aria-pressed={selectedView === "line"} onClick={() => setView("line")}>Линия</button>
+      {pie && <button type="button" aria-pressed={selectedView === "pie"} onClick={() => setView("pie")}>Круговая</button>}
     </nav> : <p className="result-visualization-note">{measures.length > 1 ? "Выберите показатель для графика. Идентификаторы используются только для подписей." : "Для графика нужен числовой показатель и поле для подписей."}</p>}
-    {view === "table" || !data ? <DataTable rows={rows} label={label} copyableIdentifierColumns={copyableIdentifierColumns} /> : <ResultChart key={`${valueField}\u0000${labelField}`} data={data} type={view} />}
+    {selectedView === "table" || !data ? <DataTable rows={rows} label={label} copyableIdentifierColumns={copyableIdentifierColumns} />
+      : selectedView === "pie" && pie ? <><PieChart slices={pie} label={`Круговая диаграмма: ${valueField} по ${labelField}`} />
+        {truncated && <p className="result-visualization-note">Доли рассчитаны только по возвращённым строкам. Результат усечён сервером.</p>}
+        {data.points.some((point) => point.value === 0) && <p className="result-visualization-note">Нулевые категории не образуют сектор и не показаны на круговой диаграмме.</p>}
+        {data.points.some((point) => point.value === null) && <p className="result-visualization-note">Пустые и нечисловые значения не включены в доли.</p>}</>
+      : <ResultChart key={`${valueField}\u0000${labelField}`} data={data} type={selectedView === "line" ? "line" : "bar"} />}
   </div>;
 }

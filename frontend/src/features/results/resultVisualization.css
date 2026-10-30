@@ -15,6 +15,11 @@
 .result-chart-pages button { padding: 8px; border: 1px solid var(--line); border-radius: 7px; font: inherit; }
 .result-chart-pages button:disabled { opacity: .5; }
 .result-chart rect:focus, .result-chart circle:focus { outline: 2px solid #104b35; outline-offset: 2px; }
+.result-pie { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+.result-pie svg { width: min(220px, 48%); height: auto; flex: 0 0 auto; }
+.result-pie-legend { display: grid; gap: 8px; min-width: 150px; flex: 1; margin: 0; padding: 0; list-style: none; font-size: 12px; }
+.result-pie-legend li { display: flex; align-items: center; gap: 8px; overflow-wrap: anywhere; }
+.result-pie-legend i { width: 10px; height: 10px; flex: 0 0 10px; border-radius: 3px; }
 .result-chart .result-zero-line { stroke: #718178; }
 
 .result-view-toggle {

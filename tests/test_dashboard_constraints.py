@@ -39,7 +39,7 @@ class ToolDashboardLLM:
                 ref = lambda field: {'source_id': self.source_id, 'field': field}
                 if card['type'] == 'kpi':
                     definition.update(field=ref(card['field']), aggregate=card['aggregate'])
-                elif card['type'] in {'line', 'bar'}:
+                elif card['type'] in {'line', 'bar', 'pie'}:
                     definition.update(x={**ref(card['x']),
                         'type': 'temporal' if card.get('time_grain') else 'category',
                         'time_grain': card.get('time_grain')},
@@ -216,6 +216,9 @@ def test_build_tool_persists_extra_filters_and_rebuild_does_not_broaden_scope(tm
 @pytest.mark.parametrize("kind,csv,card,expected", [
     ("bar", "category,amount\nA,10\nA,20\nB,5\n",
      {"type": "bar", "title": "По категории", "x": "category", "y": "amount", "aggregate": "sum"},
+     [{"x": "A", "y": 30}, {"x": "B", "y": 5}]),
+    ("pie", "category,amount\nA,10\nA,20\nB,5\n",
+     {"type": "pie", "title": "Доли по категории", "x": "category", "y": "amount", "aggregate": "sum"},
      [{"x": "A", "y": 30}, {"x": "B", "y": 5}]),
     ("scatter", "revenue,cost\n10,5\n10,5\n20,8\n",
      {"type": "scatter", "title": "Связь показателей", "x": "revenue", "y": "cost"},

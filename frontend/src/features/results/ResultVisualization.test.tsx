@@ -3,6 +3,38 @@ import userEvent from "@testing-library/user-event";
 import { ResultVisualization } from "./ResultVisualization";
 import { ToolResults } from "./ToolResults";
 
+it("shows a separate pie chart with grouped categories and percentages", () => {
+  render(<ResultVisualization rows={[{ category: "A", amount: 2 }, { category: "A", amount: 1 },
+    { category: "B", amount: 3 }]} label="Результат" />);
+  fireEvent.click(screen.getByRole("button", { name: "Круговая" }));
+  const chart = screen.getByRole("img", { name: /Круговая диаграмма: amount по category/ });
+  expect(chart).toBeInTheDocument();
+  expect(screen.getAllByText(/A.*50%/).length).toBeGreaterThan(0);
+  expect(screen.getAllByText(/B.*50%/).length).toBeGreaterThan(0);
+});
+
+it("does not offer a pie chart for negative or zero-only values", () => {
+  const { rerender } = render(<ResultVisualization rows={[{ category: "A", amount: -1 },
+    { category: "B", amount: 2 }]} label="Результат" />);
+  expect(screen.queryByRole("button", { name: "Круговая" })).not.toBeInTheDocument();
+  rerender(<ResultVisualization rows={[{ category: "A", amount: 0 }, { category: "B", amount: 0 }]} label="Результат" />);
+  expect(screen.queryByRole("button", { name: "Круговая" })).not.toBeInTheDocument();
+});
+
+it("labels pie shares from a truncated server result as partial", () => {
+  render(<ResultVisualization rows={[{ category: "A", amount: 1 }, { category: "B", amount: 1 }]}
+    label="Результат" truncated />);
+  fireEvent.click(screen.getByRole("button", { name: "Круговая" }));
+  expect(screen.getByText(/Доли рассчитаны только по возвращённым строкам/)).toBeInTheDocument();
+});
+
+it("explains why a zero-valued category has no pie slice", () => {
+  render(<ResultVisualization rows={[{ category: "A", amount: 5 }, { category: "B", amount: 0 }]}
+    label="Результат" />);
+  fireEvent.click(screen.getByRole("button", { name: "Круговая" }));
+  expect(screen.getByText(/Нулевые категории не образуют сектор/)).toBeInTheDocument();
+});
+
 it("keeps all thirteen categories when switching between table, bars and line", () => {
   const rows = Array.from({ length: 13 }, (_, i) => ({ category: `Категория ${i + 1}`, amount: i + 1 }));
   render(<ResultVisualization rows={rows} label="Результат" />);
