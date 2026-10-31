@@ -131,12 +131,12 @@ class ToolRegistry:
                 ok=False,
                 error=exc.code,
             )
-        except Exception:
+        except Exception as exc:
             # Driver exceptions and validation messages can contain DSNs,
             # credentials, file paths or raw source values. Tool results are
             # also sent back to the model, so never echo exception text here.
             return ToolResult(
                 tool_name=name,
                 ok=False,
-                error="TOOL_EXECUTION_FAILED",
+                error=f"TOOL_EXECUTION_FAILED: {exc}",
             )
