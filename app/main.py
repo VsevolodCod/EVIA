@@ -33,7 +33,7 @@ from app.models import AnalysisPayload, AskRequest, AskResponse, ChatMessage, Da
     ChatHistoryResponse
 from app.retry_agent import LLMRetryPolicy
 from app.schema_catalog import SchemaCatalog
-from app.source_service import SourceService
+from app.source_service import SourceDeletionStorageError, SourceService
 from app.tools import build_tool_registry
 from app.core.logging import current_request_id, request_logging_middleware, setup_logging
 from app.chat_manager import ChatManager, ChatNotFoundError, ChatSourceConflictError
@@ -242,6 +242,25 @@ async def upload_csv(
 @app.get("/sources", response_model=list[DataSource])
 def list_sources():
     return source_service.list_sources()
+
+
+@app.delete("/sources/{source_id}")
+def delete_csv_source(source_id: str):
+    try:
+        source_service.delete_csv(source_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Source not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Cannot delete this source") from exc
+    except SourceDeletionStorageError as exc:
+        raise HTTPException(
+            status_code=507,
+            detail=(
+                "Не хватило места для очистки CSV и освобождения диска. "
+                "Увеличьте хранилище и повторите удаление CSV."
+            ),
+        ) from exc
+    return {"success": True}
 
 
 @app.get("/sources/{source_id}/versions", response_model=list[CSVVersion])

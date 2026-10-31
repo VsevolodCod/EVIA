@@ -115,6 +115,24 @@ async function select(id: string) {
     await screen.findByRole("button", { name: `Источник ${id}` }),
   );
 }
+
+test("deletes a selected CSV only after confirmation", async () => {
+  setup();
+  const original = vi.mocked(fetch).getMockImplementation()!;
+  vi.mocked(fetch).mockImplementation((url, init) => {
+    if (url === "/sources/A" && init?.method === "DELETE") return Promise.resolve(Response.json({ success: true }));
+    return original(url, init);
+  });
+  const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
+  render(<App />);
+  await select("A");
+  fireEvent.click(await screen.findByRole("button", { name: "Удалить CSV" }));
+  expect(vi.mocked(fetch).mock.calls.some(([url, init]) => url === "/sources/A" && init?.method === "DELETE")).toBe(false);
+  fireEvent.click(screen.getByRole("button", { name: "Удалить CSV" }));
+  await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url, init]) => url === "/sources/A" && init?.method === "DELETE")).toBe(true));
+  expect(confirm).toHaveBeenCalledTimes(2);
+  await waitFor(() => expect(screen.queryByRole("button", { name: "Источник A" })).not.toBeInTheDocument());
+});
 async function ask(question: string) {
   const previousCalls = vi.mocked(fetch).mock.calls.filter(([url]) => String(url).startsWith("/agent/chat?")).length;
   fireEvent.change(screen.getByRole("textbox", { name: "Ваш вопрос" }), {

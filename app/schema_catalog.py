@@ -69,6 +69,8 @@ class SchemaCatalog:
             if record is not None and owner_id() is not None and record.owner_id != owner_id():
                 raise KeyError(source.source_id)
             current_snapshot = DataSource.model_validate_json(record.payload).snapshot_id if record else None
+            if record is not None and DataSource.model_validate_json(record.payload).status == "deleting":
+                raise CatalogConflictError("CSV source is being deleted")
             if current_snapshot != expected_snapshot_id:
                 raise CatalogConflictError("CSV source changed during import")
             if record is None:
@@ -89,7 +91,7 @@ class SchemaCatalog:
                 schema_record.version = schema.version
                 schema_record.payload = schema.model_dump_json()
 
-    def get_source(self, source_id: str) -> DataSource | None:
+    def get_source(self, source_id: str, *, include_deleting: bool = False) -> DataSource | None:
         with self.session_factory() as session:
             record = session.get(DataSourceORM, source_id)
 
@@ -98,7 +100,8 @@ class SchemaCatalog:
 
             payload = record.payload
 
-        return DataSource.model_validate_json(payload)
+        source = DataSource.model_validate_json(payload)
+        return source if include_deleting or source.status != "deleting" else None
 
     def list_sources(self) -> list[DataSource]:
         with self.session_factory() as session:
@@ -113,6 +116,37 @@ class SchemaCatalog:
             DataSource.model_validate_json(payload)
             for payload in payloads
         ]
+
+    def delete_source(self, source_id: str, expected_snapshot_id: str | None) -> None:
+        with self.session_factory.begin() as session:
+            record = session.get(DataSourceORM, source_id)
+            if record is None or (owner_id() is not None and record.owner_id != owner_id()):
+                raise KeyError(source_id)
+            if DataSource.model_validate_json(record.payload).snapshot_id != expected_snapshot_id:
+                raise CatalogConflictError("CSV source changed during deletion")
+            schema = session.get(SourceSchemaORM, source_id)
+            if schema is not None:
+                session.delete(schema)
+            session.delete(record)
+
+    def begin_source_delete(self, source_id: str) -> DataSource:
+        with self.session_factory.begin() as session:
+            record = session.get(DataSourceORM, source_id)
+            if record is None or (owner_id() is not None and record.owner_id != owner_id()):
+                raise KeyError(source_id)
+            source = DataSource.model_validate_json(record.payload)
+            if source.source_type != "csv":
+                raise ValueError("Only uploaded CSV sources can be deleted")
+            if source.status != "deleting":
+                source.status = "deleting"
+                changed = session.execute(
+                    update(DataSourceORM)
+                    .where(DataSourceORM.source_id == source_id, DataSourceORM.payload == record.payload)
+                    .values(payload=source.model_dump_json())
+                )
+                if changed.rowcount != 1:
+                    raise CatalogConflictError("CSV source changed during deletion")
+            return source
 
     def save_schema(self, schema: SourceSchema) -> None:
         if owner_id() is not None and self.get_source(schema.source_id) is None:
