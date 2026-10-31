@@ -114,6 +114,18 @@ class SchemaCatalog:
             for payload in payloads
         ]
 
+    def delete_source(self, source_id: str, expected_snapshot_id: str | None) -> None:
+        with self.session_factory.begin() as session:
+            record = session.get(DataSourceORM, source_id)
+            if record is None or (owner_id() is not None and record.owner_id != owner_id()):
+                raise KeyError(source_id)
+            if DataSource.model_validate_json(record.payload).snapshot_id != expected_snapshot_id:
+                raise CatalogConflictError("CSV source changed during deletion")
+            schema = session.get(SourceSchemaORM, source_id)
+            if schema is not None:
+                session.delete(schema)
+            session.delete(record)
+
     def save_schema(self, schema: SourceSchema) -> None:
         if owner_id() is not None and self.get_source(schema.source_id) is None:
             raise KeyError(schema.source_id)

@@ -244,6 +244,17 @@ def list_sources():
     return source_service.list_sources()
 
 
+@app.delete("/sources/{source_id}")
+def delete_csv_source(source_id: str):
+    try:
+        source_service.delete_csv(source_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Source not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Cannot delete this source") from exc
+    return {"success": True}
+
+
 @app.get("/sources/{source_id}/versions", response_model=list[CSVVersion])
 def list_csv_versions(source_id: str):
     try:

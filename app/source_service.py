@@ -4,7 +4,9 @@ import io
 import logging
 import sqlite3
 import uuid
+from functools import wraps
 from pathlib import Path
+from threading import Condition
 from typing import Any, BinaryIO
 
 from pydantic import ValidationError
@@ -26,6 +28,43 @@ from app.safe_sql import SafeQueryExecutor
 from app.schema_catalog import CatalogConflictError, SchemaCatalog
 
 logger = logging.getLogger(__name__)
+_SOURCE_MUTATION = Condition()
+_ACTIVE_IMPORTS = 0
+_DELETE_ACTIVE = False
+
+
+def _serialize_source_mutation(method):
+    @wraps(method)
+    def guarded(*args, **kwargs):
+        global _DELETE_ACTIVE
+        with _SOURCE_MUTATION:
+            while _DELETE_ACTIVE or _ACTIVE_IMPORTS:
+                _SOURCE_MUTATION.wait()
+            _DELETE_ACTIVE = True
+        try:
+            return method(*args, **kwargs)
+        finally:
+            with _SOURCE_MUTATION:
+                _DELETE_ACTIVE = False
+                _SOURCE_MUTATION.notify_all()
+    return guarded
+
+
+def _guard_source_import(method):
+    @wraps(method)
+    def guarded(*args, **kwargs):
+        global _ACTIVE_IMPORTS
+        with _SOURCE_MUTATION:
+            while _DELETE_ACTIVE:
+                _SOURCE_MUTATION.wait()
+            _ACTIVE_IMPORTS += 1
+        try:
+            return method(*args, **kwargs)
+        finally:
+            with _SOURCE_MUTATION:
+                _ACTIVE_IMPORTS -= 1
+                _SOURCE_MUTATION.notify_all()
+    return guarded
 
 
 def _storage_full(error: Exception) -> bool:
@@ -94,6 +133,7 @@ class SourceService:
     ) -> DataSource:
         return self.register_csv_stream(filename, io.BytesIO(content), name=name, source_id=source_id)
 
+    @_guard_source_import
     def register_csv_stream(
         self,
         filename: str,
@@ -191,6 +231,34 @@ class SourceService:
             raise
 
         return source
+
+    @_serialize_source_mutation
+    def delete_csv(self, source_id: str) -> None:
+        source = self.catalog.get_source(source_id)
+        if source is None:
+            raise KeyError(source_id)
+        if source.source_type != "csv":
+            raise ValueError("Only uploaded CSV sources can be deleted")
+
+        versions = source.csv_versions or []
+        snapshots = {version.snapshot_id for version in versions}
+        if source.snapshot_id:
+            snapshots.add(source.snapshot_id)
+        filenames = {name for version in versions for name in
+                     (version.raw_filename, version.normalized_filename) if name}
+        if not versions:
+            filenames.add(f"{source_id}.csv")
+        paths = []
+        for name in filenames:
+            path = (self.data_dir / name).resolve()
+            if path.parent != self.data_dir or not name.startswith(f"{source_id}."):
+                raise ValueError("Invalid source artifact path")
+            paths.append(path)
+        for snapshot in snapshots or {None}:
+            self.data_engine.discard(source.model_copy(update={"snapshot_id": snapshot}))
+        for path in paths:
+            path.unlink(missing_ok=True)
+        self.catalog.delete_source(source_id, source.snapshot_id)
 
     def list_csv_versions(self, source_id: str) -> list[CSVVersion]:
         source = self.catalog.get_source(source_id)

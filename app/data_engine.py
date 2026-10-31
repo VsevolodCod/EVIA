@@ -155,6 +155,7 @@ class DuckDBDataEngine:
             connection.execute(
                 f"DROP TABLE IF EXISTS {self._quote_identifier(self.table_name(source))}"
             )
+            connection.execute("CHECKPOINT")
 
     def has_table(self, source: DataSource) -> bool:
         with self._connect() as connection:

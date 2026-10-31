@@ -475,6 +475,8 @@ export const api = {
     request("/health", healthSchema, { signal }),
   sources: (signal?: AbortSignal) =>
     request("/sources", z.array(sourceSchema), { signal }),
+  deleteSource: (id: string) =>
+    request(path(id), z.object({ success: z.literal(true) }), { method: "DELETE" }),
   postgresStatus: (signal?: AbortSignal) =>
     request("/sources/postgresql/status", postgresStatusSchema, { signal }),
   schema: async (id: string, signal?: AbortSignal) => {
