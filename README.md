@@ -146,6 +146,16 @@ LLM_PROVIDER=mock python scripts/run.py
 
 Пример находится в [`.env.example`](.env.example); серверные ключи и пароли храните только в секретах окружения. Для Railway проверьте постоянный volume и настройки БД аккаунтов; см. [настройку аккаунтов](docs/ACCOUNT_SETUP.md) и [Dockerfile](Dockerfile).
 
+Например, при подключении volume к `/data` задайте серверу постоянные пути:
+
+```dotenv
+BI_DATA_DIR=/data
+CATALOG_DB_PATH=/data/catalog.db
+CHAT_DB_PATH=/data/chats.db
+```
+
+После развёртывания проверьте `/health`. Этот endpoint показывает состояние приложения, но сам по себе не проверяет качество модели или доставку писем.
+
 ## Проверки
 
 ```bash

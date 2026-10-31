@@ -146,6 +146,16 @@ Open `http://127.0.0.1:8000`; API documentation is at `/docs`. This is a local d
 
 See [`.env.example`](.env.example). Store server keys and passwords only in environment secrets. On Railway configure persistent storage and the account database; see [account setup](docs/ACCOUNT_SETUP.md) and the [Dockerfile](Dockerfile).
 
+For example, when a volume is mounted at `/data`, configure persistent server paths:
+
+```dotenv
+BI_DATA_DIR=/data
+CATALOG_DB_PATH=/data/catalog.db
+CHAT_DB_PATH=/data/chats.db
+```
+
+After deployment check `/health`. This endpoint reports application health; it does not establish model quality or email delivery.
+
 ## Testing
 
 ```bash
