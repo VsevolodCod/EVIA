@@ -28,6 +28,12 @@ from app.safe_sql import SafeQueryExecutor
 from app.schema_catalog import CatalogConflictError, SchemaCatalog
 
 logger = logging.getLogger(__name__)
+
+
+class SourceDeletionStorageError(RuntimeError):
+    """Raised when disk space prevents reclaiming deleted source storage."""
+
+
 _SOURCE_MUTATION = Condition()
 _ACTIVE_IMPORTS = 0
 _DELETE_ACTIVE = False
@@ -234,11 +240,7 @@ class SourceService:
 
     @_serialize_source_mutation
     def delete_csv(self, source_id: str) -> None:
-        source = self.catalog.get_source(source_id)
-        if source is None:
-            raise KeyError(source_id)
-        if source.source_type != "csv":
-            raise ValueError("Only uploaded CSV sources can be deleted")
+        source = self.catalog.begin_source_delete(source_id)
 
         versions = source.csv_versions or []
         snapshots = {version.snapshot_id for version in versions}
@@ -255,9 +257,24 @@ class SourceService:
                 raise ValueError("Invalid source artifact path")
             paths.append(path)
         for snapshot in snapshots or {None}:
-            self.data_engine.discard(source.model_copy(update={"snapshot_id": snapshot}))
+            try:
+                self.data_engine.discard(source.model_copy(update={"snapshot_id": snapshot}))
+            except Exception as exc:
+                if _storage_full(exc):
+                    raise SourceDeletionStorageError(
+                        "Insufficient storage to remove the CSV tables"
+                    ) from exc
+                raise
         for path in paths:
             path.unlink(missing_ok=True)
+        try:
+            self.data_engine.compact()
+        except Exception as exc:
+            if _storage_full(exc):
+                raise SourceDeletionStorageError(
+                    "Insufficient storage to compact the database after deletion"
+                ) from exc
+            raise
         self.catalog.delete_source(source_id, source.snapshot_id)
 
     def list_csv_versions(self, source_id: str) -> list[CSVVersion]:

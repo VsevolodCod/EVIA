@@ -356,13 +356,15 @@ async function request<T>(
 async function readResponse<T>(response: Response, validator: z.ZodType<T>): Promise<T> {
   if (!response.ok) {
     if (response.status === 401) window.dispatchEvent(new Event("evia:unauthorized"));
-    if (response.status === 507) throw new ApiError(
-      "На сервере недостаточно места для импорта. CSV не сохранён; при повторном импорте прежняя версия остаётся доступной. Выберите меньший файл или обратитесь к администратору.",
-      response.status,
-    );
     const body: unknown = await response.json().catch(() => null);
     const detail =
       body && typeof body === "object" && "detail" in body ? body.detail : null;
+    if (response.status === 507) throw new ApiError(
+      typeof detail === "string"
+        ? detail
+        : "На сервере недостаточно места для импорта. CSV не сохранён; при повторном импорте прежняя версия остаётся доступной. Выберите меньший файл или обратитесь к администратору.",
+      response.status,
+    );
     if (typeof detail === "string" && knownErrors[detail])
       throw new ApiError(knownErrors[detail], response.status);
     if (detail && typeof detail === "object" && "report" in detail) {

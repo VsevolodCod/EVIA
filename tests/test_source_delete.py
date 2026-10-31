@@ -1,10 +1,13 @@
 import pytest
+import duckdb
 from httpx import ASGITransport, AsyncClient
+from pathlib import Path
 
 from app.models import DataSource
 from app.ownership import current_owner
 from app.schema_catalog import SchemaCatalog
 from app.source_service import SourceService
+from app.data_engine import DuckDBDataEngine
 
 
 def test_delete_csv_removes_all_versions_and_keeps_other_source(tmp_path):
@@ -66,3 +69,60 @@ async def test_delete_endpoint_removes_csv_and_returns_404_for_missing(tmp_path,
         assert response.json() == {'success': True}
         assert (await client.delete(f'/sources/{source.source_id}')).status_code == 404
     assert catalog.get_source(source.source_id) is None
+
+
+def test_failed_delete_is_not_served_and_can_be_retried(tmp_path, monkeypatch):
+    catalog = SchemaCatalog(tmp_path / 'catalog.db')
+    service = SourceService(tmp_path / 'data', catalog)
+    source = service.register_csv('one.csv', b'value\n1\n')
+    real_unlink = Path.unlink
+    def fail_once(path, *args, **kwargs):
+        if path.name == source.csv_versions[0].raw_filename:
+            raise OSError('injected failure')
+        return real_unlink(path, *args, **kwargs)
+    monkeypatch.setattr(Path, 'unlink', fail_once)
+    with pytest.raises(OSError):
+        service.delete_csv(source.source_id)
+    assert catalog.get_source(source.source_id) is None
+    assert catalog.get_source(source.source_id, include_deleting=True).status == 'deleting'
+    with pytest.raises(ValueError):
+        service.register_csv('one.csv', b'value\n2\n', source_id=source.source_id)
+    monkeypatch.setattr(Path, 'unlink', real_unlink)
+    service.delete_csv(source.source_id)
+    assert catalog.get_source(source.source_id, include_deleting=True) is None
+
+
+def test_compaction_reclaims_disk_and_preserves_remaining_tables(tmp_path):
+    db = tmp_path / 'analytics.duckdb'
+    with duckdb.connect(str(db)) as connection:
+        connection.execute("create table removed as select i, md5(i::VARCHAR) as text_value from range(300000) t(i)")
+        connection.execute("CHECKPOINT")
+        connection.execute("create table retained as select i, md5(i::VARCHAR) as text_value from range(10000) t(i)")
+        connection.execute("CHECKPOINT")
+        connection.execute("drop table removed")
+        connection.execute("CHECKPOINT")
+    before = db.stat().st_size
+    DuckDBDataEngine(db).compact()
+    assert db.stat().st_size < before
+    with duckdb.connect(str(db), read_only=True) as connection:
+        assert connection.execute('select count(*), min(i), max(i) from retained').fetchone() == (10000, 0, 9999)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("operation", ["discard", "compact"])
+async def test_delete_endpoint_explains_when_disk_is_too_full_to_compact(tmp_path, monkeypatch, operation):
+    import errno
+    import app.main as main
+    catalog = SchemaCatalog(tmp_path / 'catalog.db')
+    service = SourceService(tmp_path / 'data', catalog)
+    source = service.register_csv('one.csv', b'value\n1\n')
+    def no_space(*args, **kwargs):
+        raise OSError(errno.ENOSPC, 'disk full')
+    monkeypatch.setattr(service.data_engine, operation, no_space)
+    monkeypatch.setattr(main, 'source_service', service)
+    monkeypatch.setattr(main.settings, 'auth_enabled', False)
+    async with AsyncClient(transport=ASGITransport(app=main.app), base_url='http://test') as client:
+        response = await client.delete(f'/sources/{source.source_id}')
+    assert response.status_code == 507
+    assert 'повторите удаление' in response.json()['detail'].lower()
+    assert catalog.get_source(source.source_id, include_deleting=True).status == 'deleting'
