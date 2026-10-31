@@ -10,7 +10,7 @@
   <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=111" alt="React 19">
   <img src="https://img.shields.io/badge/DuckDB-analytics-FFF000?logo=duckdb&logoColor=111" alt="DuckDB">
 </p>
-<p align="center"><a href="https://evia-production.up.railway.app/"><strong>Open EVIA</strong></a> · <a href="docs/guide/EXPERT_GUIDE.en.md">Expert guide</a> · <a href="docs/guide/ARCHITECTURE.en.md">Architecture</a> · <a href="docs/guide/DEFENSE.en.md">Defense guide</a></p>
+<p align="center"><a href="https://evia-production.up.railway.app/"><strong>Open EVIA</strong></a> · <a href="docs/guide/EXPERT_GUIDE.en.md">Expert guide</a> · <a href="docs/guide/ARCHITECTURE.en.md">Architecture</a></p>
 
 ![EVIA workspace with a synthetic data source](docs/guide/screenshots/analytics-overview-desktop.png)
 
@@ -187,8 +187,6 @@ docs/                 guides, architecture, limitations and decision history
 
 - [Expert guide](docs/guide/EXPERT_GUIDE.en.md) — what to click and verify.
 - [EVIA architecture](docs/guide/ARCHITECTURE.en.md) — components, storage, boundaries and request flow.
-- [Defense questions and answers](docs/guide/DEFENSE.en.md) — demo, limitations and checklist.
 - [GitHub backlog](https://github.com/VsevolodCod/EVIA/issues) — open work and its status.
-- [October 30 demo plan](docs/final-demo-2026-10-30.md) — a historical rehearsal plan; recheck before presenting.
 
 The repository currently has no root `LICENSE` file; the team must agree on distribution terms. Team membership and roles should be confirmed by the participants.
