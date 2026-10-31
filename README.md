@@ -10,7 +10,7 @@
   <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=111" alt="React 19">
   <img src="https://img.shields.io/badge/DuckDB-analytics-FFF000?logo=duckdb&logoColor=111" alt="DuckDB">
 </p>
-<p align="center"><a href="https://evia-production.up.railway.app/"><strong>Открыть EVIA</strong></a> · <a href="docs/guide/EXPERT_GUIDE.md">Руководство эксперта</a> · <a href="docs/guide/ARCHITECTURE.md">Архитектура</a> · <a href="docs/guide/DEFENSE.md">Подготовка к защите</a></p>
+<p align="center"><a href="https://evia-production.up.railway.app/"><strong>Открыть EVIA</strong></a> · <a href="docs/guide/EXPERT_GUIDE.md">Руководство эксперта</a> · <a href="docs/guide/ARCHITECTURE.md">Архитектура</a></p>
 
 ![Рабочая область EVIA: обзор синтетического источника](docs/guide/screenshots/analytics-overview-desktop.png)
 
@@ -187,8 +187,6 @@ docs/                 руководства, архитектура, огран
 
 - [Пошаговое руководство эксперта](docs/guide/EXPERT_GUIDE.md) — что нажать и что проверить.
 - [Архитектура EVIA](docs/guide/ARCHITECTURE.md) — компоненты, хранение, границы и поток запроса.
-- [Вопросы и ответы к защите](docs/guide/DEFENSE.md) — краткий сценарий, ограничения и чек-лист.
 - [Текущий backlog GitHub](https://github.com/VsevolodCod/EVIA/issues) — открытые задачи и их состояние.
-- [Сценарий демонстрации от 30 октября](docs/final-demo-2026-10-30.md) — исторический план репетиции; перепроверяйте перед показом.
 
 В репозитории пока нет корневого файла `LICENSE`; условия распространения необходимо согласовать с командой. Состав команды и роли следует указывать после подтверждения участниками.

@@ -1,6 +1,6 @@
 # EVIA — expert walkthrough
 
-[English README](../../README.en.md) · [Русский](EXPERT_GUIDE.md) · [Architecture](ARCHITECTURE.en.md) · [Defense guide](DEFENSE.en.md)
+[English README](../../README.en.md) · [Русский](EXPERT_GUIDE.md) · [Architecture](ARCHITECTURE.en.md)
 
 This walkthrough covers the main user scenarios. Screenshots were captured in an isolated browser test using synthetic data. They show the Russian-language UI; layout and controls may differ with screen size, account state and release.
 
@@ -85,4 +85,4 @@ The profile supports name, photo and password changes. Email recovery requires a
 - Missing-value profiling does not validate every business rule or value.
 - Empty strings and `NULL` are currently counted differently in the overview and PDF; quality figures can disagree ([#152](https://github.com/VsevolodCod/EVIA/issues/152)).
 - `/health` indicates application availability, not model quality or email delivery.
-- CI checks and a live demonstration are different; recheck the current deployment before presenting.
+- CI checks and a live application are different; check the current deployment status.
