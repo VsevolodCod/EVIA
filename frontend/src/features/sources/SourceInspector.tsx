@@ -49,6 +49,8 @@ export function SourceInspector({
   setView,
   onOpenChat,
   onReimport,
+  onDelete,
+  deleteDisabled = false,
 }: {
   source: Source;
   entry?: Entry;
@@ -57,7 +59,24 @@ export function SourceInspector({
   setView: (view: View) => void;
   onOpenChat?: () => void;
   onReimport?: (file: File, sourceId: string) => void;
+  onDelete?: (sourceId: string) => Promise<void>;
+  deleteDisabled?: boolean;
 }) {
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  async function deleteCsv() {
+    if (!onDelete || deleting || deleteDisabled) return;
+    if (!window.confirm(`Удалить «${source.name}» и все версии CSV? Действие нельзя отменить. Сохранённые отчёты по этому источнику нельзя будет обновить.`)) return;
+    setDeleteError("");
+    setDeleting(true);
+    try {
+      await onDelete(source.source_id);
+    } catch (error) {
+      setDeleteError(errorMessage(error));
+    } finally {
+      setDeleting(false);
+    }
+  }
   const [data, setData] = useState<SourceData | null>(null);
   const [failure, setFailure] = useState<{
     id: string;
@@ -135,10 +154,12 @@ export function SourceInspector({
         <div className="source-workspace-identity">
           <h1>{source.name}</h1>
         </div>
+        {source.source_type === "csv" && onDelete && <button className="source-delete" type="button" disabled={deleting || deleteDisabled} onClick={() => void deleteCsv()}>{deleting ? "Удаляем…" : "Удалить CSV"}</button>}
         <button className="source-refresh" type="button" onClick={() => setRevision((value) => value + 1)}>
           <Icon name="refresh" size={16} /> Обновить
         </button>
       </div>
+      {deleteError && <p role="alert" className="source-delete-error">Не удалось удалить CSV: {deleteError}</p>}
       <nav className="analytics-tabs" aria-label="Разделы источника">
         {views.map(([id, label]) => (
           <button

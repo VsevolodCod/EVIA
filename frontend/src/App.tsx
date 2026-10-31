@@ -580,6 +580,16 @@ export default function App({ account, onAccountChange, onLogout }: {
       }
     }
   }
+  async function deleteSource(id: string) {
+    await api.deleteSource(id);
+    sourceController.current?.abort();
+    setSources((previous) => previous.filter((item) => item.source_id !== id));
+    setSelectedId((current) => current === id ? null : current);
+    setUploadedId((current) => current === id ? null : current);
+    setAttachedDashboard(null);
+    setSourceSetup("csv");
+    setMobilePanel("analytics");
+  }
   async function send(question: string, retryId?: string) {
     if (
       !selectedId ||
@@ -921,6 +931,8 @@ export default function App({ account, onAccountChange, onLogout }: {
               setView={setView}
               onOpenChat={() => setMobilePanel("chat")}
               onReimport={(file, id) => void upload(file, id)}
+              onDelete={deleteSource}
+              deleteDisabled={uploading || Boolean(pending)}
             />
           ) : sourceSetup === "postgres" && mobileOverlay !== "upload" ? (
             <PostgresSetup

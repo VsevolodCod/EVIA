@@ -1086,6 +1086,9 @@
   font-weight: 700;
 }
 .source-refresh:hover { background: #eef8f1; }
+.source-delete { border: 1px solid #d8b8b4; border-radius: 12px; background: transparent; color: #a7352b; padding: 10px 14px; cursor: pointer; }
+.source-delete:disabled { opacity: .6; cursor: wait; }
+.source-delete-error { color: #a7352b; padding: 0 16px; }
 .analytics-workspace:has(.dashboard) .analytics-tabs { padding-right: 2px; }
 .analytics-tabs { gap: 6px; padding: 0 0 10px; }
 .analytics-tabs button { font-size: 13px; }

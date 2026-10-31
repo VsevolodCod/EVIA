@@ -139,6 +139,7 @@ class SourceService:
     ) -> DataSource:
         return self.register_csv_stream(filename, io.BytesIO(content), name=name, source_id=source_id)
 
+    @_guard_source_import
     def register_csv_stream(
         self,
         filename: str,
