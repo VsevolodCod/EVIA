@@ -198,7 +198,31 @@ def test_profile_overview_drilldown_search_and_responsive_layout(server):
                 assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), f'Overflow at {width}px'
             page.get_by_role('button', name='Рабочее пространство').click()
             expect(page.get_by_role('navigation', name='Разделы источника')).to_be_visible()
-            page.screenshot(path=str(artifacts / 'analytics-overview-mobile.png'), full_page=True)
+            # A fixed navigation bar must stay at the viewport bottom during actual
+            # scrolling; full-page screenshots place it mid-document artificially.
+            page.screenshot(path=str(artifacts / 'analytics-overview-mobile.png'))
+            mobile_nav = page.get_by_role('navigation', name='Мобильная навигация')
+            expect(mobile_nav).to_be_visible()
+            page.evaluate('window.scrollTo(0, document.body.scrollHeight)')
+            page.wait_for_function('window.scrollY > 0')
+            nav_box = mobile_nav.bounding_box()
+            last_card = page.locator('.dashboard-grid .chart-card').last.bounding_box()
+            assert abs(nav_box['y'] + nav_box['height'] - 844) < 2
+            assert last_card['y'] + last_card['height'] <= nav_box['y'] + 1
+            page.screenshot(path=str(artifacts / 'analytics-mobile-scrolled.png'))
+            page.locator('.dashboard-grid .chart-card .chart-expand').last.click()
+            expect(page.get_by_role('button', name='Закрыть график')).to_be_visible()
+            page.get_by_role('button', name='Закрыть график').click()
+            page.get_by_role('button', name='Чат', exact=True).click()
+            expect(page.get_by_role('textbox', name='Ваш вопрос')).to_be_in_viewport()
+            page.get_by_role('button', name='Рабочее пространство').click()
+            page.evaluate('window.scrollTo(0, 0)')
+            page.locator('.mobile-export-trigger').click()
+            page.locator('.mobile-export-option').filter(has_text='Собрать PDF-отчёт').click()
+            expect(page.get_by_role('article', name='PDF-отчёт')).to_be_visible()
+            page.get_by_role('button', name='Закрыть отчёт').click()
+            page.set_viewport_size({'width': 320, 'height': 640})
+            assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
             page.set_viewport_size({'width': 1440, 'height': 1000})
             page.get_by_role('button', name='Качество', exact=True).focus()
             page.keyboard.press('Enter')
@@ -236,6 +260,37 @@ def test_profile_overview_drilldown_search_and_responsive_layout(server):
             page.get_by_role('button', name='Столбцы', exact=True).click()
             expect(page.get_by_role('searchbox', name='Поиск столбца')).to_have_value('')
             expect(page.get_by_role('region', name='Столбец id')).to_be_visible()
+            assert errors == []
+        finally:
+            browser.close()
+
+
+def test_touch_mobile_upload_and_navigation(server):
+    from playwright.sync_api import sync_playwright, expect
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(channel=os.getenv('BI_BROWSER_CHANNEL') or None)
+        try:
+            page = browser.new_page(viewport={'width': 390, 'height': 844}, is_mobile=True, has_touch=True)
+            errors = []
+            page.on('pageerror', lambda error: errors.append(str(error)))
+            page.on('crash', lambda _: errors.append('browser page crashed'))
+            page.goto(server)
+            page.get_by_label('Загрузить CSV').set_input_files({
+                'name': 'mobile-demo.csv', 'mimeType': 'text/csv',
+                'buffer': b'month,revenue\nJanuary,100\nFebruary,200\nMarch,300\n',
+            })
+            page.get_by_role('button', name='Загрузить файл').tap()
+            expect(page.get_by_role('heading', name='mobile-demo')).to_be_visible()
+            expect(page.locator('.dashboard-grid .chart-card').first).to_be_visible()
+            page.evaluate('window.scrollTo(0, document.body.scrollHeight)')
+            page.wait_for_function('window.scrollY > 0')
+            page.get_by_role('button', name='Чат', exact=True).tap()
+            expect(page.get_by_role('textbox', name='Ваш вопрос')).to_be_visible()
+            page.get_by_role('button', name='Рабочее пространство').tap()
+            page.get_by_role('button', name='Качество', exact=True).tap()
+            expect(page.get_by_role('heading', name='Качество данных')).to_be_visible()
+            assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
             assert errors == []
         finally:
             browser.close()
