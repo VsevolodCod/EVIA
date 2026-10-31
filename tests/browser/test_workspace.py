@@ -282,6 +282,7 @@ def test_touch_mobile_upload_and_navigation(server):
             })
             page.get_by_role('button', name='Загрузить файл').tap()
             expect(page.get_by_role('heading', name='mobile-demo')).to_be_visible()
+            expect(page.locator('.dashboard-grid .chart-card').first).to_be_visible()
             page.evaluate('window.scrollTo(0, document.body.scrollHeight)')
             page.wait_for_function('window.scrollY > 0')
             page.get_by_role('button', name='Чат', exact=True).tap()
