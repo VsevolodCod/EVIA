@@ -75,7 +75,7 @@ An administrator must configure `POSTGRES_DSN` and `POSTGRES_ALLOWED_TABLES` bef
 
 The profile supports name, photo and password changes. Email recovery requires a configured mail provider. To check isolation, sign in with a separate test account: another user's sources, chats and saved reports should not appear.
 
-![EVIA at a mobile viewport](screenshots/analytics-overview-mobile.png)
+<table><tr><td><img src="screenshots/analytics-overview-mobile.png" alt="Phone overview"></td><td><img src="screenshots/analytics-mobile-scrolled.png" alt="Charts after scrolling on a phone"></td></tr></table>
 
 ## 9. Limits to explain
 

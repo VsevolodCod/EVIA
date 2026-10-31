@@ -90,9 +90,3 @@ jobs:
       - run: python -m pytest tests/browser -q
         env:
           BI_BROWSER_TESTS: '1'
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: evia-mobile-verification
-          path: frontend/test-results/*.png
-          if-no-files-found: warn

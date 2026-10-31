@@ -263,3 +263,33 @@ def test_profile_overview_drilldown_search_and_responsive_layout(server):
             assert errors == []
         finally:
             browser.close()
+
+
+def test_touch_mobile_upload_and_navigation(server):
+    from playwright.sync_api import sync_playwright, expect
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(channel=os.getenv('BI_BROWSER_CHANNEL') or None)
+        try:
+            page = browser.new_page(viewport={'width': 390, 'height': 844}, is_mobile=True, has_touch=True)
+            errors = []
+            page.on('pageerror', lambda error: errors.append(str(error)))
+            page.on('crash', lambda _: errors.append('browser page crashed'))
+            page.goto(server)
+            page.get_by_label('Загрузить CSV').set_input_files({
+                'name': 'mobile-demo.csv', 'mimeType': 'text/csv',
+                'buffer': b'month,revenue\nJanuary,100\nFebruary,200\nMarch,300\n',
+            })
+            page.get_by_role('button', name='Загрузить файл').tap()
+            expect(page.get_by_role('heading', name='mobile-demo')).to_be_visible()
+            page.evaluate('window.scrollTo(0, document.body.scrollHeight)')
+            page.wait_for_function('window.scrollY > 0')
+            page.get_by_role('button', name='Чат', exact=True).tap()
+            expect(page.get_by_role('textbox', name='Ваш вопрос')).to_be_visible()
+            page.get_by_role('button', name='Рабочее пространство').tap()
+            page.get_by_role('button', name='Качество', exact=True).tap()
+            expect(page.get_by_role('heading', name='Качество данных')).to_be_visible()
+            assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+            assert errors == []
+        finally:
+            browser.close()

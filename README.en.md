@@ -156,7 +156,10 @@ python -m pytest -q
 
 Browser tests require `requirements-browser.txt` and Chromium: `BI_BROWSER_TESTS=1 python -m pytest tests/browser -q`. They start an isolated server and use synthetic data. Check [GitHub Actions](https://github.com/VsevolodCod/EVIA/actions) for the current status: the existence of tests does not mean that every check passes on the current commit.
 
-![Responsive EVIA interface](docs/guide/screenshots/analytics-overview-mobile.png)
+<table><tr>
+<td width="50%"><img src="docs/guide/screenshots/analytics-overview-mobile.png" alt="EVIA overview on a phone"></td>
+<td width="50%"><img src="docs/guide/screenshots/analytics-mobile-scrolled.png" alt="EVIA charts after scrolling on a phone"></td>
+</tr><tr><td>Phone overview</td><td>Charts after scrolling</td></tr></table>
 
 ## Repository structure
 

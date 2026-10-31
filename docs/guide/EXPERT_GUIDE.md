@@ -75,7 +75,7 @@ period,revenue,segment
 
 В профиле доступны имя, фото и смена пароля. Восстановление по email доступно только при настроенном почтовом провайдере. Для проверки изоляции войдите в отдельный тестовый аккаунт: чужие источники, чаты и сохранённые отчёты не должны отображаться.
 
-![EVIA на мобильной ширине](screenshots/analytics-overview-mobile.png)
+<table><tr><td><img src="screenshots/analytics-overview-mobile.png" alt="Обзор на телефоне"></td><td><img src="screenshots/analytics-mobile-scrolled.png" alt="Графики после прокрутки на телефоне"></td></tr></table>
 
 ## 9. Что считать ограничением
 

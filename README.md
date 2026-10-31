@@ -156,7 +156,10 @@ python -m pytest -q
 
 Браузерные тесты требуют зависимостей из `requirements-browser.txt` и Chromium: `BI_BROWSER_TESTS=1 python -m pytest tests/browser -q`. Они создают изолированный сервер и используют синтетические данные. Последнее состояние CI следует смотреть в [GitHub Actions](https://github.com/VsevolodCod/EVIA/actions): наличие тестов не означает, что все проверки текущего коммита проходят.
 
-![Адаптивный интерфейс EVIA](docs/guide/screenshots/analytics-overview-mobile.png)
+<table><tr>
+<td width="50%"><img src="docs/guide/screenshots/analytics-overview-mobile.png" alt="Обзор EVIA на телефоне"></td>
+<td width="50%"><img src="docs/guide/screenshots/analytics-mobile-scrolled.png" alt="Графики EVIA после прокрутки на телефоне"></td>
+</tr><tr><td>Обзор на телефоне</td><td>Графики после прокрутки</td></tr></table>
 
 ## Структура проекта
 
