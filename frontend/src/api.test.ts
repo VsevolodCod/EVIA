@@ -299,6 +299,14 @@ it("explains full server storage without reporting rows as imported", async () =
     .rejects.toThrow("На сервере недостаточно места");
 });
 
+it("shows the server's storage cleanup instruction for a failed CSV deletion", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({
+    detail: "Недостаточно места. Увеличьте хранилище и повторите удаление CSV.",
+  }, { status: 507 })));
+  await expect(api.deleteSource("a"))
+    .rejects.toThrow("Недостаточно места. Увеличьте хранилище и повторите удаление CSV.");
+});
+
 it("reports real upload byte progress and waits for CSV processing", async () => {
   const updates: number[] = [];
   class UploadXHR {
