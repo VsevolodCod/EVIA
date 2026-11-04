@@ -31,7 +31,7 @@ from app.db import create_chat_database, initialize_chat_database
 from app.llm.factory import create_llm_provider
 from app.models import AnalysisPayload, AskRequest, ChatMessage, DataSource, CSVVersion, Chat, ChatCreateRequest, ChatSummary, \
     ChatHistoryResponse
-from app.retry_agent import LLMRetryPolicy
+from app.agent_additions.retry_agent import LLMRetryPolicy
 from app.schema_catalog import SchemaCatalog
 from app.source_service import SourceDeletionStorageError, SourceService
 from app.tools import build_tool_registry
