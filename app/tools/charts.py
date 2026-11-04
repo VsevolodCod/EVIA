@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any, get_args, get_origin
 
 from pydantic import BaseModel, Field, create_model
@@ -12,6 +13,10 @@ from app.charts.models import (
 from app.charts.repositories import ChartRepository
 from app.charts.snapshots import source_versions
 from app.tools.base import ToolDefinition, ToolRegistry
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 
 def _resolve_refs(value: Any, definitions: dict[str, Any]) -> Any:
@@ -232,6 +237,8 @@ def register_chart_tools(
     build_args_model = _build_chart_args_model()
     build_parameters, build_required = _build_parameters(build_args_model)
 
+    # logger.info(json.dumps(build_parameters["definition"], indent=2, ensure_ascii=False))
+
     def build_chart(**payload: Any) -> dict[str, Any]:
         """
         Валидирует определение, сохраняет чарт и вычисляет его данные.
@@ -265,6 +272,11 @@ def register_chart_tools(
             # A failed attempt must not leave an artifact that a retry can add
             # to a dashboard. Error details can contain schema names, so keep
             # the public response stable and log-free of source internals.
+            logger.exception(
+                "Failed to build chart: type=%s chart_id=%s",
+                parsed_definition.type,
+                chart.chart_id,
+            )
             charts.delete(chart.chart_id)
             return {
                 "success": False,

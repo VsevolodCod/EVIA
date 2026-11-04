@@ -5,6 +5,10 @@ from typing import Any
 from app.charts.aggregation import normalize_sql_value, quote_identifier, where_clause
 from app.charts.implementations.base import ChartImplementation
 from app.charts.models import ChartDefinition, DashboardFilter, ScatterCard
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 
 class ScatterImplementation(ChartImplementation):
@@ -17,14 +21,33 @@ class ScatterImplementation(ChartImplementation):
         plan = self.planner.plan(card, filters)
         x = quote_identifier(card.x.field)
         y = quote_identifier(card.y.field)
-        conditions = [f"{x} IS NOT NULL", f"{y} IS NOT NULL"]
-        sql = f"SELECT {x} AS x_value, {y} AS y_value FROM {plan.table_name}"
-        sql += where_clause(filters)
-        sql += (" AND " if filters else " WHERE ") + " AND ".join(conditions)
-        sql += f" ORDER BY {x} ASC, {y} ASC LIMIT {card.limit}"
+        sql = f"""
+            SELECT
+                {x} AS x_value,
+                {y} AS y_value
+            FROM {plan.table_name}
+            {where_clause(filters)}
+            {"AND" if filters else "WHERE"}
+                {x} IS NOT NULL
+                AND {y} IS NOT NULL
+            ORDER BY RANDOM()
+            LIMIT {card.limit}
+        """
+
+        # logger.info("Scatter plan: %s", plan)
+        # logger.info("Scatter SQL: %s", sql)
+
         result = self.sources.query(plan.source_id, sql, row_limit=card.limit)
+        # logger.info("Scatter result: %s rows", len(result.rows))
         points = [{"x": normalize_sql_value(row[0]), "y": normalize_sql_value(row[1])}
                   for row in result.rows]
+        # logger.info("Scatter SQL: %s", sql)
+        # logger.info("Scatter raw rows: %s", result.rows[:10])
+        # logger.info("Scatter raw types: %s", [
+        #     (type(row[0]).__name__, type(row[1]).__name__)
+        #     for row in result.rows[:10]
+        # ])
+
         return {
             "x": {"field": card.x.field, "label": card.x.label or card.x.field,
                   "type": "number", "format": card.x.format.model_dump(mode="json")},
