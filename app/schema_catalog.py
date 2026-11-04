@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.db.catalog.models import DataSourceORM, SourceSchemaORM, ChartORM, DashboardORM
 from app.db.base import CatalogBase
 from app.models import DataSource, SourceSchema
-from app.ownership import owner_id
+from app.core.auth import owner_id
 
 
 class CatalogConflictError(ValueError):

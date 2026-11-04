@@ -49,7 +49,7 @@ async def test_avatar_upload_is_private_and_can_be_removed(auth_module):
 
 
 def test_avatar_columns_are_added_to_existing_account_database(tmp_path):
-    from app.auth import AuthStore
+    from app.core.auth import AuthStore
 
     db_path = tmp_path / "previous-auth.db"
     with sqlite3.connect(db_path) as connection:
@@ -69,7 +69,7 @@ def test_avatar_columns_are_added_to_existing_account_database(tmp_path):
 
 
 def test_brevo_recovery_delivery_without_custom_domain(monkeypatch):
-    from app import auth_routes
+    from app.core.auth import auth_routes
 
     calls = []
 
@@ -133,7 +133,7 @@ async def test_auth_session_profile_and_source_isolation(auth_module):
             assert (await second.get("/sources")).json() == []
             assert (await second.get(f"/sources/{source_id}/preview")).status_code == 404
             assert (await second.post("/agent/ask", json={"question": "show", "source_ids": [source_id]})).status_code == 404
-            from app.ownership import current_owner
+            from app.core.auth import current_owner
             token = current_owner.set(created.json()["id"])
             try:
                 chart = module.tool_registry.execute("build_chart", {"definition": {
@@ -214,7 +214,7 @@ async def test_legacy_data_is_claimed_by_explicit_bootstrap_account(auth_module,
 
 @pytest.mark.asyncio
 async def test_reset_code_is_single_use_and_revokes_sessions(tmp_path):
-    from app.auth import AuthStore
+    from app.core.auth import AuthStore
 
     store = AuthStore(f"sqlite:///{tmp_path / 'auth.db'}", secret="test-secret-only-for-ci")
     store.initialize()
@@ -231,7 +231,7 @@ async def test_reset_code_is_single_use_and_revokes_sessions(tmp_path):
 
 
 def test_existing_account_cannot_claim_legacy_data_by_email(tmp_path):
-    from app.auth import AuthStore
+    from app.core.auth import AuthStore
 
     store = AuthStore(f"sqlite:///{tmp_path / 'auth.db'}", secret="test-secret-only-for-ci")
     store.initialize()
@@ -242,7 +242,7 @@ def test_existing_account_cannot_claim_legacy_data_by_email(tmp_path):
 
 
 def test_bootstrap_owner_cannot_change_to_another_email(tmp_path):
-    from app.auth import AuthStore
+    from app.core.auth import AuthStore
 
     store = AuthStore(f"sqlite:///{tmp_path / 'auth.db'}", secret="test-secret-only-for-ci")
     store.initialize()
@@ -261,7 +261,7 @@ def test_railway_authentication_cannot_be_disabled(monkeypatch):
 
 
 def test_login_attempts_are_reserved_before_password_check(tmp_path):
-    from app.auth import AuthStore
+    from app.core.auth import AuthStore
 
     store = AuthStore(f"sqlite:///{tmp_path / 'auth.db'}", secret="test-secret-only-for-ci")
     store.initialize()
@@ -271,7 +271,7 @@ def test_login_attempts_are_reserved_before_password_check(tmp_path):
 
 @pytest.mark.skipif(not os.getenv("EVIA_TEST_PG_URL"), reason="hosted PostgreSQL service only")
 def test_auth_store_uses_postgresql_in_hosted_ci():
-    from app.auth import AuthBase, AuthStore
+    from app.core.auth import AuthBase, AuthStore
 
     store = AuthStore(os.environ["EVIA_TEST_PG_URL"], secret="test-secret-only-for-ci")
     store.initialize()

@@ -4,7 +4,7 @@ from httpx import ASGITransport, AsyncClient
 from pathlib import Path
 
 from app.models import DataSource
-from app.ownership import current_owner
+from app.core.auth import current_owner
 from app.schema_catalog import SchemaCatalog
 from app.source_service import SourceService
 from app.data_engine import DuckDBDataEngine
