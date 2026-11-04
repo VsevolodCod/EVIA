@@ -168,7 +168,7 @@ async def test_recovery_request_is_generic_for_unknown_email(auth_module, monkey
     sent = []
     monkeypatch.setenv("RESEND_API_KEY", "test-key")
     monkeypatch.setenv("MAIL_FROM", "EVIA <hello@example.com>")
-    monkeypatch.setattr("app.auth_routes.send_reset_code", lambda address, code: sent.append((address, code)))
+    monkeypatch.setattr("app.core.auth.auth_routes.send_reset_code", lambda address, code: sent.append((address, code)))
     async with module.app.router.lifespan_context(module.app), AsyncClient(
         transport=ASGITransport(app=module.app), base_url="http://test"
     ) as client:
