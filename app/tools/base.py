@@ -105,11 +105,30 @@ class ToolRegistry:
 
         # Validate the full nested contract server-side. Provider-side JSON
         # schemas are hints, not an authorization or validation boundary.
-        if not tool._validator.is_valid(arguments):
+        errors = list(tool._validator.iter_errors(arguments))
+
+        if errors:
+            def collect_errors(error):
+                if error.context:
+                    messages = []
+                    for child in error.context:
+                        messages.extend(collect_errors(child))
+                    return messages
+
+                return [
+                    f"{error.json_path}: {error.message}"
+                ]
+
+            error_messages = [
+                message
+                for error in errors
+                for message in collect_errors(error)
+            ]
+
             return ToolResult(
                 tool_name=name,
                 ok=False,
-                error="INVALID_TOOL_ARGUMENTS",
+                error=f"INVALID_TOOL_ARGUMENTS: {error_messages}",
             )
 
         try:
