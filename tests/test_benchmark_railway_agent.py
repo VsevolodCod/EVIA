@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 
 from app.models import ToolResult
-from scripts.benchmark_railway_agent import summarize, verifies
+from scripts.benchmarks.benchmark_railway_agent import summarize, verifies
 
 
 def test_nearest_rank_p95_and_raw_order():

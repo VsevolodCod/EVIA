@@ -22,7 +22,7 @@
 - Modify `requirements.txt`: add `psycopg[binary]`.
 - Create `tests/test_postgresql_adapter.py`: adapter/executor unit tests using a fake psycopg boundary.
 - Create `tests/test_postgresql_integration.py`: opt-in integration checks against `POSTGRES_TEST_DSN`.
-- Create `docker-compose.postgres-test.yml` and `scripts/verify_postgresql_source.sh`: disposable test database and acceptance runner.
+- Create `docker-compose.postgres-test.yml` and `scripts/verifiers/verify_postgresql_source.sh`: disposable test database and acceptance runner.
 - Create `docs/postgresql-source.md`: Railway configuration and safety contract.
 
 ### Task 1: Configuration and secret-free source metadata
@@ -236,7 +236,7 @@ git commit -m "feat(postgres): expose configured live sources"
 
 **Files:**
 - Create: `docker-compose.postgres-test.yml`
-- Create: `scripts/verify_postgresql_source.sh`
+- Create: `scripts/verifiers/verify_postgresql_source.sh`
 - Create: `tests/test_postgresql_integration.py`
 - Create: `docs/postgresql-source.md`
 - Modify: `README.md`
@@ -261,7 +261,7 @@ Expected: skipped with message requiring `POSTGRES_TEST_DSN`.
 
 - [ ] **Step 3: Create a disposable Docker PostgreSQL setup**
 
-`docker-compose.postgres-test.yml` uses `postgres:16-alpine`, an init SQL file that creates `evia_reader` with `CONNECT`, `USAGE` and `SELECT` only on `public.orders`, and a separate owner role for the external-update assertion. `scripts/verify_postgresql_source.sh` brings the service up, waits for `pg_isready`, exports the reader DSN, runs the marked test, and tears it down with `trap`.
+`docker-compose.postgres-test.yml` uses `postgres:16-alpine`, an init SQL file that creates `evia_reader` with `CONNECT`, `USAGE` and `SELECT` only on `public.orders`, and a separate owner role for the external-update assertion. `scripts/verifiers/verify_postgresql_source.sh` brings the service up, waits for `pg_isready`, exports the reader DSN, runs the marked test, and tears it down with `trap`.
 
 Document Railway variables: `POSTGRES_DSN=${{Postgres.DATABASE_URL}}`, `POSTGRES_ALLOWED_TABLES=public.orders`; the hostname stays private in Railway. Explicitly state that no `POSTGRES_DSN` means no remote source is registered.
 
@@ -270,7 +270,7 @@ Document Railway variables: `POSTGRES_DSN=${{Postgres.DATABASE_URL}}`, `POSTGRES
 Run:
 
 ```bash
-./scripts/verify_postgresql_source.sh
+./scripts/verifiers/verify_postgresql_source.sh
 python -m pytest -q
 npm --prefix frontend test -- --run
 npm --prefix frontend run build
@@ -282,7 +282,7 @@ Expected: integration suite passes with Docker; full test suite and frontend che
 - [ ] **Step 5: Commit**
 
 ```bash
-git add docker-compose.postgres-test.yml scripts/verify_postgresql_source.sh tests/test_postgresql_integration.py docs/postgresql-source.md README.md
+git add docker-compose.postgres-test.yml scripts/verifiers/verify_postgresql_source.sh tests/test_postgresql_integration.py docs/postgresql-source.md README.md
 git commit -m "docs(postgres): add Railway setup and integration verification"
 ```
 

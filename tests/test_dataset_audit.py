@@ -1,7 +1,7 @@
 import csv
 import json
 
-from app.dataset_audit import audit_csv, audit_directory, write_public_method_report
+from scripts.datasets.dataset_audit_functions import audit_csv, audit_directory, write_public_method_report
 
 
 def write_csv(path, rows, *, encoding="utf-8-sig", delimiter=";"):

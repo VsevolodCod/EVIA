@@ -54,7 +54,7 @@ EVIA дополнительно открывает новую транзакци
 Для локальной приёмки используйте:
 
 ```bash
-./scripts/verify_postgresql_source.sh
+./scripts/verifiers/verify_postgresql_source.sh
 ```
 
 Скрипт поднимает временный PostgreSQL 16, создаёт read-only роль, проверяет

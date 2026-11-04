@@ -1,7 +1,7 @@
 """Create a metadata-only acceptance audit for imported CSV profiles.
 
 Usage:
-    python -m scripts.verify_csv_profiles /path/to/nine-csv-corpus \
+    python -m scripts.verifiers.verify_csv_profiles /path/to/nine-csv-corpus \
         --output docs/issue-8-originals-profile-audit.json
 
 The JSON output deliberately omits CSV rows, headers, column statistics, and

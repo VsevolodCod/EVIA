@@ -2,7 +2,7 @@ import json
 
 
 def test_profile_audit_records_only_metadata_and_full_csv_coverage(tmp_path):
-    from scripts.verify_csv_profiles import audit_directory
+    from scripts.verifiers.verify_csv_profiles import audit_directory
 
     corpus = tmp_path / "corpus"
     corpus.mkdir()

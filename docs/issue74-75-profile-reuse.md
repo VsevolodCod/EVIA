@@ -81,12 +81,12 @@ tool results; фиктивная таблица от несуществующе�
 3. После успешного smoke согласовать бюджеты и расширить замеры: cold отдельно,
    ≥30 тёплых повторов, ошибки/таймауты и p50/p95 с размером выборки. Одинаковый
    протокол выполнить на базовом и исправленном коммите на одном железе.
-4. Существующий `scripts.benchmark_local_models` сравнивает два установленных
+4. Существующий `scripts.benchmarks.benchmark_local_models` сравнивает два установленных
    тега на versioned корпусе. Полный запуск может быть долгим; это не smoke.
    Шаблон для согласованного запуска ниже сейчас не выполнялся:
 
 ```powershell
-.venv\Scripts\python -m scripts.benchmark_local_models MODEL_A MODEL_B --warm-repeats 30 --timeout 60 --max-tokens 512 --output ..\local-benchmark.json --markdown ..\local-benchmark.md
+.venv\Scripts\python -m scripts.benchmarks.benchmark_local_models MODEL_A MODEL_B --warm-repeats 30 --timeout 60 --max-tokens 512 --output ..\local-benchmark.json --markdown ..\local-benchmark.md
 ```
 
 Результаты этого runner не покрывают автоматически всю последовательность чата.

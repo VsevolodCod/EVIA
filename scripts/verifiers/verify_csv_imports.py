@@ -1,6 +1,6 @@
 """Audit original CSVs locally without copying their contents into the repository.
 
-Usage: python -m scripts.verify_csv_imports /path/to/csv-directory --report /tmp/evia-csv-audit.json
+Usage: python -m scripts.verifiers.verify_csv_imports /path/to/csv-directory --report /tmp/evia-csv-audit.json
 """
 
 from __future__ import annotations

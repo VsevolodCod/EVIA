@@ -3,7 +3,7 @@ import json
 import subprocess
 import sys
 
-from app.evaluation import load_corpus, verify_corpus
+from scripts.benchmarks.tools.evaluation import load_corpus, verify_corpus
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -33,7 +33,7 @@ def test_gold_cases_execute_through_source_service(tmp_path):
 def test_cli_writes_machine_readable_report(tmp_path):
     output = tmp_path / "report.json"
     completed = subprocess.run(
-        [sys.executable, "-m", "scripts.verify_eval_corpus", "--output", str(output)],
+        [sys.executable, "-m", "scripts.verifiers.verify_eval_corpus", "--output", str(output)],
         cwd=ROOT,
         text=True,
         capture_output=True,

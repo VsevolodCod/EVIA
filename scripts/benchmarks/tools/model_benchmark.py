@@ -15,8 +15,8 @@ import inspect
 
 import httpx
 
-from app.evaluation import EvaluationCase, rows_match
-from app.evaluation import EvaluationCorpus
+from scripts.benchmarks.tools.evaluation import EvaluationCase, rows_match
+from scripts.benchmarks.tools.evaluation import EvaluationCorpus
 from app.schema_catalog import SchemaCatalog
 from app.source_service import SourceService
 

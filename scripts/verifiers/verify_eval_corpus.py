@@ -1,6 +1,6 @@
 """Verify the public v1 gold-question corpus without a running LLM.
 
-Run: python -m scripts.verify_eval_corpus --output /tmp/evia-evals.json
+Run: python -m scripts.verifiers.verify_eval_corpus --output /tmp/evia-evals.json
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ import json
 from pathlib import Path
 import tempfile
 
-from app.evaluation import verify_corpus
+from scripts.benchmarks.tools.evaluation import verify_corpus
 
 
 ROOT = Path(__file__).resolve().parents[1]
