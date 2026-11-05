@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useLanguage } from "../../language";
 import {
   api,
   errorMessage,
@@ -27,12 +28,12 @@ type SourceData = {
   rows: Row[];
   profile?: Profile;
 };
-const views: [View, string][] = [
-  ["overview", "Обзор"],
-  ["profile", "Столбцы"],
-  ["quality", "Качество"],
-  ["preview", "Данные"],
-  ["schema", "Схема"],
+const views: [View, string, string][] = [
+  ["overview", "Обзор", "Overview"],
+  ["profile", "Столбцы", "Columns"],
+  ["quality", "Качество", "Quality"],
+  ["preview", "Данные", "Data"],
+  ["schema", "Схема", "Schema"],
 ];
 
 function sourceRowCount(schema: SourceSchema) {
@@ -62,11 +63,12 @@ export function SourceInspector({
   onDelete?: (sourceId: string) => Promise<void>;
   deleteDisabled?: boolean;
 }) {
+  const { t } = useLanguage();
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
   async function deleteCsv() {
     if (!onDelete || deleting || deleteDisabled) return;
-    if (!window.confirm(`Удалить «${source.name}» и все версии CSV? Действие нельзя отменить. Сохранённые отчёты по этому источнику нельзя будет обновить.`)) return;
+    if (!window.confirm(t(`Удалить «${source.name}» и все версии CSV? Действие нельзя отменить. Сохранённые отчёты по этому источнику нельзя будет обновить.`, `Delete “${source.name}” and all CSV versions? This cannot be undone. Saved reports using this source will no longer be refreshable.`))) return;
     setDeleteError("");
     setDeleting(true);
     try {
@@ -154,14 +156,14 @@ export function SourceInspector({
         <div className="source-workspace-identity">
           <h1>{source.name}</h1>
         </div>
-        {source.source_type === "csv" && onDelete && <button className="source-delete" type="button" disabled={deleting || deleteDisabled} onClick={() => void deleteCsv()}>{deleting ? "Удаляем…" : "Удалить CSV"}</button>}
+        {source.source_type === "csv" && onDelete && <button className="source-delete" type="button" disabled={deleting || deleteDisabled} onClick={() => void deleteCsv()}>{deleting ? t("Удаляем…", "Deleting…") : t("Удалить CSV", "Delete CSV")}</button>}
         <button className="source-refresh" type="button" onClick={() => setRevision((value) => value + 1)}>
-          <Icon name="refresh" size={16} /> Обновить
+          <Icon name="refresh" size={16} /> {t("Обновить", "Refresh")}
         </button>
       </div>
-      {deleteError && <p role="alert" className="source-delete-error">Не удалось удалить CSV: {deleteError}</p>}
-      <nav className="analytics-tabs" aria-label="Разделы источника">
-        {views.map(([id, label]) => (
+      {deleteError && <p role="alert" className="source-delete-error">{t("Не удалось удалить CSV", "Could not delete CSV")}: {deleteError}</p>}
+      <nav className="analytics-tabs" aria-label={t("Разделы источника", "Source sections")}>
+        {views.map(([id, ru, en]) => { const label = t(ru, en); return (
           <button
             key={id}
             aria-label={label}
@@ -175,8 +177,8 @@ export function SourceInspector({
               </span>
             )}
           </button>
-        ))}
-        {view === "results" && <button aria-pressed="true" onClick={() => setView("results")}>Результат анализа</button>}
+        ); })}
+        {view === "results" && <button aria-pressed="true" onClick={() => setView("results")}>{t("Результат анализа", "Analysis result")}</button>}
       </nav>
       <section className="analytics-report" aria-label="Исследование данных">
         {view === "results" ? (
@@ -186,19 +188,19 @@ export function SourceInspector({
             <ErrorNotice
               message={error}
               onRetry={() => setRevision((value) => value + 1)}
-              label="Повторить загрузку"
+              label={t("Повторить загрузку", "Retry loading")}
             />
           </div>
         ) : !current ? (
           <div className="loading-panel" role="status">
             <EviaMascot state="profiling" size={80} decorative />
-            Изучаем структуру источника…
+            {t("Изучаем структуру источника…", "Inspecting source structure…")}
           </div>
         ) : (
           <>
             {view === "overview" ? (
               <Dashboard
-                title="Обзор источника"
+                title={t("Обзор источника", "Source overview")}
                 sourceLabel={source.name}
                 scope={source.source_id}
                 schema={current.schema}

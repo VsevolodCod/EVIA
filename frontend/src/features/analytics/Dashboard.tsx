@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useLanguage } from "../../language";
 import type { Profile, Row, Source, SourceSchema } from "../../api";
 import type { Entry } from "../chat/types";
 import { hasExactStats, numberText, percentText } from "../sources/profileModel";
@@ -13,9 +14,10 @@ import "./dashboardPrint.css";
 import "./dashboardControls.css";
 
 function ChartCard({ title, unit, children, detail, detailLabel, footer }: { title: string; unit?: string; children: React.ReactNode; detail?: React.ReactNode; detailLabel?: string; footer?: React.ReactNode }) {
+  const { t } = useLanguage();
   const [expanded, setExpanded] = useState(false);
   return <section className={`dashboard-card chart-card ${expanded ? "chart-card-expanded" : ""}`} aria-label={expanded ? detailLabel : undefined}>
-    <div className="chart-heading"><h3>{title}</h3><div className="chart-heading-actions">{unit && <small>{unit}</small>}<button type="button" className="chart-expand" aria-label={expanded ? "Закрыть график" : `Развернуть график ${title}`} onClick={() => setExpanded(!expanded)}>{expanded ? "✕" : "↗"}</button></div></div>
+    <div className="chart-heading"><h3>{title}</h3><div className="chart-heading-actions">{unit && <small>{unit}</small>}<button type="button" className="chart-expand" aria-label={expanded ? t("Закрыть график", "Close chart") : t(`Развернуть график ${title}`, `Expand chart ${title}`)} onClick={() => setExpanded(!expanded)}>{expanded ? "✕" : "↗"}</button></div></div>
     {expanded && detail && <div className="chart-detail">{detail}</div>}
     {children}
     {expanded && footer && <div className="chart-detail-footer">{footer}</div>}
@@ -97,6 +99,7 @@ export function Dashboard({
   source?: Source;
   reportEntries?: Entry[];
 }) {
+  const { t } = useLanguage();
   const model = useMemo(() => buildDashboardModel(schema, rows), [schema, rows]);
   const [showPalette, setShowPalette] = useState(false);
   const [showMobileExport, setShowMobileExport] = useState(false);
@@ -192,7 +195,7 @@ export function Dashboard({
       entries={reportEntries} onClose={() => setReportOpen(false)} />}
     <div className="dashboard-top">
       <div><h2>{title}</h2>{context === "result" && <p>{sourceLabel}</p>}</div>
-      <div className="dashboard-actions"><button onClick={exportCsv}>{context === "source" ? "Скачать предпросмотр" : "Скачать результат"}</button><button className="desktop-export" onClick={exportPdf}>{source ? "Собрать PDF-отчёт" : "Печать / PDF"}</button><button className="mobile-export-trigger" onClick={() => setShowMobileExport(true)}>Ещё</button></div>
+      <div className="dashboard-actions"><button onClick={exportCsv}>{context === "source" ? t("Скачать предпросмотр", "Download preview") : t("Скачать результат", "Download result")}</button><button className="desktop-export" onClick={exportPdf}>{source ? t("Собрать PDF-отчёт", "Build PDF report") : t("Печать / PDF", "Print / PDF")}</button><button className="mobile-export-trigger" onClick={() => setShowMobileExport(true)}>{t("Ещё", "More")}</button></div>
     </div>
     {showMobileExport && <div className="mobile-export-backdrop" onClick={() => setShowMobileExport(false)}>
       <section className="mobile-export-sheet" aria-label="Экспорт результатов" onClick={(event) => event.stopPropagation()}>
@@ -203,18 +206,18 @@ export function Dashboard({
       </section>
     </div>}
     {showPalette && <PaletteEditor colors={colors} gradient={gradient} onChange={updateColors} onClose={() => setShowPalette(false)} />}
-    {!rows.length && <p className="dashboard-empty-state">{context === "source" ? "В предпросмотре нет строк" : "Инструмент не вернул строк"}</p>}
-    <div className="kpi-grid" aria-label="Ключевые показатели">
-      <section className="dashboard-card"><span>{context === "result" ? "Строк в результате" : hasSourceTotal ? "Строк в источнике" : "Строк в предпросмотре"}</span><strong>{numberText(hasSourceTotal ? fullSourceRows : model.rowCount)}</strong><small>{context === "result" ? "Ответ инструмента" : hasSourceTotal ? "Полный датасет" : "Полный объём неизвестен"}</small></section>
-      <section className="dashboard-card"><span>Столбцов</span><strong>{numberText(model.columnCount)}</strong></section>
-      {!profile && <section className="dashboard-card"><span>Заполнено ячеек</span><strong>{percentText(model.completeness)}</strong></section>}
-      {profile && <section className={`dashboard-card quality-kpi ${profileReady && missingFields ? "needs-attention" : ""}`}><span>Заполненность {fullProfile ? "источника" : "выборки"}</span><strong>{!profileReady ? "Нет профиля" : percentText(profileCompleteness)}</strong><small>{!profileReady ? "Нет строк для проверки" : missingFields ? `${fieldsText(missingFields)} с пропусками` : fullProfile ? "Пропусков не найдено" : "В выборке пропусков нет"}</small></section>}
+    {!rows.length && <p className="dashboard-empty-state">{context === "source" ? t("В предпросмотре нет строк", "No rows in preview") : t("Инструмент не вернул строк", "The tool returned no rows")}</p>}
+    <div className="kpi-grid" aria-label={t("Ключевые показатели", "Key metrics")}>
+      <section className="dashboard-card"><span>{context === "result" ? t("Строк в результате", "Rows in result") : hasSourceTotal ? t("Строк в источнике", "Rows in source") : t("Строк в предпросмотре", "Rows in preview")}</span><strong>{numberText(hasSourceTotal ? fullSourceRows : model.rowCount)}</strong><small>{context === "result" ? t("Ответ инструмента", "Tool result") : hasSourceTotal ? t("Полный датасет", "Full dataset") : t("Полный объём неизвестен", "Total size unknown")}</small></section>
+      <section className="dashboard-card"><span>{t("Столбцов", "Columns")}</span><strong>{numberText(model.columnCount)}</strong></section>
+      {!profile && <section className="dashboard-card"><span>{t("Заполнено ячеек", "Filled cells")}</span><strong>{percentText(model.completeness)}</strong></section>}
+      {profile && <section className={`dashboard-card quality-kpi ${profileReady && missingFields ? "needs-attention" : ""}`}><span>{fullProfile ? t("Заполненность источника", "Source completeness") : t("Заполненность выборки", "Sample completeness")}</span><strong>{!profileReady ? t("Нет профиля", "No profile") : percentText(profileCompleteness)}</strong><small>{!profileReady ? t("Нет строк для проверки", "No rows to check") : missingFields ? t(`${fieldsText(missingFields)} с пропусками`, `${missingFields} columns with missing values`) : fullProfile ? t("Пропусков не найдено", "No missing values found") : t("В выборке пропусков нет", "No missing values in sample")}</small></section>}
     </div>
     {rows.length > 0 && <section className="dashboard-preview" aria-label={context === "source" ? "Первые строки источника" : "Таблица результата"}>
-      <div className="dashboard-section-heading"><h3>{context === "source" ? "Первые строки" : "Таблица результата"}</h3>{onOpenData && <button type="button" onClick={onOpenData}>Открыть данные →</button>}</div>
+      <div className="dashboard-section-heading"><h3>{context === "source" ? t("Первые строки", "First rows") : t("Таблица результата", "Result table")}</h3>{onOpenData && <button type="button" onClick={onOpenData}>{t("Открыть данные →", "Open data →")}</button>}</div>
       <DataTable rows={rows} columns={schema.objects.flatMap((object) => object.fields.map((field) => field.name))} label={context === "source" ? "Таблица первых строк" : "Данные результата"} />
     </section>}
-    {hasCharts && <div className="dashboard-section-heading dashboard-charts-heading"><div><h3>Что видно в данных</h3><span className="dashboard-scope-badge">{context === "source" ? "По предпросмотру" : "По результату"}</span></div><button type="button" onClick={() => setShowPalette((open) => !open)} aria-expanded={showPalette}>Цвета графиков</button></div>}
+    {hasCharts && <div className="dashboard-section-heading dashboard-charts-heading"><div><h3>{t("Что видно в данных", "Explore the data")}</h3><span className="dashboard-scope-badge">{context === "source" ? t("По предпросмотру", "Based on preview") : t("По результату", "Based on result")}</span></div><button type="button" onClick={() => setShowPalette((open) => !open)} aria-expanded={showPalette}>{t("Цвета графиков", "Chart colors")}</button></div>}
     {hasCharts || missingColumns.length > 0 ? <div className="dashboard-grid">
       {model.timeline && <ChartCard title={`Динамика по полю ${model.timeline.field}`} unit="строки"><LineChart values={model.timeline.values} color={primary} gradient={gradient} label={`Динамика по полю ${model.timeline.field}`} /><p className="visually-hidden">{model.timeline.values.map((point) => `${point.label}: ${numberText(point.value)}`).join("; ")}</p></ChartCard>}
       {model.category && <ChartCard title={`Частые значения: ${model.category.field}`} unit="строки"><HorizontalBars values={model.category.values} color={model.timeline ? secondary : primary} label={`Частые значения поля ${model.category.field}`} /></ChartCard>}
