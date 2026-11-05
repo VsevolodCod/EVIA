@@ -5,6 +5,11 @@ import pytest
 from scripts.benchmarks.tools.evaluation import EvaluationCase
 from scripts.benchmarks.tools.evaluation import load_corpus
 from scripts.benchmarks.tools.model_benchmark import BenchmarkReport, BenchmarkRunner, ModelBenchmark, score_response, summarize_runs
+from scripts.benchmarks.benchmark_local_models import DEFAULT_CORPUS
+
+
+def test_benchmark_default_corpus_is_available():
+    assert (DEFAULT_CORPUS / "cases.json").is_file()
 
 
 COMPUTED = EvaluationCase(

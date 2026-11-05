@@ -26,7 +26,8 @@ COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app/ ./app/
-COPY scripts/__init__.py scripts/benchmarks/benchmark_railway_agent.py ./scripts/
+COPY scripts/__init__.py ./scripts/__init__.py
+COPY scripts/benchmarks/ ./scripts/benchmarks/
 COPY --from=frontend-build /build/frontend/dist ./frontend/dist
 
 RUN groupadd --system evia \

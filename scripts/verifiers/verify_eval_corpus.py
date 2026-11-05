@@ -13,7 +13,7 @@ import tempfile
 from scripts.benchmarks.tools.evaluation import verify_corpus
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CORPUS = ROOT / "evals" / "v1"
 
 

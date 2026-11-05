@@ -27,7 +27,7 @@ from app.source_service import SourceService
 from app.tools import build_tool_registry
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CORPUS = ROOT / "evals" / "v1"
 
 
