@@ -50,7 +50,7 @@ function savedChatSources(): Record<string, string> {
   }
 }
 
-function entriesFromMessages(chatId: string, messages: ChatMessage[]): Entry[] {
+function entriesFromMessages(chatId: string, messages: ChatMessage[], language: "ru" | "en"): Entry[] {
   const entries: Entry[] = [];
   let user: ChatMessage | undefined;
   for (const [index, message] of messages.entries()) {
@@ -93,7 +93,7 @@ function entriesFromMessages(chatId: string, messages: ChatMessage[]): Entry[] {
       question: user.content,
       state: "error",
       mascotState: "warning",
-      error: "Ответ для этого вопроса не сохранился. Повторите запрос.",
+      error: language === "en" ? "The answer to this question was not saved. Please retry." : "Ответ для этого вопроса не сохранился. Повторите запрос.",
     });
   }
   return entries;
@@ -299,7 +299,7 @@ export default function App({ account, onAccountChange, onLogout }: {
     try {
       const page = await api.chatHistory(chatId, before, controller.signal);
       if (controller.signal.aborted || !mounted.current) return;
-      const entries = entriesFromMessages(chatId, page.messages);
+      const entries = entriesFromMessages(chatId, page.messages, language);
       const serverSourceId = sourceId.startsWith("archive:")
         ? sourceId
         : page.source_id ?? sourceId;
@@ -971,7 +971,7 @@ export default function App({ account, onAccountChange, onLogout }: {
                 <p>{t("Перетащите файл сюда или выберите его с устройства", "Drag a file here or choose one from your device")}</p>
                 {selectedUploadFile && <div className="upload-selected-file">
                   <Icon name="file" size={18} />
-                  <span>{selectedUploadFile.name}<small>{(selectedUploadFile.size / 1024).toFixed(1)} КБ</small></span>
+                  <span>{selectedUploadFile.name}<small>{(selectedUploadFile.size / 1024).toFixed(1)} {t("КБ", "KB")}</small></span>
                   <Icon name="check" size={16} />
                 </div>}
                 {uploadError && window.matchMedia?.("(max-width: 640px)").matches && <div className="mobile-upload-error"><ErrorNotice

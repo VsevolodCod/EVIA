@@ -1,7 +1,25 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import AuthGate from "./AuthGate";
+import { LanguageProvider } from "./language";
 
 vi.mock("./App", () => ({ default: ({ account }: { account?: { name: string } }) => <div>Рабочее пространство {account?.name}</div> }));
+
+test("a visitor can switch the sign-in form to English", async () => {
+  localStorage.removeItem("evia.language");
+  vi.stubGlobal("fetch", vi.fn((url: string) => Promise.resolve(url === "/auth/status"
+    ? Response.json({ enabled: true, recovery_available: true })
+    : Response.json({ detail: "Sign in required" }, { status: 401 }))));
+  try {
+    render(<LanguageProvider><AuthGate /></LanguageProvider>);
+    fireEvent.click(await screen.findByRole("button", { name: "English" }));
+    expect(screen.getByRole("heading", { name: "Sign in" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Email")).toBeInTheDocument();
+    expect(screen.getByLabelText("Password")).toBeInTheDocument();
+  } finally {
+    localStorage.removeItem("evia.language");
+    vi.unstubAllGlobals();
+  }
+});
 
 test("a visitor registers, enters the workspace, and sees the profile", async () => {
   const fetcher = vi.fn((url: string) => {
