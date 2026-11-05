@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor, cleanup } from "@testing-library/react";
 import { afterEach, expect, it } from "vitest";
 import { LanguageProvider, LanguageSwitch, useLanguage } from "./language";
+import { DataTable } from "./features/results/DataTable";
 
 function Sample() {
   const { t } = useLanguage();
@@ -19,4 +20,12 @@ it("switches language, updates the document and restores the choice", async () =
   view.unmount();
   render(<LanguageProvider><Sample /></LanguageProvider>);
   expect(screen.getByText("Hello")).toBeInTheDocument();
+});
+
+it("translates the table empty state and returns to Russian", () => {
+  localStorage.setItem("evia.language", "en");
+  render(<LanguageProvider><LanguageSwitch /><DataTable rows={[]} /></LanguageProvider>);
+  expect(screen.getByText("No rows to display")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Русский" }));
+  expect(screen.getByText("Нет строк для отображения")).toBeInTheDocument();
 });
