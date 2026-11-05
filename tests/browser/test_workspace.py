@@ -57,6 +57,27 @@ def server(tmp_path):
                 process.wait(timeout=5)
 
 
+def test_english_workspace_language_persists(server):
+    from playwright.sync_api import sync_playwright, expect
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(channel=os.getenv('BI_BROWSER_CHANNEL') or None)
+        try:
+            page = browser.new_page(viewport={'width': 1440, 'height': 1000})
+            page.set_default_timeout(10000)
+            page.goto(server)
+            expect(page.get_by_text('Нет источников', exact=True)).to_be_visible()
+            page.get_by_role('button', name='Открыть настройки').click()
+            page.get_by_role('button', name='English', exact=True).click()
+            expect(page.get_by_role('heading', name='Sources', exact=True)).to_be_visible()
+            expect(page.locator('html')).to_have_attribute('lang', 'en')
+            page.reload()
+            expect(page.get_by_role('heading', name='Sources', exact=True)).to_be_visible()
+            expect(page.get_by_text('No sources', exact=True)).to_be_visible()
+        finally:
+            browser.close()
+
+
 def test_real_workspace_keyboard_mobile_and_safe_markdown(server):
     from playwright.sync_api import sync_playwright, expect
 

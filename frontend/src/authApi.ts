@@ -1,5 +1,8 @@
 export type Account = { id: string; email: string; name: string; created_at: string; avatar_url: string | null };
 export type AuthStatus = { enabled: boolean; recovery_available: boolean };
+function authMessage(ru: string, en: string) {
+  try { return localStorage.getItem("evia.language") === "en" ? en : ru; } catch { return ru; }
+}
 
 async function call<T>(url: string, method = "GET", body?: object): Promise<T> {
   const response = await fetch(url, {
@@ -11,7 +14,7 @@ async function call<T>(url: string, method = "GET", body?: object): Promise<T> {
   if (!response.ok) {
     const data: unknown = await response.json().catch(() => null);
     const detail = data && typeof data === "object" && "detail" in data && typeof data.detail === "string"
-      ? data.detail : `Ошибка сервера (${response.status})`;
+      ? data.detail : authMessage(`Ошибка сервера (${response.status})`, `Server error (${response.status})`);
     throw Object.assign(new Error(detail), { status: response.status });
   }
   if (response.status === 204) return undefined as T;
@@ -31,7 +34,7 @@ export const authApi = {
     const response = await fetch("/auth/avatar", { method: "PUT", credentials: "same-origin", body });
     if (!response.ok) {
       const data = await response.json().catch(() => null) as { detail?: string } | null;
-      throw new Error(data?.detail ?? `Не удалось загрузить фотографию (${response.status})`);
+      throw new Error(data?.detail ?? authMessage(`Не удалось загрузить фотографию (${response.status})`, `Could not upload photo (${response.status})`));
     }
     return response.json() as Promise<Account>;
   },

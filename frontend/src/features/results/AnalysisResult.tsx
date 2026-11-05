@@ -1,5 +1,6 @@
 import type { Row, SourceSchema, ToolResult } from "../../api";
 import type { Entry } from "../chat/types";
+import { useLanguage } from "../../language";
 import { SafeMarkdown } from "../chat/SafeMarkdown";
 import { ToolResults } from "./ToolResults";
 import { EviaMascot } from "../../components/EviaMascot";
@@ -93,6 +94,7 @@ function scalarText(value: unknown, type: string) {
 }
 
 export function AnalysisResult({ entry, onOpenChat }: { entry?: Entry; onOpenChat?: () => void }) {
+  const { t } = useLanguage();
   const generated = entry?.answer?.tool_results.map(generatedDashboardFrom).filter((item) => item !== null).at(-1);
   const savedId = entry?.answer?.tool_results.filter((item) => item.ok).map((item) =>
     item.tool_name === "compose_dashboard" || item.tool_name === "add_charts_to_dashboard"
@@ -106,46 +108,46 @@ export function AnalysisResult({ entry, onOpenChat }: { entry?: Entry; onOpenCha
     ? { name: field.name, type: field.inferred_type, value: result.rows[0][field.name] }
     : null;
   const scalarLabel = scalar?.type === "datetime" && /\bAVG\s*\(/i.test(entry?.answer?.analysis?.sql ?? "")
-    ? "Средняя дата/время" : scalar?.name.replaceAll("_", " ");
+    ? t("Средняя дата/время", "Average date/time") : scalar?.name.replaceAll("_", " ");
   const hasVisualResult = Boolean(result || generated || savedId || generatedCharts.length);
   return (
     <div className="analytics-section analysis-result">
       {(!result && !generated && !savedId && !generatedCharts.length || scalar) && <div className="analytics-title">
         <div>
-          <span className="analytics-kicker">ОТ ВОПРОСА К ВЫВОДУ</span>
-          <h2>Результат анализа</h2>
+          <span className="analytics-kicker">{t("ОТ ВОПРОСА К ВЫВОДУ", "FROM QUESTION TO INSIGHT")}</span>
+          <h2>{t("Результат анализа", "Analysis result")}</h2>
         </div>
       </div>}
       {entry?.answer ? (
         <>
           {(entry.answer.status === "error" || entry.answer.status === "clarification" || entry.answer.answer_kind === "demo") && <div className="analysis-provenance">
-            {entry.answer.status === "error" ? "Запрос не выполнен" : entry.answer.status === "clarification" ? "Нужно уточнение" : "Демо-ответ"}
+            {entry.answer.status === "error" ? t("Запрос не выполнен", "Request failed") : entry.answer.status === "clarification" ? t("Нужно уточнение", "Clarification needed") : t("Демо-ответ", "Demo response")}
           </div>}
           {savedId ? <SavedDashboard id={savedId} /> : generated ? <GeneratedDashboard dashboard={generated} scope={`generated-${entry.id}`} />
             : generatedCharts.map((chart, index) => <GeneratedDashboard key={`${entry.id}-${index}`} dashboard={chart} scope={`chart-${entry.id}-${index}`} />)}
-          {scalar && <section className="analysis-scalar" aria-label="Показатель">
+          {scalar && <section className="analysis-scalar" aria-label={t("Показатель", "Measure")}>
             <span>{scalarLabel}</span>
-            <strong>{scalarText(scalar.value, scalar.type)}</strong>
+            <strong>{scalar.value == null ? t("Нет подходящих значений", "No matching values") : scalarText(scalar.value, scalar.type)}</strong>
           </section>}
           {result && !scalar && <Dashboard
-            title="Результат анализа"
-            sourceLabel="Таблица, полученная инструментом EVIA"
+            title={t("Результат анализа", "Analysis result")}
+            sourceLabel={t("Таблица, полученная инструментом EVIA", "Table returned by an EVIA tool")}
             scope={`result-${entry.id}`}
             schema={result.schema}
             rows={result.rows}
             context="result"
           />}
           <p className="analysis-question">{entry.question}</p>
-          {hasVisualResult ? onOpenChat && <button className="result-open-chat" type="button" onClick={onOpenChat}>Открыть ответ в чате</button> : <div className="analysis-answer" aria-label="Вывод EVIA">
-            <SafeMarkdown>{entry.answer.answer || "Модель вернула пустой ответ."}</SafeMarkdown>
+          {hasVisualResult ? onOpenChat && <button className="result-open-chat" type="button" onClick={onOpenChat}>{t("Открыть ответ в чате", "Open response in chat")}</button> : <div className="analysis-answer" aria-label={t("Вывод EVIA", "EVIA finding")}>
+            <SafeMarkdown>{entry.answer.answer || t("Модель вернула пустой ответ.", "The model returned an empty response.")}</SafeMarkdown>
           </div>}
           {entry.answer.analysis?.sql && <details className="analysis-sql">
-            <summary>Показать SQL</summary>
+            <summary>{t("Показать SQL", "Show SQL")}</summary>
             <code>{entry.answer.analysis.sql}</code>
           </details>}
           {otherResults.length > 0 && (result || generated || savedId || generatedCharts.length ? (
             <details className="analysis-details">
-              <summary>Таблица и детали расчёта</summary>
+              <summary>{t("Таблица и детали расчёта", "Table and calculation details")}</summary>
               <ToolResults results={otherResults} analysis={entry?.answer?.analysis} />
             </details>
           ) : <ToolResults results={otherResults} analysis={entry?.answer?.analysis} />)}
@@ -165,15 +167,15 @@ export function AnalysisResult({ entry, onOpenChat }: { entry?: Entry; onOpenCha
           />
           <h3>
             {entry?.state === "pending"
-              ? "EVIA изучает ваш вопрос"
+              ? t("EVIA изучает ваш вопрос", "EVIA is examining your question")
               : entry?.state === "error"
-                ? "Не удалось получить результат"
-                : "Начните с вопроса"}
+                ? t("Не удалось получить результат", "Could not get a result")
+                : t("Начните с вопроса", "Start with a question")}
           </h3>
           <p>
             {entry?.state === "error"
-              ? "Повторите вопрос в диалоге справа."
-              : "Здесь появятся выводы и результаты вычислений из вашего диалога."}
+              ? t("Повторите вопрос в диалоге справа.", "Retry the question in the chat.")
+              : t("Здесь появятся выводы и результаты вычислений из вашего диалога.", "Findings and calculations from your chat will appear here.")}
           </p>
         </div>
       )}

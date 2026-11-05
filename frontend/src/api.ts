@@ -324,12 +324,16 @@ const knownErrors: Record<string, string> = {
   "CSV source changed during import; retry with the latest version":
     "Источник уже обновили. Обновите страницу и повторите импорт.",
 };
+function englishInterface(): boolean {
+  try { return localStorage.getItem("evia.language") === "en"; } catch { return false; }
+}
+function uiMessage(ru: string, en: string): string { return englishInterface() ? en : ru; }
 function readableImportError(message: string): string {
-  if (knownErrors[message]) return knownErrors[message];
+  if (knownErrors[message]) return uiMessage(knownErrors[message], message);
   const width = /^CSV row ending at line (\d+) has (\d+) fields; expected (\d+)$/.exec(message);
-  if (width) return `Строка CSV около строки ${width[1]}: полей ${width[2]}, ожидается ${width[3]}.`;
+  if (width) return uiMessage(`Строка CSV около строки ${width[1]}: полей ${width[2]}, ожидается ${width[3]}.`, `CSV row near line ${width[1]} has ${width[2]} fields; expected ${width[3]}.`);
   const quote = /^CSV quoting error near line (\d+):/.exec(message);
-  if (quote) return `Ошибка кавычек в CSV около строки ${quote[1]}.`;
+  if (quote) return uiMessage(`Ошибка кавычек в CSV около строки ${quote[1]}.`, `CSV quoting error near line ${quote[1]}.`);
   return message;
 }
 async function request<T>(
@@ -346,7 +350,7 @@ async function request<T>(
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") throw error;
     throw new ApiError(
-      "Нет связи с сервером. Проверьте, запущен ли сервис, и повторите запрос.",
+      uiMessage("Нет связи с сервером. Проверьте, запущен ли сервис, и повторите запрос.", "Cannot reach the server. Check that the service is running and retry."),
       0,
     );
   }
@@ -362,11 +366,11 @@ async function readResponse<T>(response: Response, validator: z.ZodType<T>): Pro
     if (response.status === 507) throw new ApiError(
       typeof detail === "string"
         ? detail
-        : "На сервере недостаточно места для импорта. CSV не сохранён; при повторном импорте прежняя версия остаётся доступной. Выберите меньший файл или обратитесь к администратору.",
+        : uiMessage("На сервере недостаточно места для импорта. CSV не сохранён; при повторном импорте прежняя версия остаётся доступной. Выберите меньший файл или обратитесь к администратору.", "The server has insufficient space for import. The CSV was not saved; the previous version remains available. Choose a smaller file or contact an administrator."),
       response.status,
     );
     if (typeof detail === "string" && knownErrors[detail])
-      throw new ApiError(knownErrors[detail], response.status);
+      throw new ApiError(uiMessage(knownErrors[detail], detail), response.status);
     if (detail && typeof detail === "object" && "report" in detail) {
       const report = importReportSchema.pick({
         rows_read: true, accepted_rows: true, rejected_rows: true, errors: true,
@@ -374,34 +378,34 @@ async function readResponse<T>(response: Response, validator: z.ZodType<T>): Pro
       if (report.success) {
         const { rows_read, accepted_rows, rejected_rows, errors } = report.data;
         const counts = rows_read
-          ? `Принято ${accepted_rows} из ${rows_read} строк, отклонено ${rejected_rows}.`
-          : "CSV не принят.";
-        const reason = errors[0] ?? ("message" in detail && typeof detail.message === "string" ? detail.message : "Проверьте файл.");
+          ? uiMessage(`Принято ${accepted_rows} из ${rows_read} строк, отклонено ${rejected_rows}.`, `Accepted ${accepted_rows} of ${rows_read} rows; rejected ${rejected_rows}.`)
+          : uiMessage("CSV не принят.", "CSV was not accepted.");
+        const reason = errors[0] ?? ("message" in detail && typeof detail.message === "string" ? detail.message : uiMessage("Проверьте файл.", "Check the file."));
         throw new ApiError(`${counts} ${readableImportError(reason)}`, response.status);
       }
     }
     const errors: Record<number, string> = {
-      400: "Не удалось прочитать данные. Проверьте формат файла и повторите запрос.",
-      409: "Отчёт изменился. Обновите его и повторите действие.",
-      404: "Источник больше не доступен. Обновите список источников.",
-      413: "Файл слишком большой для сервера. Попробуйте меньший CSV.",
-      422: "Проверьте данные запроса: вопрос должен содержать от 1 до 4000 символов.",
-      502: "Не удалось получить ответ модели. Проверьте подключение к модели и повторите вопрос.",
-      503: "Сервис временно недоступен. Повторите запрос немного позже.",
+      400: uiMessage("Не удалось прочитать данные. Проверьте формат файла и повторите запрос.", "Could not read the data. Check the file format and retry."),
+      409: uiMessage("Отчёт изменился. Обновите его и повторите действие.", "The report changed. Refresh it and retry."),
+      404: uiMessage("Источник больше не доступен. Обновите список источников.", "The source is no longer available. Refresh the sources list."),
+      413: uiMessage("Файл слишком большой для сервера. Попробуйте меньший CSV.", "The file is too large for the server. Try a smaller CSV."),
+      422: uiMessage("Проверьте данные запроса: вопрос должен содержать от 1 до 4000 символов.", "Check the request: the question must contain 1–4000 characters."),
+      502: uiMessage("Не удалось получить ответ модели. Проверьте подключение к модели и повторите вопрос.", "Could not get a model response. Check the model connection and retry."),
+      503: uiMessage("Сервис временно недоступен. Повторите запрос немного позже.", "The service is temporarily unavailable. Try again later."),
     };
     throw new ApiError(
       errors[response.status] ||
-        `Сервер не смог выполнить запрос (HTTP ${response.status}). Повторите попытку.`,
+        uiMessage(`Сервер не смог выполнить запрос (HTTP ${response.status}). Повторите попытку.`, `The server could not process the request (HTTP ${response.status}). Try again.`),
       response.status,
     );
   }
   const body: unknown = await response.json().catch(() => {
-    throw new Error("Сервер вернул неподдерживаемый формат ответа.");
+    throw new Error(uiMessage("Сервер вернул неподдерживаемый формат ответа.", "The server returned an unsupported response format."));
   });
   const result = validator.safeParse(body);
   if (!result.success)
     throw new Error(
-      "Сервер вернул неподдерживаемый формат данных. Обновите страницу или проверьте версию сервиса.",
+      uiMessage("Сервер вернул неподдерживаемый формат данных. Обновите страницу или проверьте версию сервиса.", "The server returned unsupported data. Refresh the page or check the service version."),
     );
   return result.data;
 }
@@ -424,7 +428,7 @@ function uploadWithProgress(body: FormData, signal: AbortSignal | undefined, onP
     };
     xhr.onerror = () => {
       detach();
-      reject(new ApiError("Нет связи с сервером. Повторите загрузку CSV.", 0));
+      reject(new ApiError(uiMessage("Нет связи с сервером. Повторите загрузку CSV.", "Cannot reach the server. Retry the CSV upload."), 0));
     };
     xhr.onabort = () => {
       detach();
@@ -470,7 +474,7 @@ export const api = {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ question, source_ids: [id], ...(dashboardId ? { dashboard_id: dashboardId } : {}) }), signal,
     });
-    if (result.chat_id !== chatId) throw new Error("Сервер вернул ответ другого диалога. Повторите запрос.");
+    if (result.chat_id !== chatId) throw new Error(uiMessage("Сервер вернул ответ другого диалога. Повторите запрос.", "The server returned a response from another chat. Retry the request."));
     return result;
   },
   health: (signal?: AbortSignal) =>
@@ -487,7 +491,7 @@ export const api = {
     });
     if (schema.source_id !== id)
       throw new Error(
-        "Сервер вернул схему другого источника. Обновите данные.",
+        uiMessage("Сервер вернул схему другого источника. Обновите данные.", "The server returned another source's schema. Refresh the data."),
       );
     return schema;
   },
@@ -517,4 +521,4 @@ export const api = {
 export const errorMessage = (error: unknown) =>
   error instanceof Error
     ? error.message
-    : "Не удалось выполнить запрос. Попробуйте ещё раз.";
+    : uiMessage("Не удалось выполнить запрос. Попробуйте ещё раз.", "Could not complete the request. Try again.");

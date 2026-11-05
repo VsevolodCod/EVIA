@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
+import { useLanguage } from "../../language";
 import type { Entry } from "./types";
 
 const seconds = (ms: number) => `${(ms / 1000).toLocaleString("ru-RU", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} с`;
 
 export function ResponseTiming({ entry }: { entry: Entry }) {
+  const { t, language } = useLanguage();
+  const duration = (ms: number) => language === "ru" ? seconds(ms) : `${(ms / 1000).toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} s`;
   const [now, setNow] = useState(() => performance.now());
   useEffect(() => {
     if (entry.state !== "pending") return;
@@ -16,20 +19,20 @@ export function ResponseTiming({ entry }: { entry: Entry }) {
   if (elapsed === undefined) return null;
   const timing = entry.answer?.timing;
   return <div className="response-timing" aria-live="off">
-    <p>{entry.state === "success" ? "Ответ за" : "Ожидание"} {seconds(elapsed)}</p>
+    <p>{entry.state === "success" ? t("Ответ за", "Answered in") : t("Ожидание", "Waiting")} {duration(elapsed)}</p>
     {timing && <details>
-      <summary>Подробности времени</summary>
-      <p>На сервере: {seconds(timing.elapsed_ms)}. Вызовы модели: {seconds(timing.llm_ms)}. Инструменты: {seconds(timing.tools_ms)}.</p>
+      <summary>{t("Подробности времени", "Timing details")}</summary>
+      <p>{t("На сервере", "Server")}: {duration(timing.elapsed_ms)}. {t("Вызовы модели", "Model calls")}: {duration(timing.llm_ms)}. {t("Инструменты", "Tools")}: {duration(timing.tools_ms)}.</p>
       <ol>{timing.calls.map((call, index) => <li key={index}>
-        Вызов {index + 1}{call.model ? ` (${call.model})` : ""}: {seconds(call.elapsed_ms)}.
-        {call.provider_total_ms != null && <> По таймеру провайдера: {seconds(call.provider_total_ms)}.</>}
-        {call.load_ms != null && <> Загрузка модели: {seconds(call.load_ms)}.</>}
-        {call.prompt_ms != null && <> Обработка входа: {seconds(call.prompt_ms)}.</>}
-        {call.generation_ms != null && <> Генерация: {seconds(call.generation_ms)}.</>}
+        {t("Вызов", "Call")} {index + 1}{call.model ? ` (${call.model})` : ""}: {duration(call.elapsed_ms)}.
+        {call.provider_total_ms != null && <> {t("По таймеру провайдера", "Provider timing")}: {duration(call.provider_total_ms)}.</>}
+        {call.load_ms != null && <> {t("Загрузка модели", "Model loading")}: {duration(call.load_ms)}.</>}
+        {call.prompt_ms != null && <> {t("Обработка входа", "Input processing")}: {duration(call.prompt_ms)}.</>}
+        {call.generation_ms != null && <> {t("Генерация", "Generation")}: {duration(call.generation_ms)}.</>}
         {call.generated_tokens != null && call.generation_ms != null && call.generation_ms > 0 &&
-          <> Скорость: {(call.generated_tokens * 1000 / call.generation_ms).toLocaleString("ru-RU", { maximumFractionDigits: 1 })} токенов/с.</>}
+          <> {t("Скорость", "Speed")}: {(call.generated_tokens * 1000 / call.generation_ms).toLocaleString(language === "ru" ? "ru-RU" : "en-US", { maximumFractionDigits: 1 })} {t("токенов/с", "tokens/s")}.</>}
       </li>)}</ol>
-      <p>Общее время включает сеть и обработку ответа. Вызовы модели включают ожидание Ollama; это не время до первого токена.</p>
+      <p>{t("Общее время включает сеть и обработку ответа. Вызовы модели включают ожидание Ollama; это не время до первого токена.", "Total time includes network and response processing. Model calls include waiting for Ollama; this is not time to first token.")}</p>
     </details>}
   </div>;
 }

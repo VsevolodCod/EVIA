@@ -14,7 +14,7 @@
 
 ![EVIA workspace with a synthetic data source](docs/guide/screenshots/analytics-overview-desktop.png)
 
-> Screenshots show the Russian-language interface in an isolated browser test with synthetic data and the `mock` provider. They do not establish real-model quality or imply that an English UI is available.
+> Screenshots show the Russian-language interface in an isolated browser test with synthetic data and the `mock` provider. They do not establish real-model quality. The interface also offers English; user data and model responses retain their original language.
 
 ## Contents
 

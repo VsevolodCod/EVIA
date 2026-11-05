@@ -17,6 +17,7 @@ import { PostgresSetup } from "./features/sources/PostgresSetup";
 import type { Entry, View } from "./features/chat/types";
 import { ResponseTiming } from "./features/chat/ResponseTiming";
 import { AccountMenu } from "./AccountMenu";
+import { LanguageSwitch, useLanguage } from "./language";
 import type { Account } from "./authApi";
 import "./styles.css";
 import {
@@ -49,7 +50,7 @@ function savedChatSources(): Record<string, string> {
   }
 }
 
-function entriesFromMessages(chatId: string, messages: ChatMessage[]): Entry[] {
+function entriesFromMessages(chatId: string, messages: ChatMessage[], language: "ru" | "en"): Entry[] {
   const entries: Entry[] = [];
   let user: ChatMessage | undefined;
   for (const [index, message] of messages.entries()) {
@@ -92,7 +93,7 @@ function entriesFromMessages(chatId: string, messages: ChatMessage[]): Entry[] {
       question: user.content,
       state: "error",
       mascotState: "warning",
-      error: "Ответ для этого вопроса не сохранился. Повторите запрос.",
+      error: language === "en" ? "The answer to this question was not saved. Please retry." : "Ответ для этого вопроса не сохранился. Повторите запрос.",
     });
   }
   return entries;
@@ -108,6 +109,7 @@ export default function App({ account, onAccountChange, onLogout }: {
   onAccountChange?: (account: Account) => void;
   onLogout?: () => Promise<void>;
 } = {}) {
+  const { t, language } = useLanguage();
   const [sources, setSources] = useState<Source[]>([]);
   const [sourcesLoading, setSourcesLoading] = useState(true);
   const [sourcesError, setSourcesError] = useState("");
@@ -297,7 +299,7 @@ export default function App({ account, onAccountChange, onLogout }: {
     try {
       const page = await api.chatHistory(chatId, before, controller.signal);
       if (controller.signal.aborted || !mounted.current) return;
-      const entries = entriesFromMessages(chatId, page.messages);
+      const entries = entriesFromMessages(chatId, page.messages, language);
       const serverSourceId = sourceId.startsWith("archive:")
         ? sourceId
         : page.source_id ?? sourceId;
@@ -542,12 +544,12 @@ export default function App({ account, onAccountChange, onLogout }: {
     setFailedFile(null);
     if (!file.name.toLowerCase().endsWith(".csv")) {
       setUploadFailure("invalid_csv");
-      setUploadError("Поддерживаются только файлы .csv.");
+      setUploadError(t("Поддерживаются только файлы .csv.", "Only .csv files are supported."));
       return;
     }
     if (file.size === 0) {
       setUploadFailure("invalid_csv");
-      setUploadError("Файл пуст. Выберите CSV с заголовком и данными.");
+      setUploadError(t("Файл пуст. Выберите CSV с заголовком и данными.", "The file is empty. Choose a CSV with a header and data."));
       return;
     }
     setUploading(true);
@@ -664,7 +666,7 @@ export default function App({ account, onAccountChange, onLogout }: {
         finish({
           state: "error",
           mascotState: "cancelled",
-          error: "Ожидание остановлено. Сервер может продолжать обработку.",
+          error: t("Ожидание остановлено. Сервер может продолжать обработку.", "Waiting stopped. The server may continue processing."),
         });
       else if (answer.status === "error")
         finish({ state: "error", mascotState: "error", answer, error: answer.answer });
@@ -680,7 +682,7 @@ export default function App({ account, onAccountChange, onLogout }: {
           ? "cancelled"
           : errorEviaState(error),
         error: controller.signal.aborted
-          ? "Ожидание остановлено. Сервер может продолжать обработку."
+          ? t("Ожидание остановлено. Сервер может продолжать обработку.", "Waiting stopped. The server may continue processing.")
           : errorMessage(error),
       });
     } finally {
@@ -698,13 +700,13 @@ export default function App({ account, onAccountChange, onLogout }: {
   return (
     <div className={`app mobile-panel-${mobilePanel} ${mobileOverlay === "upload" ? "mobile-upload-overlay" : ""}`} data-testid="app-shell" data-theme={theme === "system" ? systemDark ? "dark" : "light" : theme}>
       <a className="skip-link" href="#analysis">
-        Перейти к данным
+        {t("Перейти к данным", "Go to data")}
       </a>
       <header className="topbar">
         <a
           className="brand"
           href="#analysis"
-          aria-label="EVIA, рабочее пространство"
+          aria-label={t("EVIA, рабочее пространство", "EVIA workspace")}
           onClick={(event) => {
             if (window.matchMedia?.("(max-width: 640px)").matches) event.preventDefault();
             setMobilePanel("home");
@@ -713,21 +715,21 @@ export default function App({ account, onAccountChange, onLogout }: {
           EVIA
         </a>
         {account && onAccountChange && onLogout && <AccountMenu account={account} onChange={onAccountChange} onLogout={onLogout} theme={theme === "system" ? systemDark ? "dark" : "light" : theme} />}
-        <button className="mobile-settings-entry" aria-label="Открыть настройки" onClick={openSettings}><Icon name="settings" size={18} /></button>
+        <button className="mobile-settings-entry" aria-label={t("Открыть настройки", "Open settings")} onClick={openSettings}><Icon name="settings" size={18} /></button>
       </header>
       <div className="workspace">
-        <aside className="sidebar" aria-label="Навигация рабочего пространства">
+        <aside className="sidebar" aria-label={t("Навигация рабочего пространства", "Workspace navigation")}>
           <button className="primary new-analysis" onClick={newAnalysis}>
             <Icon name="plus" />
-            Добавить источник
+            {t("Добавить источник", "Add source")}
           </button>
           {!sourcesLoading && <div className="mobile-home-greeting"><WelcomeGreeting greeting={welcomeGreeting} activeState={mascotState} /></div>}
           <section className="nav-section">
             <div className="nav-heading">
-              <h2>Источники</h2>
+              <h2>{t("Источники", "Sources")}</h2>
               <button
                 className="icon-button"
-                aria-label="Обновить источники"
+                aria-label={t("Обновить источники", "Refresh sources")}
                 onClick={() => void loadSources()}
                 disabled={sourcesLoading}
               >
@@ -736,7 +738,7 @@ export default function App({ account, onAccountChange, onLogout }: {
             </div>
             {sourcesLoading && (
               <p className="sidebar-note" role="status">
-                Загружаем источники…
+                {t("Загружаем источники…", "Loading sources…")}
               </p>
             )}
             {sourcesError && (
@@ -746,7 +748,7 @@ export default function App({ account, onAccountChange, onLogout }: {
               />
             )}
             {!sourcesLoading && !sourcesError && !sources.length && (
-              <p className="sidebar-note">Нет источников</p>
+              <p className="sidebar-note">{t("Нет источников", "No sources")}</p>
             )}
             <div className="source-list">
               {sources.map((item) => (
@@ -774,25 +776,25 @@ export default function App({ account, onAccountChange, onLogout }: {
                 if (window.matchMedia?.("(max-width: 640px)").matches) openMobileUpload();
                 else chooseFile();
               }}
-              title="CSV · UTF-8, UTF-16 или Windows-1251"
+              title={t("CSV · UTF-8, UTF-16 или Windows-1251", "CSV · UTF-8, UTF-16 or Windows-1251")}
               disabled={uploading}
             >
               <Icon name="plus" size={16} />
-              {uploading ? uploadProgress === 100 ? "Обрабатываем CSV…" : `Загружаем CSV · ${uploadProgress ?? 0}%` : "Добавить CSV"}
+              {uploading ? uploadProgress === 100 ? t("Обрабатываем CSV…", "Processing CSV…") : t(`Загружаем CSV · ${uploadProgress ?? 0}%`, `Uploading CSV · ${uploadProgress ?? 0}%`) : t("Добавить CSV", "Add CSV")}
             </button>
             <button
               className={`postgres-nav ${!source && sourceSetup === "postgres" ? "selected" : ""}`}
               onClick={openPostgresSetup}
               aria-pressed={!source && sourceSetup === "postgres"}
-              title={postgresStatus?.connected ? "PostgreSQL доступен" : undefined}
+              title={postgresStatus?.connected ? t("PostgreSQL доступен", "PostgreSQL available") : undefined}
             >
-              Подключить PostgreSQL
+              {t("Подключить PostgreSQL", "Connect PostgreSQL")}
             </button>
             <input
               className="visually-hidden"
               type="file"
               accept=".csv,text/csv"
-              aria-label="Загрузить CSV"
+              aria-label={t("Загрузить CSV", "Upload CSV")}
               ref={fileInput}
               tabIndex={-1}
               onChange={(event) => {
@@ -812,35 +814,35 @@ export default function App({ account, onAccountChange, onLogout }: {
                 onRetry={
                   failedFile ? () => void upload(failedFile) : chooseFile
                 }
-                label={failedFile ? "Повторить загрузку CSV" : "Выбрать файл"}
+                label={failedFile ? t("Повторить загрузку CSV", "Retry CSV upload") : t("Выбрать файл", "Choose file")}
               />
             )}
           </section>
           <button className={`reports-nav ${showDashboardGallery ? "selected" : ""}`} type="button" aria-pressed={showDashboardGallery} onClick={() => { setShowDashboardGallery(true); setMobilePanel("analytics"); }}>
-            Сохранённые отчёты <Icon name="chevron" size={15} />
+            {t("Сохранённые отчёты", "Saved reports")} <Icon name="chevron" size={15} />
           </button>
           <section className="nav-section history-section">
             <div className="nav-heading">
-              <h2>История диалогов</h2>
+              <h2>{t("История диалогов", "Chat history")}</h2>
               {historyCount > 0 && (
                 <span className="nav-count">{historyCount}</span>
               )}
             </div>
             {historyListLoading ? (
-              <p className="sidebar-note" role="status">Загружаем диалоги…</p>
+              <p className="sidebar-note" role="status">{t("Загружаем диалоги…", "Loading chats…")}</p>
             ) : historyListError ? (
               <ErrorNotice
                 message={historyListError}
                 onRetry={() => void loadChatList()}
-                label="Повторить загрузку диалогов"
+                label={t("Повторить загрузку диалогов", "Retry loading chats")}
               />
             ) : (
               <>
                 {failedServerChat && !history.length && (
                   <ErrorNotice
-                    message={historyPages[failedServerChat.chat_id]?.error ?? "Не удалось загрузить историю."}
+                    message={historyPages[failedServerChat.chat_id]?.error ?? t("Не удалось загрузить историю.", "Could not load history.")}
                     onRetry={() => historyKey && void loadChatHistory(historyKey, failedServerChat.chat_id)}
-                    label="Повторить загрузку истории"
+                    label={t("Повторить загрузку истории", "Retry loading history")}
                   />
                 )}
                 {historyCount > 0 ? (
@@ -876,8 +878,8 @@ export default function App({ account, onAccountChange, onLogout }: {
                   <button
                     key={chat.chat_id}
                     className={`history-item ${archivedChatId === chat.chat_id ? "active" : ""}`}
-                    aria-label={`Архив: ${chat.title}`}
-                    title={`Источник недоступен · ${chat.title}`}
+                    aria-label={t(`Архив: ${chat.title}`, `Archive: ${chat.title}`)}
+                    title={t(`Источник недоступен · ${chat.title}`, `Source unavailable · ${chat.title}`)}
                     onClick={() => openArchivedChat(chat)}
                   >
                     <Icon name="chat" size={16} />
@@ -888,8 +890,8 @@ export default function App({ account, onAccountChange, onLogout }: {
                   <button
                     key={chat.chat_id}
                     className={`history-item ${archivedChatId === chat.chat_id ? "active" : ""}`}
-                    aria-label={`Без источника: ${chat.title}`}
-                    title={`Без источника · ${chat.title}`}
+                    aria-label={t(`Без источника: ${chat.title}`, `No source: ${chat.title}`)}
+                    title={t(`Без источника · ${chat.title}`, `No source · ${chat.title}`)}
                     onClick={() => openArchivedChat(chat)}
                   >
                     <Icon name="chat" size={16} />
@@ -898,7 +900,7 @@ export default function App({ account, onAccountChange, onLogout }: {
                 ))}
               </div>
                 ) : !failedServerChat && (
-                  <p className="sidebar-note">Нет диалогов</p>
+                  <p className="sidebar-note">{t("Нет диалогов", "No chats")}</p>
                 )}
               </>
             )}
@@ -910,10 +912,10 @@ export default function App({ account, onAccountChange, onLogout }: {
           tabIndex={-1}
         >
           <div className="mobile-page-header">
-            <button aria-label={mobileOverlay === "upload" ? "Закрыть загрузку CSV" : "Назад к источникам"} onClick={() => { setMobileOverlay(null); setMobilePanel("home"); }}>
+            <button aria-label={mobileOverlay === "upload" ? t("Закрыть загрузку CSV", "Close CSV upload") : t("Назад к источникам", "Back to sources")} onClick={() => { setMobileOverlay(null); setMobilePanel("home"); }}>
               <Icon name="back" size={22} />
             </button>
-            <strong>{mobileOverlay === "upload" ? "Загрузка CSV" : showDashboardGallery ? "Отчёты" : source ? "Данные источника" : sourceSetup === "postgres" ? "PostgreSQL" : "Загрузка CSV"}</strong>
+            <strong>{mobileOverlay === "upload" ? t("Загрузка CSV", "CSV upload") : showDashboardGallery ? t("Отчёты", "Reports") : source ? t("Данные источника", "Source data") : sourceSetup === "postgres" ? "PostgreSQL" : t("Загрузка CSV", "CSV upload")}</strong>
             <span aria-hidden="true" />
           </div>
           {showDashboardGallery && mobileOverlay !== "upload" ? (
@@ -962,20 +964,20 @@ export default function App({ account, onAccountChange, onLogout }: {
                     else void upload(file);
                   }
                 }}
-                aria-label={mobileOverlay === "upload" ? "Загрузка CSV" : "Добавление источника"}
+                aria-label={mobileOverlay === "upload" ? t("Загрузка CSV", "CSV upload") : t("Добавление источника", "Add source")}
               >
                 {!sourcesLoading && <WelcomeGreeting greeting={welcomeGreeting} activeState={mascotState} />}
-                <h1>{uploading ? uploadProgress === 100 ? "Обрабатываем CSV…" : `Загрузка CSV · ${uploadProgress ?? 0}%` : "Добавьте CSV"}</h1>
-                <p>Перетащите файл сюда или выберите его с устройства</p>
+              <h1>{uploading ? uploadProgress === 100 ? t("Обрабатываем CSV…", "Processing CSV…") : t(`Загрузка CSV · ${uploadProgress ?? 0}%`, `Uploading CSV · ${uploadProgress ?? 0}%`) : t("Добавьте CSV", "Add CSV")}</h1>
+                <p>{t("Перетащите файл сюда или выберите его с устройства", "Drag a file here or choose one from your device")}</p>
                 {selectedUploadFile && <div className="upload-selected-file">
                   <Icon name="file" size={18} />
-                  <span>{selectedUploadFile.name}<small>{(selectedUploadFile.size / 1024).toFixed(1)} КБ</small></span>
+                  <span>{selectedUploadFile.name}<small>{(selectedUploadFile.size / 1024).toFixed(1)} {t("КБ", "KB")}</small></span>
                   <Icon name="check" size={16} />
                 </div>}
                 {uploadError && window.matchMedia?.("(max-width: 640px)").matches && <div className="mobile-upload-error"><ErrorNotice
                   message={uploadError}
                   onRetry={failedFile ? () => void upload(failedFile) : chooseFile}
-                  label={failedFile ? "Повторить загрузку CSV" : "Выбрать файл"}
+                  label={failedFile ? t("Повторить загрузку CSV", "Retry CSV upload") : t("Выбрать файл", "Choose file")}
                 /></div>}
                 <button
                   className="primary"
@@ -983,18 +985,18 @@ export default function App({ account, onAccountChange, onLogout }: {
                   disabled={uploading}
                 >
                   <Icon name="upload" />
-                  {uploading ? uploadProgress === 100 ? "Обрабатываем…" : `Загружаем · ${uploadProgress ?? 0}%` : selectedUploadFile ? "Загрузить файл" : "Выбрать CSV"}
+                  {uploading ? uploadProgress === 100 ? t("Обрабатываем…", "Processing…") : t(`Загружаем · ${uploadProgress ?? 0}%`, `Uploading · ${uploadProgress ?? 0}%`) : selectedUploadFile ? t("Загрузить файл", "Upload file") : t("Выбрать CSV", "Choose CSV")}
                 </button>
-                <small>UTF-8, UTF-16 или Windows-1251 · до 512 МиБ</small>
+                <small>{t("UTF-8, UTF-16 или Windows-1251 · до 512 МиБ", "UTF-8, UTF-16 or Windows-1251 · up to 512 MiB")}</small>
               </section>
-              <details className="upload-advanced"><summary>Дополнительно</summary><p>Поддерживаются UTF-8, UTF-16 и Windows-1251; разделители — запятая, точка с запятой, табуляция и вертикальная черта. Первая строка содержит уникальные названия столбцов. Для замены данных откройте «Схема» у нужного источника.</p></details>
+              <details className="upload-advanced"><summary>{t("Дополнительно", "More details")}</summary><p>{t("Поддерживаются UTF-8, UTF-16 и Windows-1251; разделители — запятая, точка с запятой, табуляция и вертикальная черта. Первая строка содержит уникальные названия столбцов. Для замены данных откройте «Схема» у нужного источника.", "Supported encodings: UTF-8, UTF-16 and Windows-1251; delimiters: comma, semicolon, tab and vertical bar. The first row must contain unique column names. To replace data, open the source's Schema tab.")}</p></details>
             </>
           )}
         </main>
-        <aside className="chat-panel" aria-label="Чат с EVIA">
+        <aside className="chat-panel" aria-label={t("Чат с EVIA", "Chat with EVIA")}>
           <header className="chat-header">
-            <h2>AI-помощник</h2><strong className="mobile-chat-brand">EVIA</strong>
-            {source && <button className="new-dialog" type="button" onClick={newDialog}><Icon name="plus" size={15} /> Новый диалог</button>}
+            <h2>{t("AI-помощник", "AI assistant")}</h2><strong className="mobile-chat-brand">EVIA</strong>
+            {source && <button className="new-dialog" type="button" onClick={newDialog}><Icon name="plus" size={15} /> {t("Новый диалог", "New chat")}</button>}
           </header>
           <div className="chat-content">
             {activeEntry ? (
@@ -1002,52 +1004,52 @@ export default function App({ account, onAccountChange, onLogout }: {
               {activePage?.hasMore && (
                 <div className="history-pagination">
                   {activePage.loading ? (
-                    <p role="status">Загружаем предыдущие сообщения…</p>
+                    <p role="status">{t("Загружаем предыдущие сообщения…", "Loading previous messages…")}</p>
                   ) : activePage.error ? (
                     <ErrorNotice
                       message={activePage.error}
                       onRetry={() => historyKey && activePage.nextBefore !== null && void loadChatHistory(historyKey, activeConversationId!, activePage.nextBefore)}
-                      label="Повторить загрузку истории"
+                      label={t("Повторить загрузку истории", "Retry loading history")}
                     />
                   ) : (
                     <button
                       className="text-button"
                       onClick={() => historyKey && activePage.nextBefore !== null && void loadChatHistory(historyKey, activeConversationId!, activePage.nextBefore)}
                     >
-                      Показать предыдущие сообщения
+                      {t("Показать предыдущие сообщения", "Show previous messages")}
                     </button>
                   )}
                 </div>
               )}
               {conversationEntries.map((message) => <article key={message.id} className="chat-turn">
                 <div className="user-message">{message.question}</div>
-                <section className="assistant-message" aria-label="Ответ EVIA">
+                <section className="assistant-message" aria-label={t("Ответ EVIA", "EVIA response")}>
                   <div className="reply-label">EVIA</div>
                   {message.state === "pending" ? (
                     <div className="thinking" role="status">
                       <span />
                       <span />
                       <span />
-                      <p>Изучаю ваш вопрос…</p>
+                      <p>{t("Изучаю ваш вопрос…", "Looking into your question…")}</p>
                     </div>
                   ) : message.state === "error" ? (
                     <ErrorNotice
                       message={
-                        message.error ?? "Не удалось получить ответ."
+                        message.error ?? t("Не удалось получить ответ.", "Could not get a response.")
                       }
                       onRetry={() =>
                         void send(message.question, message.id)
                       }
-                      label="Повторить вопрос"
+                      label={t("Повторить вопрос", "Retry question")}
                     />
                   ) : (
                     <>
                       <SafeMarkdown>
                         {message.answer?.answer ||
-                          "Модель вернула пустой ответ."}
+                          t("Модель вернула пустой ответ.", "The model returned an empty response.")}
                       </SafeMarkdown>
                       {message.answer?.clarification?.options && (
-                        <div className="clarification-options" aria-label="Варианты уточнения">
+                        <div className="clarification-options" aria-label={t("Варианты уточнения", "Clarification options")}>
                           {message.answer.clarification.options.map((option, index) => (
                             <button
                               className="text-button"
@@ -1062,10 +1064,10 @@ export default function App({ account, onAccountChange, onLogout }: {
                       {message.historyDetail && (
                         <p className="history-details-notice" role="status">
                           {message.historyDetail === "legacy"
-                            ? "Это старый текстовый ответ: SQL, таблица и время тогда не сохранялись."
+                            ? t("Это старый текстовый ответ: SQL, таблица и время тогда не сохранялись.", "This is an old text-only response; SQL, tables and timing were not saved.")
                             : message.historyDetail === "unsupported"
-                              ? "Сохранённые детали созданы более новой версией EVIA и пока показаны только текстом."
-                              : "Сохранённые детали этого ответа повреждены, поэтому показан только текст."}
+                              ? t("Сохранённые детали созданы более новой версией EVIA и пока показаны только текстом.", "The saved details were created by a newer EVIA version and are shown as text only.")
+                              : t("Сохранённые детали этого ответа повреждены, поэтому показан только текст.", "The saved details are damaged, so only text is shown.")}
                         </p>
                       )}
                       {!message.historyDetail && Boolean(message.answer?.tool_results.length || message.answer?.analysis?.sql) && <button
@@ -1077,7 +1079,7 @@ export default function App({ account, onAccountChange, onLogout }: {
                           setMobilePanel("analytics");
                         }}
                       >
-                        Открыть результат
+                        {t("Открыть результат", "Open result")}
                         <Icon name="chevron" size={15} />
                       </button>
                       }
@@ -1090,21 +1092,21 @@ export default function App({ account, onAccountChange, onLogout }: {
             ) : (
               <div className="chat-welcome">
                 {source && !sourcesLoading && <WelcomeGreeting greeting={welcomeGreeting} activeState={mascotState} />}
-                <h3>{source ? "Спросите о своих данных" : "Добавьте источник данных"}</h3>
-                <p className="mobile-chat-intro">{source ? "EVIA поможет найти ответ, построить график или разобраться в таблице." : "Загрузите CSV или подключите PostgreSQL, чтобы начать анализ."}</p>
+                <h3>{source ? t("Спросите о своих данных", "Ask about your data") : t("Добавьте источник данных", "Add a data source")}</h3>
+                <p className="mobile-chat-intro">{source ? t("EVIA поможет найти ответ, построить график или разобраться в таблице.", "EVIA can answer questions, create charts and help you explore your data.") : t("Загрузите CSV или подключите PostgreSQL, чтобы начать анализ.", "Upload a CSV or connect PostgreSQL to start analyzing.")}</p>
                 <p
                   className={`evia-live-status ${["welcome", "waiting", "listening", "explaining"].includes(mascotState) ? "visually-hidden" : ""}`}
                   role="status"
                 >
-                  {eviaStatus(mascotState)}
+                  {eviaStatus(mascotState, language)}
                 </p>
                 {source && (
                   <div className="suggestions">
                     {[
-                      "Какие есть столбцы?",
-                      "Покажи первые строки",
-                      "Есть ли пропуски?",
-                      "Построй график распределения",
+                      t("Какие есть столбцы?", "What columns are available?"),
+                      t("Покажи первые строки", "Show the first rows"),
+                      t("Есть ли пропуски?", "Are there missing values?"),
+                      t("Построй график распределения", "Plot the distribution"),
                     ].map((question) => (
                       <button
                         key={question}
@@ -1123,24 +1125,24 @@ export default function App({ account, onAccountChange, onLogout }: {
             )}
           </div>
           <div className="chat-bottom">
-            {attachedDashboard && source && <div className="attached-report" aria-label="Прикреплённый отчёт"><span>Отчёт: <strong>{attachedDashboard.title}</strong></span><button type="button" aria-label="Открепить отчёт" onClick={() => setAttachedDashboard(null)}><Icon name="close" size={14} /></button></div>}
-            {activeEntry && <div className="helper" role="status"><Evia state={mascotState} />{activeEntry.state === "pending" && <strong>{eviaStatus(mascotState)}</strong>}</div>}
+            {attachedDashboard && source && <div className="attached-report" aria-label={t("Прикреплённый отчёт", "Attached report")}><span>{t("Отчёт", "Report")}: <strong>{attachedDashboard.title}</strong></span><button type="button" aria-label={t("Открепить отчёт", "Detach report")} onClick={() => setAttachedDashboard(null)}><Icon name="close" size={14} /></button></div>}
+            {activeEntry && <div className="helper" role="status"><Evia state={mascotState} />{activeEntry.state === "pending" && <strong>{eviaStatus(mascotState, language)}</strong>}</div>}
             {archivedChat && !archivedChat.source_id && (
               <p className="history-details-notice">
-                Для продолжения этого старого диалога выберите источник в левой панели.
+                {t("Для продолжения этого старого диалога выберите источник в левой панели.", "To continue this old chat, select a source in the left panel.")}
               </p>
             )}
             <form className="composer" onSubmit={submit}>
               <label className="visually-hidden" htmlFor="question">
-                Ваш вопрос
+                {t("Ваш вопрос", "Your question")}
               </label>
               <textarea
                 id="question"
                 ref={composer}
                 placeholder={
                   source
-                    ? "Что хотите узнать о данных?"
-                    : "Сначала добавьте источник…"
+                    ? t("Что хотите узнать о данных?", "What would you like to know about your data?")
+                    : t("Сначала добавьте источник…", "First add a data source…")
                 }
                 rows={3}
                 value={draft}
@@ -1165,14 +1167,14 @@ export default function App({ account, onAccountChange, onLogout }: {
                       {source.name}
                     </>
                   ) : (
-                    "Источник не выбран"
+                    t("Источник не выбран", "No source selected")
                   )}
                 </span>
                 {pending ? (
                   <button
                     type="button"
                     className="stop-button"
-                    aria-label="Прекратить ожидание"
+                    aria-label={t("Прекратить ожидание", "Stop waiting")}
                     onClick={() => {
                       if (pending?.conversationId)
                         askControllers.current.get(pending.conversationId)?.abort();
@@ -1184,7 +1186,7 @@ export default function App({ account, onAccountChange, onLogout }: {
                   <button
                     className="send-button"
                     type="submit"
-                    aria-label="Отправить вопрос"
+                    aria-label={t("Отправить вопрос", "Send question")}
                     disabled={
                       !source || !draft.trim() || draft.trim().length > 4000
                     }
@@ -1194,55 +1196,55 @@ export default function App({ account, onAccountChange, onLogout }: {
                 )}
               </div>
             </form>
-            {source && <div className="mobile-chat-source" aria-label="Прикреплённый источник"><Icon name="file" size={14} /><span>{source.name}{source.source_type === "csv" && !source.name.toLowerCase().endsWith(".csv") ? ".csv" : ""}</span><button type="button" aria-label="Убрать источник из чата" onClick={() => setSelectedId(null)}><Icon name="close" size={14} /></button></div>}
+            {source && <div className="mobile-chat-source" aria-label={t("Прикреплённый источник", "Attached source")}><Icon name="file" size={14} /><span>{source.name}{source.source_type === "csv" && !source.name.toLowerCase().endsWith(".csv") ? ".csv" : ""}</span><button type="button" aria-label={t("Убрать источник из чата", "Remove source from chat")} onClick={() => setSelectedId(null)}><Icon name="close" size={14} /></button></div>}
             <div className="composer-hint">
-              <span>Ctrl / ⌘ + Enter — отправить</span>
+              <span>{t("Ctrl / ⌘ + Enter — отправить", "Ctrl / ⌘ + Enter to send")}</span>
               {draft.length > 3500 && <span>{draft.length}/4000</span>}
             </div>
           </div>
         </aside>
       </div>
       {mobileOverlay === "settings" && <div className="settings-backdrop" data-testid="settings-backdrop" aria-hidden="true" onClick={() => setMobileOverlay(null)} />}
-      {mobileOverlay === "settings" && <section className="mobile-fullscreen mobile-settings" role="dialog" aria-label="Настройки" aria-modal="true" ref={settingsDialog}>
-        <header><h2>Настройки</h2><button aria-label="Закрыть настройки" onClick={() => setMobileOverlay(null)}><Icon name="close" size={19} /></button></header>
-        <h3>Тема</h3>
+      {mobileOverlay === "settings" && <section className="mobile-fullscreen mobile-settings" role="dialog" aria-label={t("Настройки", "Settings")} aria-modal="true" ref={settingsDialog}>
+        <header><h2>{t("Настройки", "Settings")}</h2><button aria-label={t("Закрыть настройки", "Close settings")} onClick={() => setMobileOverlay(null)}><Icon name="close" size={19} /></button></header>
+        <h3>{t("Тема", "Theme")}</h3>
         <div className="settings-options">
-          {([ ["light", "Светлая"], ["dark", "Тёмная"], ["system", "Системная"] ] as const).map(([value, label]) => <button key={value} aria-label={`${label} тема`} aria-pressed={theme === value} onClick={() => chooseTheme(value)}><span>{label}</span>{theme === value && <Icon name="check" size={16} />}</button>)}
+          {([ ["light", t("Светлая", "Light")], ["dark", t("Тёмная", "Dark")], ["system", t("Системная", "System")] ] as const).map(([value, label]) => <button key={value} aria-label={t(`${label} тема`, `${label} theme`)} aria-pressed={theme === value} onClick={() => chooseTheme(value)}><span>{label}</span>{theme === value && <Icon name="check" size={16} />}</button>)}
         </div>
-        <div className="settings-info"><span>Язык</span><strong>Русский</strong></div>
+        <h3>{t("Язык", "Language")}</h3><LanguageSwitch />
       </section>}
-      <nav className="mobile-nav" aria-label="Мобильная навигация">
+      <nav className="mobile-nav" aria-label={t("Мобильная навигация", "Mobile navigation")}>
         <button
-          aria-label="Источники"
+          aria-label={t("Источники", "Sources")}
           aria-pressed={mobilePanel === "home"}
           onClick={() => setMobilePanel("home")}
         >
           <Icon name="home" size={18} />
-          <span>Источники</span>
+          <span>{t("Источники", "Sources")}</span>
         </button>
         <button
-          aria-label="Рабочее пространство"
+          aria-label={t("Рабочее пространство", "Workspace")}
           aria-pressed={mobilePanel === "analytics"}
           onClick={() => setMobilePanel("analytics")}
         >
           <Icon name="file" size={18} />
-          <span>Данные</span>
+          <span>{t("Данные", "Data")}</span>
         </button>
         <button
-          aria-label="Чат"
+          aria-label={t("Чат", "Chat")}
           aria-pressed={mobilePanel === "chat"}
           onClick={() => setMobilePanel("chat")}
         >
           <Icon name="chat" size={18} />
-          <span>Чат</span>
+          <span>{t("Чат", "Chat")}</span>
         </button>
         <button
-          aria-label="Настройки"
+          aria-label={t("Настройки", "Settings")}
           aria-pressed={mobileOverlay === "settings"}
           onClick={openSettings}
         >
           <Icon name="settings" size={18} />
-          <span>Настройки</span>
+          <span>{t("Настройки", "Settings")}</span>
         </button>
       </nav>
     </div>

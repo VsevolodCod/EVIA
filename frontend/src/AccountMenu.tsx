@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "./components/Icon";
 import { authApi, type Account } from "./authApi";
+import { useLanguage } from "./language";
 
 export function AccountMenu({ account, onChange, onLogout, theme = "light" }: {
   account: Account;
@@ -9,6 +10,7 @@ export function AccountMenu({ account, onChange, onLogout, theme = "light" }: {
   onLogout: () => Promise<void>;
   theme?: "light" | "dark";
 }) {
+  const { t } = useLanguage();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(account.name);
   const [currentPassword, setCurrentPassword] = useState("");
@@ -56,8 +58,8 @@ export function AccountMenu({ account, onChange, onLogout, theme = "light" }: {
   async function saveName(event: FormEvent) {
     event.preventDefault();
     setBusy(true); setError(""); setNotice("");
-    try { onChange(await authApi.rename(name)); setNotice("Имя сохранено."); }
-    catch (err) { setError(err instanceof Error ? err.message : "Не удалось сохранить имя."); }
+    try { onChange(await authApi.rename(name)); setNotice(t("Имя сохранено.", "Name saved.")); }
+    catch (err) { setError(err instanceof Error ? err.message : t("Не удалось сохранить имя.", "Could not save name.")); }
     finally { setBusy(false); }
   }
 
@@ -66,51 +68,51 @@ export function AccountMenu({ account, onChange, onLogout, theme = "light" }: {
     setBusy(true); setError(""); setNotice("");
     try {
       await authApi.password(currentPassword, newPassword);
-      setCurrentPassword(""); setNewPassword(""); setNotice("Пароль обновлён.");
-    } catch (err) { setError(err instanceof Error ? err.message : "Не удалось сменить пароль."); }
+      setCurrentPassword(""); setNewPassword(""); setNotice(t("Пароль обновлён.", "Password updated."));
+    } catch (err) { setError(err instanceof Error ? err.message : t("Не удалось сменить пароль.", "Could not change password.")); }
     finally { setBusy(false); }
   }
 
   async function uploadPhoto(file?: File) {
     if (!file) return;
     setError(""); setNotice("");
-    if (file.size > 1_048_576) { setError("Фотография должна быть меньше 1 МБ."); return; }
+    if (file.size > 1_048_576) { setError(t("Фотография должна быть меньше 1 МБ.", "Photo must be smaller than 1 MB.")); return; }
     setBusy(true);
-    try { onChange(await authApi.uploadAvatar(file)); setNotice("Фотография сохранена."); }
-    catch (err) { setError(err instanceof Error ? err.message : "Не удалось загрузить фотографию."); }
+    try { onChange(await authApi.uploadAvatar(file)); setNotice(t("Фотография сохранена.", "Photo saved.")); }
+    catch (err) { setError(err instanceof Error ? err.message : t("Не удалось загрузить фотографию.", "Could not upload photo.")); }
     finally { setBusy(false); }
   }
 
   async function removePhoto() {
     setBusy(true); setError(""); setNotice("");
-    try { onChange(await authApi.removeAvatar()); setNotice("Фотография удалена."); }
-    catch (err) { setError(err instanceof Error ? err.message : "Не удалось удалить фотографию."); }
+    try { onChange(await authApi.removeAvatar()); setNotice(t("Фотография удалена.", "Photo removed.")); }
+    catch (err) { setError(err instanceof Error ? err.message : t("Не удалось удалить фотографию.", "Could not remove photo.")); }
     finally { setBusy(false); }
   }
 
   return <>
     <div className="account-menu">
-      <button ref={trigger} type="button" className="account-trigger" aria-label="Открыть профиль" aria-expanded={open} onClick={() => setOpen(true)}>
+      <button ref={trigger} type="button" className="account-trigger" aria-label={t("Открыть профиль", "Open profile")} aria-expanded={open} onClick={() => setOpen(true)}>
         {account.avatar_url ? <img className="account-avatar-image" src={account.avatar_url} alt="" /> : <Icon name="user" size={20} />}
       </button>
     </div>
     {open && createPortal(<>
       <div className="account-backdrop" aria-hidden="true" onClick={() => setOpen(false)} />
-      <section ref={dialog} className="account-popover" data-theme={theme} role="dialog" aria-label="Профиль" aria-modal="true">
-        <div className="account-heading"><h2>Профиль</h2><button type="button" className="account-close" aria-label="Закрыть профиль" onClick={() => setOpen(false)}>×</button></div>
+      <section ref={dialog} className="account-popover" data-theme={theme} role="dialog" aria-label={t("Профиль", "Profile")} aria-modal="true">
+        <div className="account-heading"><h2>{t("Профиль", "Profile")}</h2><button type="button" className="account-close" aria-label={t("Закрыть профиль", "Close profile")} onClick={() => setOpen(false)}>×</button></div>
         <div className="account-identity">
           <span className="account-avatar-large">{account.avatar_url ? <img src={account.avatar_url} alt="" /> : <Icon name="user" size={32} />}</span>
           <div><strong>{account.name}</strong><p className="account-email">{account.email}</p></div>
         </div>
         <div className="account-photo-actions">
-          <label className="account-photo-upload">Выбрать фотографию<input type="file" aria-label="Фотография профиля" accept="image/png,image/jpeg,image/webp" disabled={busy} onChange={(event) => { void uploadPhoto(event.target.files?.[0]); event.target.value = ""; }} /></label>
-          {account.avatar_url && <button type="button" disabled={busy} onClick={() => void removePhoto()}>Удалить фото</button>}
+          <label className="account-photo-upload">{t("Выбрать фотографию", "Choose photo")}<input type="file" aria-label={t("Фотография профиля", "Profile photo")} accept="image/png,image/jpeg,image/webp" disabled={busy} onChange={(event) => { void uploadPhoto(event.target.files?.[0]); event.target.value = ""; }} /></label>
+          {account.avatar_url && <button type="button" disabled={busy} onClick={() => void removePhoto()}>{t("Удалить фото", "Remove photo")}</button>}
         </div>
-        <form onSubmit={(event) => void saveName(event)}><label>Имя<input value={name} onChange={(event) => setName(event.target.value)} maxLength={80} required /></label><button disabled={busy || name.trim() === account.name}>Сохранить имя</button></form>
-        <form onSubmit={(event) => void savePassword(event)}><label>Текущий пароль<input type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} required /></label><label>Новый пароль<input type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} minLength={12} required /></label><button disabled={busy}>Сменить пароль</button></form>
+        <form onSubmit={(event) => void saveName(event)}><label>{t("Имя", "Name")}<input value={name} onChange={(event) => setName(event.target.value)} maxLength={80} required /></label><button disabled={busy || name.trim() === account.name}>{t("Сохранить имя", "Save name")}</button></form>
+        <form onSubmit={(event) => void savePassword(event)}><label>{t("Текущий пароль", "Current password")}<input type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} required /></label><label>{t("Новый пароль", "New password")}<input type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} minLength={12} required /></label><button disabled={busy}>{t("Сменить пароль", "Change password")}</button></form>
         {error && <p className="auth-error" role="alert">{error}</p>}
         {notice && <p className="auth-notice" role="status">{notice}</p>}
-        <button className="account-logout" onClick={() => void onLogout()}>Выйти</button>
+        <button className="account-logout" onClick={() => void onLogout()}>{t("Выйти", "Sign out")}</button>
       </section>
     </>, document.body)}
   </>;

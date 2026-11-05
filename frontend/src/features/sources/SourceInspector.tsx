@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useLanguage } from "../../language";
 import {
   api,
   errorMessage,
@@ -27,12 +28,12 @@ type SourceData = {
   rows: Row[];
   profile?: Profile;
 };
-const views: [View, string][] = [
-  ["overview", "Обзор"],
-  ["profile", "Столбцы"],
-  ["quality", "Качество"],
-  ["preview", "Данные"],
-  ["schema", "Схема"],
+const views: [View, string, string][] = [
+  ["overview", "Обзор", "Overview"],
+  ["profile", "Столбцы", "Columns"],
+  ["quality", "Качество", "Quality"],
+  ["preview", "Данные", "Data"],
+  ["schema", "Схема", "Schema"],
 ];
 
 function sourceRowCount(schema: SourceSchema) {
@@ -62,11 +63,12 @@ export function SourceInspector({
   onDelete?: (sourceId: string) => Promise<void>;
   deleteDisabled?: boolean;
 }) {
+  const { t, language } = useLanguage();
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
   async function deleteCsv() {
     if (!onDelete || deleting || deleteDisabled) return;
-    if (!window.confirm(`Удалить «${source.name}» и все версии CSV? Действие нельзя отменить. Сохранённые отчёты по этому источнику нельзя будет обновить.`)) return;
+    if (!window.confirm(t(`Удалить «${source.name}» и все версии CSV? Действие нельзя отменить. Сохранённые отчёты по этому источнику нельзя будет обновить.`, `Delete “${source.name}” and all CSV versions? This cannot be undone. Saved reports using this source will no longer be refreshable.`))) return;
     setDeleteError("");
     setDeleting(true);
     try {
@@ -104,7 +106,7 @@ export function SourceInspector({
           if (!controller.signal.aborted) {
             setProfileFailure({
               id: source.source_id,
-              message: "Профиль относится к другой версии источника. Обновите данные и повторите расчёт.",
+              message: t("Профиль относится к другой версии источника. Обновите данные и повторите расчёт.", "The profile belongs to a different source version. Refresh the data and retry."),
             });
           }
           return;
@@ -154,14 +156,14 @@ export function SourceInspector({
         <div className="source-workspace-identity">
           <h1>{source.name}</h1>
         </div>
-        {source.source_type === "csv" && onDelete && <button className="source-delete" type="button" disabled={deleting || deleteDisabled} onClick={() => void deleteCsv()}>{deleting ? "Удаляем…" : "Удалить CSV"}</button>}
+        {source.source_type === "csv" && onDelete && <button className="source-delete" type="button" disabled={deleting || deleteDisabled} onClick={() => void deleteCsv()}>{deleting ? t("Удаляем…", "Deleting…") : t("Удалить CSV", "Delete CSV")}</button>}
         <button className="source-refresh" type="button" onClick={() => setRevision((value) => value + 1)}>
-          <Icon name="refresh" size={16} /> Обновить
+          <Icon name="refresh" size={16} /> {t("Обновить", "Refresh")}
         </button>
       </div>
-      {deleteError && <p role="alert" className="source-delete-error">Не удалось удалить CSV: {deleteError}</p>}
-      <nav className="analytics-tabs" aria-label="Разделы источника">
-        {views.map(([id, label]) => (
+      {deleteError && <p role="alert" className="source-delete-error">{t("Не удалось удалить CSV", "Could not delete CSV")}: {deleteError}</p>}
+      <nav className="analytics-tabs" aria-label={t("Разделы источника", "Source sections")}>
+        {views.map(([id, ru, en]) => { const label = t(ru, en); return (
           <button
             key={id}
             aria-label={label}
@@ -175,10 +177,10 @@ export function SourceInspector({
               </span>
             )}
           </button>
-        ))}
-        {view === "results" && <button aria-pressed="true" onClick={() => setView("results")}>Результат анализа</button>}
+        ); })}
+        {view === "results" && <button aria-pressed="true" onClick={() => setView("results")}>{t("Результат анализа", "Analysis result")}</button>}
       </nav>
-      <section className="analytics-report" aria-label="Исследование данных">
+      <section className="analytics-report" aria-label={t("Исследование данных", "Data exploration")}>
         {view === "results" ? (
           <AnalysisResult entry={entry} onOpenChat={onOpenChat} />
         ) : error ? (
@@ -186,19 +188,19 @@ export function SourceInspector({
             <ErrorNotice
               message={error}
               onRetry={() => setRevision((value) => value + 1)}
-              label="Повторить загрузку"
+              label={t("Повторить загрузку", "Retry loading")}
             />
           </div>
         ) : !current ? (
           <div className="loading-panel" role="status">
             <EviaMascot state="profiling" size={80} decorative />
-            Изучаем структуру источника…
+            {t("Изучаем структуру источника…", "Inspecting source structure…")}
           </div>
         ) : (
           <>
             {view === "overview" ? (
               <Dashboard
-                title="Обзор источника"
+                title={t("Обзор источника", "Source overview")}
                 sourceLabel={source.name}
                 scope={source.source_id}
                 schema={current.schema}
@@ -225,37 +227,37 @@ export function SourceInspector({
               /> : profileError ? (
                 <div className="pane-padding">
                   <ErrorNotice
-                    message={`Не удалось построить профиль: ${profileError}`}
+                    message={t(`Не удалось построить профиль: ${profileError}`, `Could not build profile: ${profileError}`)}
                     onRetry={() => setRevision((value) => value + 1)}
-                    label="Повторить расчёт"
+                    label={t("Повторить расчёт", "Retry calculation")}
                   />
                 </div>
               ) : (
                 <div className="loading-panel" role="status">
                   <EviaMascot state="profiling" size={80} decorative />
-                  Рассчитываем профиль источника…
+                  {t("Рассчитываем профиль источника…", "Calculating source profile…")}
                 </div>
               )
             ) : view === "quality" ? (
               model ? <ProfileQuality model={model} onColumn={openColumn} /> : profileError ? (
                 <div className="pane-padding">
                   <ErrorNotice
-                    message={`Не удалось построить профиль: ${profileError}`}
+                    message={t(`Не удалось построить профиль: ${profileError}`, `Could not build profile: ${profileError}`)}
                     onRetry={() => setRevision((value) => value + 1)}
-                    label="Повторить расчёт"
+                    label={t("Повторить расчёт", "Retry calculation")}
                   />
                 </div>
               ) : (
                 <div className="loading-panel" role="status">
                   <EviaMascot state="profiling" size={80} decorative />
-                  Рассчитываем профиль источника…
+                  {t("Рассчитываем профиль источника…", "Calculating source profile…")}
                 </div>
               )
             ) : view === "preview" ? (
               <>
                 <div className="pane-heading">
                   <div>
-                    <h2>Предпросмотр данных</h2>
+                    <h2>{t("Предпросмотр данных", "Data preview")}</h2>
                   </div>
                 </div>
                 <DataTable
@@ -263,28 +265,28 @@ export function SourceInspector({
                   columns={current.schema.objects[0]?.fields.map(
                     (field) => field.name,
                   )}
-                  label="Предпросмотр источника"
+                  label={t("Предпросмотр источника", "Source preview")}
                 />
               </>
             ) : (
               <div className="analytics-section">
                 <div className="analytics-title">
                   <div>
-                    <h2>Структура источника</h2>
+                    <h2>{t("Структура источника", "Source structure")}</h2>
                   </div>
                 </div>
                 {source.import_report && <details className="csv-import-details">
-                  <summary>Отчёт об импорте</summary>
-                  <p>Принято {numberText(source.import_report.accepted_rows)} из {numberText(source.import_report.rows_read)} строк · отклонено {numberText(source.import_report.rejected_rows)}</p>
-                  <p>Кодировка: {source.import_report.encoding.toUpperCase()} · разделитель: {source.import_report.delimiter === "\t" ? "табуляция" : source.import_report.delimiter}</p>
+                  <summary>{t("Отчёт об импорте", "Import report")}</summary>
+                  <p>{t(`Принято ${numberText(source.import_report.accepted_rows)} из ${numberText(source.import_report.rows_read)} строк · отклонено ${numberText(source.import_report.rejected_rows)}`, `Accepted ${numberText(source.import_report.accepted_rows)} of ${numberText(source.import_report.rows_read)} rows · rejected ${numberText(source.import_report.rejected_rows)}`)}</p>
+                  <p>{t("Кодировка", "Encoding")}: {source.import_report.encoding.toUpperCase()} · {t("разделитель", "delimiter")}: {source.import_report.delimiter === "\t" ? t("табуляция", "tab") : source.import_report.delimiter}</p>
                   {source.import_report.warnings.length > 0 && <ul>{source.import_report.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>}
                   {source.csv_versions?.map((version, index) => <a
                     key={version.snapshot_id}
                     href={`/sources/${encodeURIComponent(source.source_id)}/versions/${encodeURIComponent(version.snapshot_id)}/download`}
-                  >Скачать оригинал {index + 1}</a>)}
+                  >{t("Скачать оригинал", "Download original")} {index + 1}</a>)}
                   {onReimport && <label className="csv-reimport">
-                    Повторно импортировать CSV
-                    <input type="file" accept=".csv,text/csv" aria-label="Повторно импортировать CSV" onChange={(event) => {
+                    {t("Повторно импортировать CSV", "Reimport CSV")}
+                    <input type="file" accept=".csv,text/csv" aria-label={t("Повторно импортировать CSV", "Reimport CSV")} onChange={(event) => {
                       const file = event.target.files?.[0];
                       if (file) onReimport(file, source.source_id);
                       event.target.value = "";
@@ -292,7 +294,7 @@ export function SourceInspector({
                   </label>}
                 </details>}
                 {!current.schema.objects.length ? (
-                  <p className="muted">В источнике нет объектов схемы.</p>
+                  <p className="muted">{t("В источнике нет объектов схемы.", "The source contains no schema objects.")}</p>
                 ) : (
                   current.schema.objects.map((object) => (
                     <section key={object.object_id}>
@@ -306,19 +308,19 @@ export function SourceInspector({
                             <div>
                               <strong>{field.name}</strong>
                               <small>
-                                {typeLabel(field.inferred_type)}
+                                {typeLabel(field.inferred_type, language)}
                                 {field.is_identifier_candidate
-                                  ? " · Возможный идентификатор"
+                                  ? t(" · Возможный идентификатор", " · Possible identifier")
                                   : ""}
                               </small>
                               {field.description && <p>{field.description}</p>}
                             </div>
                             <span className="nullable">
                               {field.nullable === null
-                                ? "Нет выборки"
+                                ? t("Нет выборки", "No sample")
                                 : field.nullable
-                                  ? "Есть пропуски"
-                                  : "Без пропусков"}
+                                  ? t("Есть пропуски", "Missing values")
+                                  : t("Без пропусков", "No missing values")}
                             </span>
                           </div>
                         ))}
@@ -330,13 +332,11 @@ export function SourceInspector({
             )}
             {current.profile && model && ["profile", "quality"].includes(view) && (
               <details className="profile-method">
-                <summary>Как рассчитан профиль</summary>
+                <summary>{t("Как рассчитан профиль", "How the profile is calculated")}</summary>
                 <p>
-                  Источник: {source.name}. Версия схемы:{" "}
-                  {current.schema.version}. Число строк датасета берётся из
-                  схемы; {current.profile.coverage === "full"
-                    ? "заполненность, NULL, пустые строки и уникальность рассчитаны по всему датасету. Частые значения — из профиля выборки."
-                    : "остальные показатели — из профиля выборки. Заполненность — доля непустых ячеек среди ячеек с доступной статистикой. Частые значения сравниваются как исходные строки."}
+                  {t(`Источник: ${source.name}. Версия схемы: ${current.schema.version}. Число строк датасета берётся из схемы;`, `Source: ${source.name}. Schema version: ${current.schema.version}. Dataset row count comes from the schema;`)}{" "}{current.profile.coverage === "full"
+                    ? t("заполненность, NULL, пустые строки и уникальность рассчитаны по всему датасету. Частые значения — из профиля выборки.", "completeness, NULLs, empty strings and uniqueness cover the full dataset. Frequent values come from the sample profile.")
+                    : t("остальные показатели — из профиля выборки. Заполненность — доля непустых ячеек среди ячеек с доступной статистикой. Частые значения сравниваются как исходные строки.", "other metrics come from the sample profile. Completeness is the share of non-empty cells among cells with available statistics. Frequent values are compared as original strings.")}
                 </p>
                 <p>{current.profile.note}</p>
               </details>

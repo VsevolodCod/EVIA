@@ -10,6 +10,17 @@ const source = {
   schema_version: 1,
 };
 
+it("uses the selected language for model connection errors", async () => {
+  localStorage.setItem("evia.language", "en");
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("upstream failure", { status: 502 })));
+  try {
+    await expect(api.sources()).rejects.toThrow("Could not get a model response");
+  } finally {
+    localStorage.removeItem("evia.language");
+    vi.unstubAllGlobals();
+  }
+});
+
 it("continues the requested chat and rejects a response from another chat", async () => {
   const fetcher = vi.fn().mockResolvedValueOnce(Response.json({ answer: "ok", chat_id: "chat-A", steps: 1, tool_results: [] }))
     .mockResolvedValueOnce(Response.json({ answer: "wrong", chat_id: "chat-B", steps: 1, tool_results: [] }));
