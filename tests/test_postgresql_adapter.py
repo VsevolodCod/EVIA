@@ -122,7 +122,7 @@ def test_postgresql_executor_rejects_write_multistatement_and_external_functions
 
     from app.config import PostgresSettings
     from app.data_sources.postgresql_adapter import PostgreSQLAdapter
-    from app.postgresql_sql import PostgresQueryError
+    from app.data_sources.postgresql_tools.postgresql_sql import PostgresQueryError
 
     adapter = PostgreSQLAdapter(
         PostgresSettings(

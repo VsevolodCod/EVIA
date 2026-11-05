@@ -8,7 +8,7 @@ from fastapi import APIRouter, BackgroundTasks, File, HTTPException, Request, Re
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, EmailStr, Field
 
-from app.auth import Account, AuthStore, SESSION_DAYS
+from app.core.auth import Account, AuthStore, SESSION_DAYS
 
 
 router = APIRouter(prefix="/auth", tags=["account"])

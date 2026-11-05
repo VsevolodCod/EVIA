@@ -17,7 +17,7 @@ from app.tools import ToolRegistry
 from app.core.logging import current_request_id
 from app.charts.repositories import ChartRepository, DashboardRepository
 from app.charts.snapshots import source_ids as chart_source_ids
-from app.retry_agent import LLMRetryPolicy, LLMRetryExhausted, call_with_retry
+from app.agent_additions.retry_agent import LLMRetryPolicy, LLMRetryExhausted, call_with_retry
 import logging
 
 logger = logging.getLogger(__name__)

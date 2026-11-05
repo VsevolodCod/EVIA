@@ -16,7 +16,7 @@ from app.charts.models import (
     DashboardModel,
 )
 from app.db.catalog import DashboardORM, DashboardOriginORM, DashboardChartRefORM, ChartORM, ChartSnapshotORM
-from app.ownership import owner_id
+from app.core.auth import owner_id
 
 
 SessionMaker = sessionmaker[Session]

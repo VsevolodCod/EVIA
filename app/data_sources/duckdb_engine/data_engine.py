@@ -19,12 +19,12 @@ from uuid import uuid4
 
 import duckdb
 
-from app.csv_import import null_marker
-from app.duckdb_access import DUCKDB_ACCESS_LOCK
+from app.data_sources.csv_tools.csv_import import null_marker
+from app.data_sources.duckdb_engine.duckdb_access import DUCKDB_ACCESS_LOCK
 from app.models import DataSource
 
-
-_GRAIN_NAME = re.compile(r"(^|[_\s-])(id|code|identifier|date|time|дата|время|код|идентификатор)([_\s-]|$)", re.IGNORECASE)
+_GRAIN_NAME = re.compile(r"(^|[_\s-])(id|code|identifier|date|time|дата|время|код|идентификатор)([_\s-]|$)",
+                         re.IGNORECASE)
 _MAX_GRAIN_COLUMNS = 3
 
 
@@ -39,7 +39,8 @@ class DuckDBDataEngine:
     def _quote_identifier(identifier: str) -> str:
         return '"' + identifier.replace('"', '""') + '"'
 
-    def table_name(self, source: DataSource) -> str:
+    @staticmethod
+    def table_name(source: DataSource) -> str:
         """Return a deterministic safe physical table name for a snapshot."""
         snapshot_key = f"{source.source_id}:{source.snapshot_id or 'legacy'}"
         snapshot_hash = sha256(snapshot_key.encode("utf-8")).hexdigest()[:24]
@@ -74,8 +75,8 @@ class DuckDBDataEngine:
         return projections
 
     def import_csv(
-        self, source: DataSource, csv_path: Path, *, delimiter: str,
-        typed_sql_types: dict[str, str] | None = None,
+            self, source: DataSource, csv_path: Path, *, delimiter: str,
+            typed_sql_types: dict[str, str] | None = None,
     ) -> None:
         """Atomically replace the materialized table after CSV validation.
 
@@ -121,7 +122,8 @@ class DuckDBDataEngine:
                 )
                 if typed_sql_types is not None:
                     projections = self._typed_projections(connection, pending, typed_sql_types)
-                    connection.execute(f"CREATE TABLE {typed_pending} AS SELECT {', '.join(projections)} FROM {pending}")
+                    connection.execute(
+                        f"CREATE TABLE {typed_pending} AS SELECT {', '.join(projections)} FROM {pending}")
                 connection.execute(f"ALTER TABLE {pending} RENAME TO {table}")
                 if typed_sql_types is not None:
                     connection.execute(
@@ -226,12 +228,12 @@ class DuckDBDataEngine:
             return +total
 
     def _candidate_grain_keys(
-        self,
-        connection,
-        raw_table: str,
-        raw_columns: list[str],
-        columns: dict[str, dict[str, Any]],
-        processed_rows: int,
+            self,
+            connection,
+            raw_table: str,
+            raw_columns: list[str],
+            columns: dict[str, dict[str, Any]],
+            processed_rows: int,
     ) -> list[list[str]]:
         """Return bounded, exact key hypotheses for one immutable snapshot.
 
@@ -244,13 +246,11 @@ class DuckDBDataEngine:
             return []
         complete_fields = [
             name for name in raw_columns
-            if columns[name]["non_null_count"] == processed_rows
-            and columns[name]["empty_count"] == 0
+            if columns[name]["non_null_count"] == processed_rows and columns[name]["empty_count"] == 0
         ]
         single_keys = [
             [name] for name in complete_fields
-            if _GRAIN_NAME.search(name)
-            and columns[name]["distinct_count"] == processed_rows
+            if _GRAIN_NAME.search(name) and columns[name]["distinct_count"] == processed_rows
         ]
         if single_keys:
             return single_keys
@@ -338,10 +338,8 @@ class DuckDBDataEngine:
                     "distinct_count": distinct_count,
                     "uniqueness_ratio": distinct_count / non_null_count if non_null_count else 0.0,
                     "is_identifier_candidate": (
-                        processed_rows > 0
-                        and non_null_count == processed_rows
-                        and empty_count == 0
-                        and distinct_count == processed_rows
+                            non_null_count == processed_rows > 0 == empty_count
+                            and distinct_count == processed_rows
                     ),
                     "numeric": None,
                     "temporal": None,
@@ -398,7 +396,8 @@ class DuckDBDataEngine:
             "snapshot_id": source.snapshot_id or "legacy",
             "columns": columns,
             "candidate_grain_keys": candidate_grain_keys,
-            "note": "Full snapshot statistics; top values use a bounded sample. Candidate grain keys are hypotheses, not confirmed business keys.",
+            "note": "Full snapshot statistics; top values use a bounded sample. Candidate grain keys are hypotheses, "
+                    "not confirmed business keys.",
         }
 
     def columns(self, source: DataSource) -> list[str]:

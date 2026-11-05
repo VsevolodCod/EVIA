@@ -16,7 +16,7 @@ import sqlglot
 from sqlglot import exp
 
 from app.contracts.v1 import Provenance, QueryResult, ResultColumn
-from app.duckdb_access import DUCKDB_ACCESS_LOCK
+from app.data_sources.duckdb_engine.duckdb_access import DUCKDB_ACCESS_LOCK
 
 import logging
 

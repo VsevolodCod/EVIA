@@ -73,7 +73,7 @@ Expected: PASS.
 ### Task 3: CLI and documentation
 
 **Files:**
-- Create: `scripts/verify_eval_corpus.py`
+- Create: `scripts/verifiers/verify_eval_corpus.py`
 - Modify: `README.md`
 - Test: `tests/test_evaluation_corpus.py`
 

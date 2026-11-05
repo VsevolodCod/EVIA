@@ -12,7 +12,7 @@ import re
 import shutil
 from typing import BinaryIO
 
-from app.data_sources.csv_format import SAMPLE_CHARS, detect_delimiter, read_header
+from app.data_sources.csv_tools.csv_format import SAMPLE_CHARS, detect_delimiter, read_header
 from app.models import ImportReport
 
 

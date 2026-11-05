@@ -2,7 +2,7 @@
 
 > Исторический отчёт от 20.10.2026. Он сравнивает только два вопроса и не
 > используется для выбора модели после появления `evals/v1`. Для актуального
-> сравнения используйте `python -m scripts.benchmark_local_models` из README:
+> сравнения используйте `python -m scripts.benchmarks.benchmark_local_models` из README:
 > новый runner считает EX по данным, валидность JSON/SQL, ошибки и cold/warm
 > latency на 20 versioned cases.
 
@@ -31,7 +31,7 @@ ollama pull qwen2.5-coder:3b
 ollama pull llama3.2:3b
 ollama pull qwen2.5-coder:7b
 OLLAMA_NO_CLOUD=true ollama serve
-python -m scripts.verify_local_models qwen2.5-coder:7b qwen2.5-coder:3b llama3.2:3b --output /tmp/evia-local-model-report.json
+python -m scripts.verifiers.verify_local_models qwen2.5-coder:7b qwen2.5-coder:3b llama3.2:3b --output /tmp/evia-local-model-report.json
 ```
 
 Скрипт загружает только встроенный синтетический CSV (`month,revenue`) и прогоняет одинаковые вопросы на каждом теге. Он выводит digest, quantization, лицензию, результат SQL, время и память запущенной модели. Для проверки сервера с выбранным тегом задайте `LLM_PROVIDER=ollama`, `LLM_MODEL=<точный тег>` и запустите `python -m scripts.run` после сборки frontend. В браузере загрузите небольшой CSV, выберите его и спросите «Сколько всего выручки?»; на вкладке результата должны быть метка «Рассчитано по CSV», SQL и таблица с числом из `QueryResult`. При `LLM_PROVIDER=mock` отображается «Демо-ответ».

@@ -27,16 +27,16 @@ flowchart TB
     API --> UI
 ```
 
-| Layer | Location | Responsibility |
-| --- | --- | --- |
-| UI | `frontend/src/` | Workspace, CSV upload, profile, chat, cards, PDF and account state. |
-| API | `app/main.py`, `app/auth_routes.py` | HTTP routes, validation, authentication and service calls. |
-| Accounts | `app/auth.py`, `app/ownership.py` | Accounts, password hashing, sessions and owner checks. PostgreSQL is required when authentication is enabled. |
-| Sources | `app/source_service.py`, `app/csv_import.py`, `app/data_sources/` | CSV import and snapshots, schema, profile and access to configured PostgreSQL tables. |
-| Storage | `app/schema_catalog.py`, `app/chat_manager.py`, `BI_DATA_DIR` | SQLite catalog and history, source files in persistent storage. Configuration and backups depend on deployment. |
-| Agent and LLM | `app/agent.py`, `app/llm/`, `app/tools/` | Conversation context, model calls and a bounded tool set. |
-| Execution | `app/safe_sql.py`, `app/data_engine.py`, `app/postgresql_sql.py` | Query validation and read-only calculations against the selected source. |
-| Artifacts | `app/charts/`, `app/hypothesis/` | Chart specifications, card execution, saved results and hypothesis checks. |
+| Layer         | Location                                                                                                                  | Responsibility                                                                                                  |
+|---------------|---------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------|
+| UI            | `frontend/src/`                                                                                                           | Workspace, CSV upload, profile, chat, cards, PDF and account state.                                             |
+| API           | `app/main.py`, `app/core/auth/auth_routes.py`                                                                             | HTTP routes, validation, authentication and service calls.                                                      |
+| Accounts      | `app/core/auth/auth.py`, `app/core/auth/ownership.py`                                                                     | Accounts, password hashing, sessions and owner checks. PostgreSQL is required when authentication is enabled.   |
+| Sources       | `app/source_service.py`, `app/data_sources/csv_tools/csv_import.py`, `app/data_sources/`                                  | CSV import and snapshots, schema, profile and access to configured PostgreSQL tables.                           |
+| Storage       | `app/schema_catalog.py`, `app/chat_manager.py`, `BI_DATA_DIR`                                                             | SQLite catalog and history, source files in persistent storage. Configuration and backups depend on deployment. |
+| Agent and LLM | `app/agent.py`, `app/llm/`, `app/tools/`                                                                                  | Conversation context, model calls and a bounded tool set.                                                       |
+| Execution     | `app/safe_sql.py`, `app/data_sources/duckdb_engine/data_engine.py`, `app/data_sources/postgresql_tools/postgresql_sql.py` | Query validation and read-only calculations against the selected source.                                        |
+| Artifacts     | `app/charts/`, `app/hypothesis/`                                                                                          | Chart specifications, card execution, saved results and hypothesis checks.                                      |
 
 ## Data flow
 
@@ -50,17 +50,17 @@ flowchart TB
 
 ## API
 
-| Route | Purpose |
-| --- | --- |
-| `GET /health` | Application status and configured provider type. |
-| `POST /auth/register`, `/auth/login`, `/auth/logout` | Registration, login and logout when authentication is enabled. |
-| `GET /auth/me`, `PATCH /auth/profile`, `/auth/avatar` | Account, profile and photo. |
-| `POST /auth/reset/request`, `/auth/reset/confirm` | Request and apply a recovery code when delivery is configured. |
-| `POST /sources/csv`, `GET /sources` | Upload CSV and list accessible sources. |
-| `GET /sources/{id}/schema`, `/preview`, `/profile` | Schema, bounded preview and profile. |
-| `POST /agent/ask`, `POST /agent/chat` | Standalone question or a question in a conversation. |
-| `GET /chats`, `POST /chats`, `GET /chats/{id}` | Create and restore conversation history. |
-| `GET /dashboards/ids`, `GET /dashboards/{id}/build`, `POST /dashboards/{id}/refresh` | List, saved result and explicit dashboard refresh. |
+| Route                                                                                | Purpose                                                        |
+|--------------------------------------------------------------------------------------|----------------------------------------------------------------|
+| `GET /health`                                                                        | Application status and configured provider type.               |
+| `POST /auth/register`, `/auth/login`, `/auth/logout`                                 | Registration, login and logout when authentication is enabled. |
+| `GET /auth/me`, `PATCH /auth/profile`, `/auth/avatar`                                | Account, profile and photo.                                    |
+| `POST /auth/reset/request`, `/auth/reset/confirm`                                    | Request and apply a recovery code when delivery is configured. |
+| `POST /sources/csv`, `GET /sources`                                                  | Upload CSV and list accessible sources.                        |
+| `GET /sources/{id}/schema`, `/preview`, `/profile`                                   | Schema, bounded preview and profile.                           |
+| `POST /agent/ask`, `POST /agent/chat`                                                | Standalone question or a question in a conversation.           |
+| `GET /chats`, `POST /chats`, `GET /chats/{id}`                                       | Create and restore conversation history.                       |
+| `GET /dashboards/ids`, `GET /dashboards/{id}/build`, `POST /dashboards/{id}/refresh` | List, saved result and explicit dashboard refresh.             |
 
 See [contracts](../../contracts/README.md); a running FastAPI server exposes interactive documentation at `/docs`. The `/auth/avatar` path supports multiple HTTP methods.
 

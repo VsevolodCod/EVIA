@@ -33,7 +33,7 @@ p95 рассчитан методом ближайшего ранга `ceil(0.95
 Воспроизвести на Railway после развертывания скрипта:
 
 ```sh
-railway ssh -p f0ae576b-cde6-4314-939b-dd961cb0e139 -s EVIA -e production -- python -m scripts.benchmark_railway_agent
+railway ssh -p f0ae576b-cde6-4314-939b-dd961cb0e139 -s EVIA -e production -- python -m scripts.benchmarks.benchmark_railway_agent
 ```
 
 Скрипт откажется запускаться без `RAILWAY_ENVIRONMENT`, создаст временный CSV

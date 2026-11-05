@@ -7,7 +7,7 @@ from sqlalchemy.orm import lazyload
 
 from app.db.chat.models import ChatORM, ChatMessageORM
 from app.models import Chat, ChatMessage, ChatHistoryResponse
-from app.ownership import owner_id
+from app.core.auth import owner_id
 
 
 class ChatNotFoundError(Exception):

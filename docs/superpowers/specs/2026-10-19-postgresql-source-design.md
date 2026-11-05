@@ -23,7 +23,7 @@ The existing UI does not need to expose a password form for #23. Issue #24 will 
 ## Components
 
 - `app/data_sources/postgresql_adapter.py` owns connection creation, allowlist validation, batched schema discovery, bounded preview/profile, and mapping PostgreSQL rows to existing models.
-- `app/postgresql_sql.py` owns PostgreSQL-specific guarded `SELECT` execution. It reuses the parser policy from #9 conceptually but does not make DuckDB depend on psycopg.
+- `app/data_sources/postgresql_tools/postgresql_sql.py` owns PostgreSQL-specific guarded `SELECT` execution. It reuses the parser policy from #9 conceptually but does not make DuckDB depend on psycopg.
 - `app/source_service.py` dispatches source actions by `source_type`. Its CSV methods and constructor stay compatible with all existing tests.
 - `app/config.py` parses PostgreSQL setup; no secret-bearing setting is rendered by `/health`.
 - `app/main.py` registers configured PostgreSQL sources at startup and exposes the existing source/schema/preview/profile paths for them. A narrow connection check endpoint returns status only, never DSN details.

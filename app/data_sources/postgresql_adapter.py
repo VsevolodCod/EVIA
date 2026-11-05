@@ -13,7 +13,7 @@ from app.config import PostgresSettings
 from app.data_sources.base import DataSourceAdapter
 from app.contracts.v1 import Provenance, QueryResult
 from app.models import DataSource, SchemaField, SchemaObject, SourceSchema, utc_now
-from app.postgresql_sql import PostgresQueryExecutor
+from app.data_sources.postgresql_tools.postgresql_sql import PostgresQueryExecutor
 
 
 class PostgresSourceError(Exception):

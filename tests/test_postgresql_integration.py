@@ -88,7 +88,7 @@ def test_bad_password_and_timeout_do_not_leak_details_or_poison_next_query(postg
             statement_timeout_ms=1,
         )
     )
-    from app.postgresql_sql import PostgresQueryError
+    from app.data_sources.postgresql_tools.postgresql_sql import PostgresQueryError
 
     with pytest.raises(PostgresQueryError) as caught:
         timeout_adapter.query(

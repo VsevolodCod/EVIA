@@ -1,4 +1,3 @@
-import csv
 from datetime import date, datetime
 from itertools import islice
 from pathlib import Path
@@ -6,7 +5,7 @@ import re
 from typing import Any
 
 from app.data_sources.base import DataSourceAdapter
-from app.data_sources.csv_format import PARSER_VERSION, csv_reader, read_header, checked_rows
+from app.data_sources.csv_tools.csv_format import PARSER_VERSION, csv_reader, read_header, checked_rows
 from app.models import (
     DataSource,
     SchemaField,

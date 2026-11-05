@@ -14,7 +14,7 @@
 
 ## Выполнение
 
-`app/evaluation.py` загружает fixture через тот же `SourceService`, что UI, запускает gold SQL через read-only executor и сравнивает типизированные ячейки. Строки сравниваются в заданном порядке; NULL равен только NULL; числа сравниваются через `Decimal` с заданным допуском. Скрипт `python -m scripts.verify_eval_corpus` создаёт machine-readable JSON отчёт и возвращает ненулевой код при несоответствии hash, SQL, схемы или результата.
+`app/evaluation.py` загружает fixture через тот же `SourceService`, что UI, запускает gold SQL через read-only executor и сравнивает типизированные ячейки. Строки сравниваются в заданном порядке; NULL равен только NULL; числа сравниваются через `Decimal` с заданным допуском. Скрипт `python -m scripts.verifiers.verify_eval_corpus` создаёт machine-readable JSON отчёт и возвращает ненулевой код при несоответствии hash, SQL, схемы или результата.
 
 ## Набор сценариев
 

@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, call
 import httpx
 import pytest
 
-from app.retry_agent import (
+from app.agent_additions.retry_agent import (
     LLMRetryExhausted,
     LLMRetryPolicy,
     call_with_retry,
@@ -48,7 +48,7 @@ def policy() -> LLMRetryPolicy:
 @pytest.fixture
 def sleep_mock(monkeypatch) -> AsyncMock:
     mock = AsyncMock()
-    monkeypatch.setattr("app.retry_agent.asyncio.sleep", mock)
+    monkeypatch.setattr("app.agent_additions.retry_agent.asyncio.sleep", mock)
     return mock
 
 
