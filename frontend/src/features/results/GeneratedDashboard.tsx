@@ -350,7 +350,7 @@ function GeneratedCard({ card, preference, expandPassport = false }: { card: Car
       <button type="button" aria-pressed={view === "bar"} onClick={() => setView("bar")}>{t("Столбцы", "Bars")}</button>
     </div>}
     {card.status === "error" ? <p className="generated-empty">{t("Не удалось рассчитать эту карточку.", "Could not calculate this card.")}</p>
-      : card.type === "kpi" && object(card.data) ? <strong className="generated-value">{formattedNumber(card.data.value,
+      : card.type === "kpi" && object(card.data) ? <strong className="generated-value">{card.data.value == null ? t("Нет данных", "No data") : formattedNumber(card.data.value,
           card.data.format ?? (object(card.definition) ? card.definition.format : null))}</strong>
         : activeType === "line" ? <ResultLine card={card} colors={preference.colors} gradient={preference.gradient} />
           : activeType === "bar" ? <ResultBar card={card} colors={preference.colors} />

@@ -13,7 +13,7 @@ export function savedDashboardId(data: unknown): string | null {
   return typeof data.dashboard.id === "string" && data.dashboard.id ? data.dashboard.id : null;
 }
 
-export function dashboardFromBuild(build: SavedDashboardBuild): Dashboard {
+export function dashboardFromBuild(build: SavedDashboardBuild, language: "ru" | "en" = "ru"): Dashboard {
   return {
     version: 1,
     title: build.dashboard.title,
@@ -23,14 +23,14 @@ export function dashboardFromBuild(build: SavedDashboardBuild): Dashboard {
       if (!definition || !["kpi", "line", "bar", "pie", "scatter", "table"].includes(String(type))) return {
         id: chart.chart_id,
         type: "kpi" as const,
-        title: "Недоступный график",
+        title: language === "en" ? "Unavailable chart" : "Недоступный график",
         status: "error" as const,
         error: chart.error,
       };
       return {
         id: chart.chart_id,
         type: type as Dashboard["cards"][number]["type"],
-        title: typeof definition.title === "string" ? definition.title : "График",
+        title: typeof definition.title === "string" ? definition.title : language === "en" ? "Chart" : "График",
         status: chart.success ? "success" as const : "error" as const,
         definition: chart.definition,
         data: chart.result,
@@ -69,7 +69,7 @@ export function SavedDashboard({ id, editable = false }: { id: string; editable?
   if (!current) return <div className="loading-panel" role="status">{t("Открываем сохранённый дашборд…", "Opening saved dashboard…")}</div>;
   if (current.error && !current.build) return <ErrorNotice message={current.error} onRetry={() => setRevision((value) => value + 1)} label={t("Повторить загрузку дашборда", "Retry loading dashboard")} />;
   if (!current.build) return <div className="loading-panel" role="status">{t("Открываем сохранённый дашборд…", "Opening saved dashboard…")}</div>;
-  const dashboard = dashboardFromBuild(current.build!);
+  const dashboard = dashboardFromBuild(current.build!, language);
   const ordered = [...current.build.dashboard.charts].sort((left, right) => left.position - right.position);
   async function move(index: number, direction: -1 | 1) {
     const next = ordered.map((item) => item.chart_id);
