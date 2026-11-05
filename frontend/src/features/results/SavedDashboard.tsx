@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useLanguage } from "../../language";
 import { api, ApiError, errorMessage, type SavedDashboardBuild } from "../../api";
 import { ErrorNotice } from "../../components";
 import { GeneratedDashboard, type Dashboard } from "./GeneratedDashboard";
@@ -40,6 +41,7 @@ export function dashboardFromBuild(build: SavedDashboardBuild): Dashboard {
 }
 
 export function SavedDashboard({ id, editable = false }: { id: string; editable?: boolean }) {
+  const { t, language } = useLanguage();
   const [revision, setRevision] = useState(0);
   const [state, setState] = useState<{ id: string; build?: SavedDashboardBuild; error?: string; refreshing?: boolean; updatedAt?: number } | null>(null);
   const [saving, setSaving] = useState(false);
@@ -56,17 +58,17 @@ export function SavedDashboard({ id, editable = false }: { id: string; editable?
         id, build: previous?.id === id ? previous.build : undefined,
         updatedAt: previous?.id === id ? previous.updatedAt : undefined,
         error: error instanceof ApiError && error.status === 404
-          ? "Сохранённый дашборд больше не доступен."
-          : `Не удалось обновить отчёт. ${errorMessage(error)}`,
+          ? t("Сохранённый дашборд больше не доступен.", "The saved dashboard is no longer available.")
+          : t(`Не удалось обновить отчёт. ${errorMessage(error)}`, `Could not refresh the report. ${errorMessage(error)}`),
       }));
     });
     return () => controller.abort();
   }, [id, revision]);
 
   const current = state?.id === id ? state : null;
-  if (!current) return <div className="loading-panel" role="status">Открываем сохранённый дашборд…</div>;
-  if (current.error && !current.build) return <ErrorNotice message={current.error} onRetry={() => setRevision((value) => value + 1)} label="Повторить загрузку дашборда" />;
-  if (!current.build) return <div className="loading-panel" role="status">Открываем сохранённый дашборд…</div>;
+  if (!current) return <div className="loading-panel" role="status">{t("Открываем сохранённый дашборд…", "Opening saved dashboard…")}</div>;
+  if (current.error && !current.build) return <ErrorNotice message={current.error} onRetry={() => setRevision((value) => value + 1)} label={t("Повторить загрузку дашборда", "Retry loading dashboard")} />;
+  if (!current.build) return <div className="loading-panel" role="status">{t("Открываем сохранённый дашборд…", "Opening saved dashboard…")}</div>;
   const dashboard = dashboardFromBuild(current.build!);
   const ordered = [...current.build.dashboard.charts].sort((left, right) => left.position - right.position);
   async function move(index: number, direction: -1 | 1) {
@@ -88,25 +90,25 @@ export function SavedDashboard({ id, editable = false }: { id: string; editable?
       setSaving(false);
     }
   }
-  return <section className="saved-dashboard" aria-label="Сохранённый дашборд">
-    <div className="saved-dashboard-toolbar"><span>Сохранённый дашборд{current.updatedAt ? ` · обновлён ${new Date(current.updatedAt).toLocaleString("ru-RU")}` : ""}</span><button type="button" disabled={current.refreshing} onClick={() => setRevision((value) => value + 1)}>{current.refreshing ? "Обновляем…" : "Обновить данные"}</button></div>
-    {current.error && <ErrorNotice message={current.build ? `${current.error} Показаны предыдущие данные.` : current.error} onRetry={() => setRevision((value) => value + 1)} label="Повторить загрузку дашборда" />}
-    {current.build.stale && <p role="status">Источник изменился. Показан сохранённый результат; нажмите «Обновить данные» для пересчёта.</p>}
-    {current.refreshing && <p role="status">Обновляем графики…</p>}
-    {!current.build.success && <p role="status">Часть графиков не обновилась. Остальные результаты доступны ниже.</p>}
-    {editable && ordered.length > 1 && <div className="saved-dashboard-order" aria-label="Порядок графиков">
+  return <section className="saved-dashboard" aria-label={t("Сохранённый дашборд", "Saved dashboard")}>
+    <div className="saved-dashboard-toolbar"><span>{t("Сохранённый дашборд", "Saved dashboard")}{current.updatedAt ? ` · ${t("обновлён", "updated")} ${new Date(current.updatedAt).toLocaleString(language === "en" ? "en-US" : "ru-RU")}` : ""}</span><button type="button" disabled={current.refreshing} onClick={() => setRevision((value) => value + 1)}>{current.refreshing ? t("Обновляем…", "Refreshing…") : t("Обновить данные", "Refresh data")}</button></div>
+    {current.error && <ErrorNotice message={current.build ? `${current.error} ${t("Показаны предыдущие данные.", "Showing previous data.")}` : current.error} onRetry={() => setRevision((value) => value + 1)} label={t("Повторить загрузку дашборда", "Retry loading dashboard")} />}
+    {current.build.stale && <p role="status">{t("Источник изменился. Показан сохранённый результат; нажмите «Обновить данные» для пересчёта.", "The source has changed. The saved result is shown; select Refresh data to recalculate.")}</p>}
+    {current.refreshing && <p role="status">{t("Обновляем графики…", "Refreshing charts…")}</p>}
+    {!current.build.success && <p role="status">{t("Часть графиков не обновилась. Остальные результаты доступны ниже.", "Some charts could not be refreshed. Other results are available below.")}</p>}
+    {editable && ordered.length > 1 && <div className="saved-dashboard-order" aria-label={t("Порядок графиков", "Chart order")}>
       {ordered.map((ref, index) => {
         const chart = current.build!.charts.find((item) => item.chart_id === ref.chart_id);
         const rawDefinition = chart?.definition;
         const definition = record(rawDefinition) ? rawDefinition : null;
-        const title = typeof definition?.title === "string" ? definition.title : `График ${index + 1}`;
+        const title = typeof definition?.title === "string" ? definition.title : t(`График ${index + 1}`, `Chart ${index + 1}`);
         return <div key={ref.chart_id}><span>{title}</span>
-          <button type="button" disabled={saving || index === 0} aria-label={`Поднять ${title}`} onClick={() => void move(index, -1)}>↑</button>
-          <button type="button" disabled={saving || index === ordered.length - 1} aria-label={`Опустить ${title}`} onClick={() => void move(index, 1)}>↓</button>
+          <button type="button" disabled={saving || index === 0} aria-label={t(`Поднять ${title}`, `Move ${title} up`)} onClick={() => void move(index, -1)}>↑</button>
+          <button type="button" disabled={saving || index === ordered.length - 1} aria-label={t(`Опустить ${title}`, `Move ${title} down`)} onClick={() => void move(index, 1)}>↓</button>
         </div>;
       })}
     </div>}
-    {dashboard.cards.length ? <GeneratedDashboard dashboard={dashboard} scope={`saved-${id}`} sourceLabel={current.build!.success ? "Сохранённый результат" : "Часть карточек недоступна"} />
-      : <p className="dashboard-empty">В этом дашборде пока нет графиков.</p>}
+    {dashboard.cards.length ? <GeneratedDashboard dashboard={dashboard} scope={`saved-${id}`} sourceLabel={current.build!.success ? t("Сохранённый результат", "Saved result") : t("Часть карточек недоступна", "Some cards are unavailable")} />
+      : <p className="dashboard-empty">{t("В этом дашборде пока нет графиков.", "This dashboard has no charts yet.")}</p>}
   </section>;
 }

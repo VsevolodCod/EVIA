@@ -1,4 +1,5 @@
 import type { Answer, Row, ToolResult } from "../../api";
+import { useLanguage } from "../../language";
 import { Icon } from "../../components/Icon";
 import { ResultVisualization } from "./ResultVisualization";
 import { HypothesisEvidence, isHypothesisEvidence } from "./HypothesisEvidence";
@@ -54,12 +55,14 @@ function resultPassport(data: unknown) {
 }
 
 export function ToolResults({ results, analysis }: { results: ToolResult[]; analysis?: Answer["analysis"] }) {
+  const { t } = useLanguage();
+  const englishTitles: Record<string, string> = { list_sources: "Data sources", preview_source: "Data sample", profile_source: "Data profile", get_schema: "Data structure", execute_sql: "Calculation result", run_sql: "Calculation result", compare_groups: "Group comparison", analyze_relationship: "Relationship analysis" };
   if (!results.length)
     return (
       <div className="empty-table">
         <Icon name="grid" size={28} />
-        <p>Модель не вернула результаты инструментов</p>
-        <span>Текст ответа находится в диалоге справа.</span>
+        <p>{t("Модель не вернула результаты инструментов", "The model returned no tool results")}</p>
+        <span>{t("Текст ответа находится в диалоге справа.", "The answer is in the chat.")}</span>
       </div>
     );
   return (
@@ -75,57 +78,56 @@ export function ToolResults({ results, analysis }: { results: ToolResult[]; anal
           isHypothesisEvidence(result.data) ? result.data : null;
         return <section className="tool-result" key={i}>
           <div className="section-heading">
-            <h3>{titles[result.tool_name] ?? "Результат инструмента"}</h3>
+            <h3>{t(titles[result.tool_name] ?? "Результат инструмента", englishTitles[result.tool_name] ?? "Tool result")}</h3>
             <span className={`pill ${result.ok ? "" : "error-pill"}`}>
-              {result.ok ? "Выполнено" : "Ошибка"}
+              {result.ok ? t("Выполнено", "Completed") : t("Ошибка", "Error")}
             </span>
           </div>
           {!result.ok && (
             <p className="error-text">
-              {result.error || "Инструмент не смог выполнить запрос."}
+              {result.error || t("Инструмент не смог выполнить запрос.", "The tool could not complete the request.")}
             </p>
           )}
           {csvTable && <div className="tool-export">
-            <button type="button" onClick={() => downloadCsv(csvTable)}>Скачать CSV</button>
+            <button type="button" onClick={() => downloadCsv(csvTable)}>{t("Скачать CSV", "Download CSV")}</button>
             {csvTable.truncated && <p>
               {csvTable.rows.length === 1
-                ? "В CSV попадёт только 1 строка, возвращённая сервером. Результат усечён."
-                : `В CSV попадут только ${csvTable.rows.length} строк, возвращённых сервером. Результат усечён.`}
+                ? t("В CSV попадёт только 1 строка, возвращённая сервером. Результат усечён.", "The CSV contains only the 1 row returned by the server. The result is truncated.")
+                : t(`В CSV попадут только ${csvTable.rows.length} строк, возвращённых сервером. Результат усечён.`, `The CSV contains only the ${csvTable.rows.length} rows returned by the server. The result is truncated.`)}
             </p>}
           </div>}
           {passport && <details className="tool-method result-passport">
-            <summary>Паспорт результата</summary>
+            <summary>{t("Паспорт результата", "Result details")}</summary>
             <dl>
-              <div><dt>Источник</dt><dd>{passport.source}</dd></div>
-              <div><dt>Снимок данных</dt><dd>{passport.snapshot}</dd></div>
-              {passport.schemaVersion !== null && <div><dt>Версия схемы</dt><dd>{passport.schemaVersion}</dd></div>}
-              <div><dt>Возвращено строк</dt><dd>{passport.shown}</dd></div>
+              <div><dt>{t("Источник", "Source")}</dt><dd>{passport.source}</dd></div>
+              <div><dt>{t("Снимок данных", "Data snapshot")}</dt><dd>{passport.snapshot}</dd></div>
+              {passport.schemaVersion !== null && <div><dt>{t("Версия схемы", "Schema version")}</dt><dd>{passport.schemaVersion}</dd></div>}
+              <div><dt>{t("Возвращено строк", "Rows returned")}</dt><dd>{passport.shown}</dd></div>
               {sql && <div><dt>SQL</dt><dd><code>{sql}</code></dd></div>}
             </dl>
-            {passport.truncated && <p>Показана только часть результата. Экспорт содержит только возвращённые строки.</p>}
+            {passport.truncated && <p>{t("Показана только часть результата. Экспорт содержит только возвращённые строки.", "Only part of the result is shown. The export contains only returned rows.")}</p>}
           </details>}
           {hypothesis ? <HypothesisEvidence evidence={hypothesis} /> : rows ? (
             <ResultVisualization
               rows={rows}
-              label={`Результат ${result.tool_name}`}
+              label={t(`Результат ${result.tool_name}`, `Result of ${result.tool_name}`)}
               columns={chartColumns(result.data)}
               truncated={Boolean(result.data && typeof result.data === "object" && !Array.isArray(result.data) && "truncated" in result.data && result.data.truncated === true)}
               copyableIdentifierColumns={result.tool_name === "list_sources" ? ["source_id", "snapshot_id"] : undefined}
             />
           ) : result.data !== null && result.data !== undefined ? (
             <details>
-              <summary>Технические данные · {result.tool_name}</summary>
+              <summary>{t("Технические данные", "Technical details")} · {result.tool_name}</summary>
               <pre>{JSON.stringify(result.data, null, 2)}</pre>
             </details>
           ) : result.ok ? (
-            <p className="muted">Инструмент не вернул данные.</p>
+            <p className="muted">{t("Инструмент не вернул данные.", "The tool returned no data.")}</p>
           ) : null}
           {rows && (
             <details className="tool-method">
-              <summary>Об источнике результата</summary>
+              <summary>{t("Об источнике результата", "About the result source")}</summary>
               <p>
-                Инструмент: {result.tool_name}. Отображены строки, возвращённые
-                сервером.
+                {t("Инструмент", "Tool")}: {result.tool_name}. {t("Отображены строки, возвращённые сервером.", "Showing rows returned by the server.")}
               </p>
             </details>
           )}
