@@ -27,16 +27,16 @@ flowchart TB
     API --> UI
 ```
 
-| Layer         | Location                                                          | Responsibility                                                                                                  |
-|---------------|-------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------|
-| UI            | `frontend/src/`                                                   | Workspace, CSV upload, profile, chat, cards, PDF and account state.                                             |
-| API           | `app/main.py`, `app/core/auth/auth_routes.py`                     | HTTP routes, validation, authentication and service calls.                                                      |
-| Accounts      | `app/core/auth/auth.py`, `app/core/auth/ownership.py`             | Accounts, password hashing, sessions and owner checks. PostgreSQL is required when authentication is enabled.   |
-| Sources       | `app/source_service.py`, `app/csv_import.py`, `app/data_sources/` | CSV import and snapshots, schema, profile and access to configured PostgreSQL tables.                           |
-| Storage       | `app/schema_catalog.py`, `app/chat_manager.py`, `BI_DATA_DIR`     | SQLite catalog and history, source files in persistent storage. Configuration and backups depend on deployment. |
-| Agent and LLM | `app/agent.py`, `app/llm/`, `app/tools/`                          | Conversation context, model calls and a bounded tool set.                                                       |
-| Execution     | `app/safe_sql.py`, `app/data_engine.py`, `app/postgresql_sql.py`  | Query validation and read-only calculations against the selected source.                                        |
-| Artifacts     | `app/charts/`, `app/hypothesis/`                                  | Chart specifications, card execution, saved results and hypothesis checks.                                      |
+| Layer         | Location                                                                                                                  | Responsibility                                                                                                  |
+|---------------|---------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------|
+| UI            | `frontend/src/`                                                                                                           | Workspace, CSV upload, profile, chat, cards, PDF and account state.                                             |
+| API           | `app/main.py`, `app/core/auth/auth_routes.py`                                                                             | HTTP routes, validation, authentication and service calls.                                                      |
+| Accounts      | `app/core/auth/auth.py`, `app/core/auth/ownership.py`                                                                     | Accounts, password hashing, sessions and owner checks. PostgreSQL is required when authentication is enabled.   |
+| Sources       | `app/source_service.py`, `app/data_sources/csv_tools/csv_import.py`, `app/data_sources/`                                  | CSV import and snapshots, schema, profile and access to configured PostgreSQL tables.                           |
+| Storage       | `app/schema_catalog.py`, `app/chat_manager.py`, `BI_DATA_DIR`                                                             | SQLite catalog and history, source files in persistent storage. Configuration and backups depend on deployment. |
+| Agent and LLM | `app/agent.py`, `app/llm/`, `app/tools/`                                                                                  | Conversation context, model calls and a bounded tool set.                                                       |
+| Execution     | `app/safe_sql.py`, `app/data_sources/duckdb_engine/data_engine.py`, `app/data_sources/postgresql_tools/postgresql_sql.py` | Query validation and read-only calculations against the selected source.                                        |
+| Artifacts     | `app/charts/`, `app/hypothesis/`                                                                                          | Chart specifications, card execution, saved results and hypothesis checks.                                      |
 
 ## Data flow
 

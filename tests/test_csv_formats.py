@@ -5,7 +5,7 @@ import pytest
 from app.models import SourceSchema
 from app.schema_catalog import SchemaCatalog
 from app.source_service import SourceService
-from app.data_sources.csv_format import PARSER_VERSION, detect_delimiter
+from app.data_sources.csv_tools.csv_format import PARSER_VERSION, detect_delimiter
 from app.data_sources.csv_adapter import infer_type
 
 

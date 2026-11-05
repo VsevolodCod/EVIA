@@ -11,7 +11,7 @@ from pathlib import Path
 import re
 from typing import Any
 
-from app.data_sources.csv_format import SAMPLE_CHARS, detect_delimiter
+from app.data_sources.csv_tools.csv_format import SAMPLE_CHARS, detect_delimiter
 
 
 _DECIMAL_COMMA = re.compile(r"^[+-]?\d+,\d+$")

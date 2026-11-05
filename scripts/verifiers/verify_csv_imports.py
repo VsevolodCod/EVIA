@@ -11,7 +11,7 @@ import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from app.csv_import import CSVImportError
+from app.data_sources.csv_tools.csv_import import CSVImportError
 from app.schema_catalog import SchemaCatalog
 from app.source_service import SourceService
 

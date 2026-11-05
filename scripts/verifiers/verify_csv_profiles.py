@@ -18,7 +18,7 @@ from tempfile import TemporaryDirectory
 from time import perf_counter
 from typing import Any
 
-from app.csv_import import CSVImportError
+from app.data_sources.csv_tools.csv_import import CSVImportError
 from app.schema_catalog import SchemaCatalog
 from app.source_service import SourceService
 

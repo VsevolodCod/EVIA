@@ -7,7 +7,7 @@ from app.models import DataSource
 from app.core.auth import current_owner
 from app.schema_catalog import SchemaCatalog
 from app.source_service import SourceService
-from app.data_engine import DuckDBDataEngine
+from app.data_sources.duckdb_engine.data_engine import DuckDBDataEngine
 
 
 def test_delete_csv_removes_all_versions_and_keeps_other_source(tmp_path):

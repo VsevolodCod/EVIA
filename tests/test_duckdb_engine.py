@@ -2,7 +2,7 @@ from app.models import DataSource
 
 
 def test_imported_csv_is_available_for_analytics_and_survives_reopen(tmp_path):
-    from app.data_engine import DuckDBDataEngine
+    from app.data_sources.duckdb_engine.data_engine import DuckDBDataEngine
 
     source = DataSource(
         source_id="sales-source",
@@ -91,7 +91,7 @@ def test_existing_catalog_source_is_materialized_on_first_use(tmp_path):
 def test_snapshots_with_one_source_id_are_immutable_and_isolated(tmp_path):
     import pytest
 
-    from app.data_engine import DuckDBDataEngine
+    from app.data_sources.duckdb_engine.data_engine import DuckDBDataEngine
 
     engine = DuckDBDataEngine(tmp_path / "analytics.duckdb")
     first = DataSource(
@@ -146,7 +146,7 @@ def test_legacy_catalog_source_receives_snapshot_before_materialization(tmp_path
 
 def test_profile_calculates_full_snapshot_statistics_and_typed_blocks(tmp_path):
     from app.contracts.v1 import Profile
-    from app.data_engine import DuckDBDataEngine
+    from app.data_sources.duckdb_engine.data_engine import DuckDBDataEngine
     from app.models import ImportReport
 
     null_value = "__EVIA_NULL_profile-sha__"
@@ -222,7 +222,7 @@ def test_profile_calculates_full_snapshot_statistics_and_typed_blocks(tmp_path):
 
 def test_profile_finds_an_exact_composite_grain_candidate(tmp_path):
     from app.contracts.v1 import Profile
-    from app.data_engine import DuckDBDataEngine
+    from app.data_sources.duckdb_engine.data_engine import DuckDBDataEngine
 
     source = DataSource(
         source_id="composite-grain-source",
@@ -254,7 +254,7 @@ def test_profile_finds_an_exact_composite_grain_candidate(tmp_path):
 
 def test_profile_for_legacy_raw_import_is_a_complete_text_only_payload(tmp_path):
     from app.contracts.v1 import Profile
-    from app.data_engine import DuckDBDataEngine
+    from app.data_sources.duckdb_engine.data_engine import DuckDBDataEngine
 
     source = DataSource(
         source_id="legacy-profile-source",

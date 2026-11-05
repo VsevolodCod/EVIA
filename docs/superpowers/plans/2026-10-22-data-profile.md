@@ -70,7 +70,7 @@ Commit: `git commit -am "feat(profile): define exact snapshot statistics contrac
 ### Task 2: Точные агрегаты DuckDB
 
 **Files:**
-- Modify: `app/data_engine.py`
+- Modify: `app/data_sources/duckdb_engine/data_engine.py`
 - Test: `tests/test_duckdb_engine.py`
 
 - [ ] **Step 1: Write failing tests for exact counts and numeric/date boundaries**

@@ -13,7 +13,7 @@
 ## File structure
 
 - Create `app/data_sources/postgresql_adapter.py`: read-only connection, allowlist discovery, schema, preview and bounded sampled profile.
-- Create `app/postgresql_sql.py`: PostgreSQL guarded analytical `SELECT` execution and stable public errors.
+- Create `app/data_sources/postgresql_tools/postgresql_sql.py`: PostgreSQL guarded analytical `SELECT` execution and stable public errors.
 - Modify `app/config.py`: parse optional PostgreSQL DSN, allowlist and safe connection/query budgets.
 - Modify `app/models.py`: add non-secret remote object metadata to `DataSource`.
 - Modify `app/source_service.py`: register remote sources and dispatch source operations without changing CSV behaviour.
@@ -142,7 +142,7 @@ git commit -m "feat(postgres): add allowlisted read-only adapter"
 ### Task 3: Guarded PostgreSQL query executor
 
 **Files:**
-- Create: `app/postgresql_sql.py`
+- Create: `app/data_sources/postgresql_tools/postgresql_sql.py`
 - Test: `tests/test_postgresql_adapter.py`
 
 - [ ] **Step 1: Write failing query tests**
@@ -180,7 +180,7 @@ Expected: unsafe SQL is rejected; timeout does not poison the next fresh query.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add app/postgresql_sql.py tests/test_postgresql_adapter.py
+git add app/data_sources/postgresql_tools/postgresql_sql.py tests/test_postgresql_adapter.py
 git commit -m "feat(postgres): guard remote analytical queries"
 ```
 

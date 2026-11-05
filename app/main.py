@@ -25,7 +25,7 @@ from app.core.auth import current_owner
 from app.agent import AgentRuntime
 from app.contracts.v1 import AgentResponse
 from app.config import PROJECT_ROOT, get_settings
-from app.csv_import import CSVImportError
+from app.data_sources.csv_tools.csv_import import CSVImportError
 from app.data_sources.postgresql_adapter import PostgresSourceError, PostgreSQLAdapter
 from app.db import create_chat_database, initialize_chat_database
 from app.llm.factory import create_llm_provider
