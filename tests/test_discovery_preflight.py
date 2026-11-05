@@ -35,16 +35,21 @@ async def test_schema_fastpath_preserves_dates_and_identifier(setup, scripted_ll
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("question", ["Покажи частоты поля Код клиента", "Какие значения встречаются по коду клиента?"])
-async def test_customer_code_is_query_data_not_program(setup, scripted_llm, question):
+async def test_customer_code_frequencies_use_a_chart_not_program_execution(setup, scripted_llm, question):
     sources, source, catalog = setup
     llm = scripted_llm([
-        LLMResponse(tool_calls=[ToolCall(name="query_data", arguments={"source_id": source.source_id,
-            "sql": 'SELECT COUNT(*) AS frequency, "Код клиента" AS value FROM source GROUP BY "Код клиента" ORDER BY value'})], finish_reason="tool_calls"),
+        LLMResponse(tool_calls=[ToolCall(name="build_chart", arguments={"definition": {
+            "type": "bar", "title": "Частоты",
+            "x": {"source_id": source.source_id, "field": "Код клиента", "sort": "label_asc"},
+            "y": {"source_id": source.source_id, "field": "Код клиента", "aggregate": "count"},
+        }})], finish_reason="tool_calls"),
         LLMResponse(content="Частоты рассчитаны по коду клиента."),
     ])
     result = await AgentRuntime(llm, build_tool_registry(catalog, sources), sources=sources).ask(question, [source.source_id])
-    assert result.results[0].rows == [[1, "001"], [1, "002"]]
-    assert result.results[0].provenance[0].source_id == source.source_id
+    built = result.tool_results[0].data
+    assert built['success']
+    assert built['result']['points'] == [{'x': '001', 'y': 1}, {'x': '002', 'y': 1}]
+    assert built['result']['provenance'][0]['source_id'] == source.source_id
 
 
 @pytest.mark.asyncio

@@ -7,7 +7,8 @@ from app.agent import AgentRuntime
 from app.config import Settings
 from app.llm.ollama_provider import OllamaModel, OllamaProvider
 from app.llm.openai_provider import OpenAIModel, OpenAIProvider
-from app.models import LLMResponse, ToolCall, ToolResult
+from app.models import LLMResponse, ModelTiming, ToolCall, ToolResult
+from app.agent_additions.retry_agent import LLMRetryPolicy
 
 
 def test_ollama_nanoseconds_missing_metrics_and_zero_tokens():
@@ -63,7 +64,7 @@ async def test_openai_chat_completion_uses_integer_token_limit(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_openai_model_retries_transient_502_for_structured_and_tool_calls(monkeypatch):
+async def test_agent_retries_openai_http_502_once_without_nested_retries(monkeypatch):
     monkeypatch.setenv('OPENAI_API_KEY', 'test-key')
     original = httpx.AsyncClient
     attempts = []
@@ -75,8 +76,16 @@ async def test_openai_model_retries_transient_502_for_structured_and_tool_calls(
         return httpx.Response(200, json={'choices': [{'finish_reason': 'stop', 'message': {'content': 'ok'}}]})
 
     monkeypatch.setattr(httpx, 'AsyncClient', lambda **kwargs: original(transport=httpx.MockTransport(handle), **kwargs))
-    result = await OpenAIModel(Settings()).generate({'model': 'test', 'messages': [], 'tools': []})
-    assert result['choices'][0]['message']['content'] == 'ok'
+    class Tools:
+        def descriptions(self): return []
+
+    result = await AgentRuntime(
+        OpenAIProvider(OpenAIModel(Settings()), 'test'), Tools(), max_steps=1,
+        retry_policy=LLMRetryPolicy(max_attempts=2, base_delay_seconds=0),
+    ).ask('test')
+    assert result.answer == 'ok'
+    assert result.steps == 1
+    assert len(result.timing.calls) == 2
     assert len(attempts) == 2
     assert attempts[0] == attempts[1]
 
@@ -99,6 +108,35 @@ async def test_agent_timings_accumulate_across_tool_rounds(monkeypatch):
     assert result.timing.tools_ms == 1000
     assert [c.elapsed_ms for c in result.timing.calls] == [2000, 3000]
     assert all(c.load_ms is None for c in result.timing.calls)
+
+
+@pytest.mark.asyncio
+async def test_retry_timings_preserve_provider_metrics_without_mutating_responses(monkeypatch):
+    clock = iter([0, 1, 3, 4, 7, 8])
+    monkeypatch.setattr('app.agent.perf_counter', lambda: next(clock))
+    provider_timing = ModelTiming(load_ms=2.5, generated_tokens=0, model='test')
+    responses = iter([
+        LLMResponse(content='', finish_reason='stop', timing=provider_timing),
+        LLMResponse(content='ok', finish_reason='stop', timing=provider_timing),
+    ])
+
+    class LLM:
+        async def chat(self, *args): return next(responses)
+
+    class Tools:
+        def descriptions(self): return []
+
+    result = await AgentRuntime(
+        LLM(), Tools(), max_steps=1,
+        retry_policy=LLMRetryPolicy(max_attempts=2, base_delay_seconds=0),
+    ).ask('test')
+    assert result.status == 'answered' and result.steps == 1
+    assert result.timing.elapsed_ms == 8000
+    assert result.timing.llm_ms == 5000
+    assert [call.elapsed_ms for call in result.timing.calls] == [2000, 3000]
+    assert all(call.load_ms == 2.5 and call.generated_tokens == 0 for call in result.timing.calls)
+    assert all(call.model == 'test' for call in result.timing.calls)
+    assert provider_timing.elapsed_ms == 0
 
 
 @pytest.mark.asyncio

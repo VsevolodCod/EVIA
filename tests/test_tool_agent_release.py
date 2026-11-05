@@ -16,8 +16,8 @@ async def test_model_cannot_expand_selected_source_scope(tmp_path, scripted_llm,
     sources = SourceService(tmp_path / "data", catalog)
     selected = sources.register_csv("a.csv", b"amount\n10\n")
     other = sources.register_csv("b.csv", b"amount\n999\n")
-    args = {"source_id": other.source_id, "sql": "SELECT * FROM source"}
-    tool = "query_data"
+    args = {"source_id": other.source_id}
+    tool = "preview_data"
     if nested:
         tool = "build_chart"
         args = {"definition": {"type": "kpi", "title": "Other", "aggregate": "sum",

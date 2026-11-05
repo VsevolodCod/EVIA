@@ -8,6 +8,7 @@ from app.schema_catalog import SchemaCatalog
 from app.source_service import SourceService
 from app.tools import build_tool_registry
 from app.models import LLMResponse
+from app.agent_additions.retry_agent import LLMRetryPolicy
 
 
 @pytest.mark.asyncio
@@ -190,7 +191,7 @@ async def test_agent_retries_transient_502_without_spending_a_step(monkeypatch):
     async def no_wait(_delay):
         return None
 
-    monkeypatch.setattr("app.agent.asyncio.sleep", no_wait)
+    monkeypatch.setattr("app.agent_additions.retry_agent.asyncio.sleep", no_wait)
     llm = LLM()
     result = await AgentRuntime(llm, Tools(), max_steps=1).ask("Вопрос")
     assert result.status == "answered"
@@ -200,7 +201,7 @@ async def test_agent_retries_transient_502_without_spending_a_step(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_openai_provider_502_is_not_retried_again_by_agent(monkeypatch):
+async def test_openai_provider_502_uses_the_agent_retry_budget(monkeypatch):
     class FailingOpenAI(OpenAIProvider):
         calls = 0
 
@@ -216,11 +217,11 @@ async def test_openai_provider_502_is_not_retried_again_by_agent(monkeypatch):
     async def no_wait(_delay):
         return None
 
-    monkeypatch.setattr("app.agent.asyncio.sleep", no_wait)
+    monkeypatch.setattr("app.agent_additions.retry_agent.asyncio.sleep", no_wait)
     provider = FailingOpenAI.__new__(FailingOpenAI)
     with pytest.raises(httpx.HTTPStatusError):
-        await AgentRuntime(provider, Tools()).ask("Вопрос")
-    assert provider.calls == 1
+        await AgentRuntime(provider, Tools(), retry_policy=LLMRetryPolicy(max_attempts=3)).ask("Вопрос")
+    assert provider.calls == 3
 
 
 @pytest.mark.asyncio

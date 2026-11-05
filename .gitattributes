@@ -1,0 +1,2 @@
+# Corpus manifests verify SHA-256 of the exact fixture bytes on every platform.
+evals/v1/fixtures/*.csv text eol=lf

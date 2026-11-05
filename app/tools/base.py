@@ -115,9 +115,10 @@ class ToolRegistry:
                         messages.extend(collect_errors(child))
                     return messages
 
-                return [
-                    f"{error.json_path}: {error.message}"
-                ]
+                # Schema paths describe the public contract without echoing
+                # argument values or unknown property names supplied by the model.
+                return [{"schema_path": list(error.absolute_schema_path),
+                         "validator": error.validator}]
 
             error_messages = [
                 message
@@ -128,7 +129,8 @@ class ToolRegistry:
             return ToolResult(
                 tool_name=name,
                 ok=False,
-                error=f"INVALID_TOOL_ARGUMENTS: {error_messages}",
+                error="INVALID_TOOL_ARGUMENTS",
+                data={"validation_errors": error_messages},
             )
 
         try:
@@ -150,12 +152,12 @@ class ToolRegistry:
                 ok=False,
                 error=exc.code,
             )
-        except Exception as exc:
+        except Exception:
             # Driver exceptions and validation messages can contain DSNs,
             # credentials, file paths or raw source values. Tool results are
             # also sent back to the model, so never echo exception text here.
             return ToolResult(
                 tool_name=name,
                 ok=False,
-                error=f"TOOL_EXECUTION_FAILED: {exc}",
+                error="TOOL_EXECUTION_FAILED",
             )

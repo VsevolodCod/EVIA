@@ -11,7 +11,7 @@ from app.source_service import SourceService
 from app.models import (
     AskResponse,
     LLMMessage,
-    ToolCall, ToolResult, ChatMessage, AgentTiming, SourceSchema,
+    ToolCall, ToolResult, ChatMessage, AgentTiming, ModelTiming, SourceSchema,
 )
 from app.tools import ToolRegistry
 from app.core.logging import current_request_id
@@ -34,7 +34,7 @@ class AgentStepLimit(IncompleteModelOutput):
 
 
 class RepeatedQueryRejection(IncompleteModelOutput):
-    """The model tried invalid SQL twice without recovering."""
+    """The model repeated a rejected data-tool call without recovering."""
 
 
 def _referenced_sources(value):
@@ -539,14 +539,26 @@ class AgentRuntime:
         for step in range(1, self.max_steps + 1):
             logger.info(f"Агент начал выполнение шага {step}")
 
-            call_started = perf_counter()
+            async def call_model():
+                call_started = perf_counter()
+                candidate = None
+                try:
+                    candidate = await self.llm.chat(messages, self.tools.descriptions())
+                    return candidate
+                finally:
+                    elapsed_ms = (perf_counter() - call_started) * 1000
+                    call_timing = (
+                        candidate.timing.model_copy(deep=True)
+                        if candidate is not None and candidate.timing is not None
+                        else ModelTiming()
+                    )
+                    call_timing.elapsed_ms = elapsed_ms
+                    timing.calls.append(call_timing)
+                    timing.llm_ms += elapsed_ms
 
             try:
                 response = await call_with_retry(
-                    lambda: self.llm.chat(
-                        messages,
-                        self.tools.descriptions(),
-                    ),
+                    call_model,
                     self.retry_policy,
                     is_retryable_result=lambda candidate: (
                             not candidate.tool_calls
@@ -557,9 +569,6 @@ class AgentRuntime:
 
             except LLMRetryExhausted as exc:
                 raise IncompleteModelOutput(step, results) from exc
-
-            finally:
-                timing.llm_ms += (perf_counter() - call_started) * 1000
 
             if response is None:
                 # Защита от неожиданного выхода без результата.
@@ -666,13 +675,12 @@ class AgentRuntime:
                         ),
                     )
                 )
-                if call.name == "query_data":
-                    if result.error == "QUERY_REJECTED":
-                        query_rejections += 1
-                        if query_rejections >= 2:
-                            raise RepeatedQueryRejection(step, results)
-                    elif result.ok:
-                        query_rejections = 0
+                if result.error in {"QUERY_REJECTED", "INVALID_TOOL_ARGUMENTS", "INVALID_SOURCE_FIELD"}:
+                    query_rejections += 1
+                    if query_rejections >= 2:
+                        raise RepeatedQueryRejection(step, results)
+                elif result.ok:
+                    query_rejections = 0
         logger.warning("Достигнут лимит шагов агента. Завершение")
         raise AgentStepLimit(self.max_steps, results)
 

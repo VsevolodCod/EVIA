@@ -22,9 +22,7 @@ async def test_profile_and_tool_chat_sequence_preserve_data_and_history(tmp_path
     llm = scripted_llm([])
     monkeypatch.setattr(module, 'agent', AgentRuntime(llm, build_tool_registry(catalog, sources), sources=sources))
     monkeypatch.setattr(module.settings, 'chat_db_path', tmp_path / 'chat.db')
-    def add_tool(name, source_id, sql=None):
-        args = {'source_id': source_id}
-        if sql: args['sql'] = sql
+    def add_tool(name, args):
         llm.responses.extend([
             LLMResponse(tool_calls=[ToolCall(name=name, arguments=args)], finish_reason='tool_calls'),
             lambda messages: LLMResponse(content='Проверенные сведения: ' + json.dumps(json.loads(messages[-1].content)['data'], ensure_ascii=False)),
@@ -35,15 +33,28 @@ async def test_profile_and_tool_chat_sequence_preserve_data_and_history(tmp_path
                 b'id;event_date;category;amount\n001;2024-01-01;A;1,5\n002;2024-02-03;B;2\n002;2024-02-03;B;2\n', 'text/csv')})
             assert uploaded.status_code == 200
             source_id = uploaded.json()['source_id']
+            def ref(field):
+                return {'source_id': source_id, 'field': field}
+
+            frequencies = {'definition': {
+                'type': 'bar', 'title': 'Frequencies',
+                'x': {**ref('category'), 'sort': 'label_asc'},
+                'y': {**ref('category'), 'aggregate': 'count'},
+            }}
+            rows = {'definition': {
+                'type': 'table', 'title': 'Rows',
+                'fields': [ref(field) for field in ('id', 'event_date', 'category', 'amount')],
+                'limit': 10,
+            }}
             profile = await client.get(f'/sources/{source_id}/profile')
             assert profile.status_code == 200 and profile.json()['processed_rows'] == 3
             questions = [
                 ('Что передо мной?', 'profile_data', None),
                 ('Что есть в этих данных?', 'profile_data', None),
                 ('Какие есть столбцы?', 'get_source_schema', None),
-                ('А какие значения встречаются чаще всего?', 'query_data', 'SELECT COUNT(*) AS frequency, category FROM source GROUP BY category ORDER BY frequency DESC'),
-                ('А теперь есть ли тут дубликаты?', 'query_data', 'SELECT COUNT(*) AS groups, SUM(n-1) AS extra FROM (SELECT COUNT(*) AS n FROM source GROUP BY id, event_date, category, amount HAVING COUNT(*) > 1) repeated'),
-                ('А теперь покажи первые строки', 'query_data', 'SELECT * FROM source LIMIT 10'),
+                ('А какие значения встречаются чаще всего?', 'build_chart', frequencies),
+                ('А теперь есть ли тут дубликаты?', 'build_chart', rows),
+                ('А теперь покажи первые строки', 'build_chart', rows),
                 ('Что ещё можешь скзаать про эти данные?', 'profile_data', None),
             ]
             direct_questions = {
@@ -51,9 +62,9 @@ async def test_profile_and_tool_chat_sequence_preserve_data_and_history(tmp_path
                 'Какие есть столбцы?', 'Что ещё можешь скзаать про эти данные?',
             }
             chat_id = None
-            for question, tool, sql in questions:
+            for question, tool, args in questions:
                 if question not in direct_questions:
-                    add_tool(tool, source_id, sql)
+                    add_tool(tool, args)
                 path = '/agent/chat' + (f'?chat_id={chat_id}' if chat_id else '')
                 response = await client.post(path, json={'question': question, 'source_ids': [source_id]})
                 assert response.status_code == 200, response.text
@@ -64,18 +75,24 @@ async def test_profile_and_tool_chat_sequence_preserve_data_and_history(tmp_path
                 assert len(body['timing']['calls']) == (0 if question in direct_questions else 2)
                 assert chat_id is None or body['chat_id'] == chat_id
                 chat_id = body['chat_id']
-                if 'часто' in question:
-                    assert body['results'][0]['rows'] == [[2, 'B'], [1, 'A']]
+                if tool == 'build_chart':
+                    built = body['tool_results'][0]['data']
+                    assert built['success']
+                    assert built['result']['provenance'][0]['source_id'] == source_id
+                if 'чаще' in question:
+                    assert built['result']['points'] == [{'x': 'A', 'y': 1}, {'x': 'B', 'y': 2}]
                 elif 'дубликаты' in question:
-                    assert body['results'][0]['rows'] == [[1, 1]]
+                    calculated_rows = built['result']['rows']
+                    assert len(calculated_rows) == 3
+                    assert calculated_rows[1] == calculated_rows[2]
+                    assert calculated_rows[0] != calculated_rows[1]
                 elif 'первые строки' in question:
-                    assert body['results'][0]['rows'][0][0] == '001'
-                if tool == 'query_data':
-                    assert body['results'][0]['provenance'][0]['source_id'] == source_id
+                    assert built['result']['rows'][0]['id'] == '001'
             assert scans.call_count == 1
             history = (await client.get(f'/chats/{chat_id}')).json()
             assert history['source_id'] == source_id
-            assert len(history['messages']) == 20  # хз, как в этом модуле вызываются инструменты, поэтому так
+            # Seven user/final-answer pairs and three assistant/tool pairs.
+            assert len(history['messages']) == 2 * len(questions) + 2 * 3
             saved = [m['analysis_payload']['response'] for m in history['messages'] if m['role'] == 'assistant' and m["content"]]
             assert [r['tool_results'][0]['tool_name'] for r in saved] == [
                 'get_source_schema' if question in direct_questions else tool
