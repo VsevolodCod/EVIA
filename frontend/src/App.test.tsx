@@ -156,6 +156,14 @@ test("switches the workspace to English and remembers the choice", async () => {
   expect(within(navigation).getByRole("button", { name: "Chat" })).toBeInTheDocument();
   expect(localStorage.getItem("evia.language")).toBe("en");
   expect(document.documentElement.lang).toBe("en");
+  fireEvent.click(screen.getByRole("button", { name: "Close settings" }));
+  await select("A");
+  fireEvent.click(within(navigation).getByRole("button", { name: "Chat" }));
+  expect(screen.getByRole("heading", { name: "Ask about your data" })).toBeInTheDocument();
+  expect(screen.getByPlaceholderText("What would you like to know about the data?")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "What columns are available?" })).toBeInTheDocument();
+  const greeting = await screen.findByLabelText("EVIA greeting");
+  expect(greeting).toHaveTextContent(/Hello!|explore your data|explore it together|questions and charts/i);
 });
 
 test("opens the chat from the empty analysis-results page", async () => {
