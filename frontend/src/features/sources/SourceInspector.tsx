@@ -106,7 +106,7 @@ export function SourceInspector({
           if (!controller.signal.aborted) {
             setProfileFailure({
               id: source.source_id,
-              message: "Профиль относится к другой версии источника. Обновите данные и повторите расчёт.",
+              message: t("Профиль относится к другой версии источника. Обновите данные и повторите расчёт.", "The profile belongs to a different source version. Refresh the data and retry."),
             });
           }
           return;
@@ -180,7 +180,7 @@ export function SourceInspector({
         ); })}
         {view === "results" && <button aria-pressed="true" onClick={() => setView("results")}>{t("Результат анализа", "Analysis result")}</button>}
       </nav>
-      <section className="analytics-report" aria-label="Исследование данных">
+      <section className="analytics-report" aria-label={t("Исследование данных", "Data exploration")}>
         {view === "results" ? (
           <AnalysisResult entry={entry} onOpenChat={onOpenChat} />
         ) : error ? (

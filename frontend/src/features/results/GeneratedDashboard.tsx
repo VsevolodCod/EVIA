@@ -118,21 +118,21 @@ function seriesKey(point: Point): string {
   return point.series == null ? "null" : `${typeof point.series}:${JSON.stringify(point.series)}`;
 }
 
-function seriesLabel(point: Point): string {
-  if (point.series == null) return "Нет значения";
-  if (point.series === "") return "Пустая строка";
+function seriesLabel(point: Point, language: "ru" | "en" = "ru"): string {
+  if (point.series == null) return language === "en" ? "No value" : "Нет значения";
+  if (point.series === "") return language === "en" ? "Empty string" : "Пустая строка";
   const label = String(point.series);
   return label === "Нет значения" || label === "Пустая строка" ? `«${label}»` : label;
 }
 
-function lineData(value: unknown): { points: Point[]; xLabel: string; yLabel: string } | null {
+function lineData(value: unknown, language: "ru" | "en" = "ru"): { points: Point[]; xLabel: string; yLabel: string } | null {
   if (!object(value) || !Array.isArray(value.points)) return null;
   const points = value.points.filter((item): item is Point =>
     object(item) && (typeof item.x === "string" || typeof item.x === "number" || item.x === null) &&
     (typeof item.y === "string" || typeof item.y === "number" || item.y === null));
   const x = object(value.x) ? value.x : {};
   const y = object(value.y) ? value.y : {};
-  return { points, xLabel: String(x.label ?? x.field ?? "Категория"), yLabel: String(y.label ?? y.field ?? "Значение") };
+  return { points, xLabel: String(x.label ?? x.field ?? (language === "en" ? "Category" : "Категория")), yLabel: String(y.label ?? y.field ?? (language === "en" ? "Value" : "Значение")) };
 }
 
 function calculationPassport(card: Card, language: "ru" | "en"): { source: string; formula: string; period: string; filters: string[]; grouping?: string; snapshot?: string; schemaVersion?: number } | null {
@@ -177,14 +177,14 @@ function calculationPassport(card: Card, language: "ru" | "en"): { source: strin
 }
 
 function ResultLine({ card, colors, gradient }: { card: Card; colors: string[]; gradient: boolean }) {
-  const { t } = useLanguage();
-  const chart = lineData(card.data);
+  const { t, language } = useLanguage();
+  const chart = lineData(card.data, language);
   const format = axisFormat(card, "y");
   const gradientId = useId().replaceAll(":", "");
   if (!chart || !chart.points.length) return <p className="generated-empty">{t("Нет точек для графика.", "No points for the chart.")}</p>;
   const labels = [...new Set(chart.points.map((point) => String(point.x ?? "—")))];
   const hasSeries = object(card.definition) && object(card.definition.series);
-  const series = hasSeries ? [...new Map(chart.points.map((point) => [seriesKey(point), seriesLabel(point)])).entries()] : [["", ""]];
+  const series = hasSeries ? [...new Map(chart.points.map((point) => [seriesKey(point), seriesLabel(point, language)])).entries()] : [["", ""]];
   const values = chart.points.map((point) => numeric(point.y)).filter((value): value is number => value !== null);
   if (!values.length) return <p className="generated-empty">{t("Нет числовых значений для графика.", "No numeric values for the chart.")}</p>;
   const width = 720; const height = 260; const left = 54; const right = 16; const top = 18; const bottom = 42;
@@ -213,7 +213,7 @@ function ResultLine({ card, colors, gradient }: { card: Card; colors: string[]; 
         return <g key={key}>
           {gradient && series.length === 1 && positions.length > 1 && <path d={`M ${positions[0][0]} ${baseline} L ${positions.map(([px, py]) => `${px} ${py}`).join(" L ")} L ${positions.at(-1)![0]} ${baseline} Z`} fill={`url(#${gradientId})`} />}
           <polyline points={line} fill="none" stroke={color} strokeWidth="3" strokeLinejoin="round" data-testid={`generated-series-${index}`} />
-          {points.map((point, pointIndex) => <circle key={`${point.x}-${pointIndex}`} cx={x(String(point.x ?? "—"))} cy={y(numeric(point.y) ?? 0)} r="4" fill={color} tabIndex={0} aria-label={`${point.x}${hasSeries ? ` · ${seriesLabel(point)}` : ""}: ${formattedNumber(point.y, format)}`}><title>{`${point.x}${hasSeries ? ` · ${seriesLabel(point)}` : ""}: ${formattedNumber(point.y, format)}`}</title></circle>)}
+          {points.map((point, pointIndex) => <circle key={`${point.x}-${pointIndex}`} cx={x(String(point.x ?? "—"))} cy={y(numeric(point.y) ?? 0)} r="4" fill={color} tabIndex={0} aria-label={`${point.x}${hasSeries ? ` · ${seriesLabel(point, language)}` : ""}: ${formattedNumber(point.y, format)}`}><title>{`${point.x}${hasSeries ? ` · ${seriesLabel(point, language)}` : ""}: ${formattedNumber(point.y, format)}`}</title></circle>)}
         </g>;
       })}
       {labels.filter((_, index) => index % Math.max(1, Math.ceil(labels.length / 6)) === 0).map((label) => <text key={label} x={x(label)} y={height - 13} textAnchor="middle">{label.length > 12 ? `${label.slice(0, 10)}…` : label}</text>)}
@@ -231,8 +231,8 @@ function LimitNote({ data, count, unit = "точек" }: { data: unknown; count:
 }
 
 function ResultBar({ card, colors }: { card: Card; colors: string[] }) {
-  const { t } = useLanguage();
-  const chart = lineData(card.data);
+  const { t, language } = useLanguage();
+  const chart = lineData(card.data, language);
   const format = axisFormat(card, "y");
   if (!chart || !chart.points.length) return <p className="generated-empty">{t("Нет столбцов для графика.", "No bars for the chart.")}</p>;
   const values = chart.points.map(point => numeric(point.y)).filter((value): value is number => value !== null);
@@ -248,7 +248,7 @@ function ResultBar({ card, colors }: { card: Card; colors: string[] }) {
   const barWidth = Math.min(24, (width - left - right) / chart.points.length * .7);
   const stride = Math.max(1, Math.ceil(chart.points.length / 10));
   const hasSeries = object(card.definition) && object(card.definition.series);
-  const series = hasSeries ? [...new Map(chart.points.map((point) => [seriesKey(point), seriesLabel(point)])).entries()] : [];
+  const series = hasSeries ? [...new Map(chart.points.map((point) => [seriesKey(point), seriesLabel(point, language)])).entries()] : [];
   return <>
     <LimitNote data={card.data} count={chart.points.length} />
     <div className="generated-chart-scroll" role="region" aria-label={t(`Прокрутка графика ${card.title}`, `Scroll chart ${card.title}`)} tabIndex={0}>
@@ -258,7 +258,7 @@ function ResultBar({ card, colors }: { card: Card; colors: string[] }) {
           const value = numeric(point.y);
           if (value === null) return null;
           const topY = Math.min(y(value), baseline);
-          const name = hasSeries ? `${point.x} · ${seriesLabel(point)}` : String(point.x);
+          const name = hasSeries ? `${point.x} · ${seriesLabel(point, language)}` : String(point.x);
           const seriesIndex = hasSeries ? series.findIndex(([key]) => key === seriesKey(point)) : 0;
           return <rect key={index} data-bar="true" x={x(index) - barWidth / 2} y={topY} width={barWidth}
             height={Math.abs(y(value) - baseline)} fill={colors[Math.max(seriesIndex, 0) % colors.length]} rx="2" tabIndex={0}
@@ -277,8 +277,8 @@ function ResultBar({ card, colors }: { card: Card; colors: string[] }) {
 }
 
 function ResultPie({ card }: { card: Card }) {
-  const { t } = useLanguage();
-  const chart = lineData(card.data);
+  const { t, language } = useLanguage();
+  const chart = lineData(card.data, language);
   if (!chart || !chart.points.length) return <p className="generated-empty">{t("Нет категорий для круговой диаграммы.", "No categories for the pie chart.")}</p>;
   if (object(card.data) && card.data.limit_reached === true)
     return <p className="generated-empty">{t("Доли не показаны: результат ограничен и не включает все категории.", "Shares are unavailable because the limited result does not include every category.")}</p>;
@@ -290,8 +290,8 @@ function ResultPie({ card }: { card: Card }) {
 }
 
 function ResultScatter({ card, color }: { card: Card; color: string }) {
-  const { t } = useLanguage();
-  const chart = lineData(card.data);
+  const { t, language } = useLanguage();
+  const chart = lineData(card.data, language);
   const xFormat = axisFormat(card, "x");
   const yFormat = axisFormat(card, "y");
   if (!chart || !chart.points.length) return <p className="generated-empty">{t("Нет точек для диаграммы.", "No points for the chart.")}</p>;

@@ -1,7 +1,9 @@
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { useLanguage } from "../../language";
 
 export function SafeMarkdown({ children }: { children: string }) {
+  const { t } = useLanguage();
   return (
     <div className="markdown">
       <Markdown
@@ -23,7 +25,7 @@ export function SafeMarkdown({ children }: { children: string }) {
               className="table-scroll"
               tabIndex={0}
               role="region"
-              aria-label="Таблица в ответе"
+              aria-label={t("Таблица в ответе", "Table in response")}
             >
               <table>{children}</table>
             </div>
