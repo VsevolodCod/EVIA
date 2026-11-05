@@ -428,7 +428,7 @@ function uploadWithProgress(body: FormData, signal: AbortSignal | undefined, onP
     };
     xhr.onerror = () => {
       detach();
-      reject(new ApiError("Нет связи с сервером. Повторите загрузку CSV.", 0));
+      reject(new ApiError(uiMessage("Нет связи с сервером. Повторите загрузку CSV.", "Cannot reach the server. Retry the CSV upload."), 0));
     };
     xhr.onabort = () => {
       detach();
@@ -474,7 +474,7 @@ export const api = {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ question, source_ids: [id], ...(dashboardId ? { dashboard_id: dashboardId } : {}) }), signal,
     });
-    if (result.chat_id !== chatId) throw new Error("Сервер вернул ответ другого диалога. Повторите запрос.");
+    if (result.chat_id !== chatId) throw new Error(uiMessage("Сервер вернул ответ другого диалога. Повторите запрос.", "The server returned a response from another chat. Retry the request."));
     return result;
   },
   health: (signal?: AbortSignal) =>
@@ -491,7 +491,7 @@ export const api = {
     });
     if (schema.source_id !== id)
       throw new Error(
-        "Сервер вернул схему другого источника. Обновите данные.",
+        uiMessage("Сервер вернул схему другого источника. Обновите данные.", "The server returned another source's schema. Refresh the data."),
       );
     return schema;
   },
@@ -521,4 +521,4 @@ export const api = {
 export const errorMessage = (error: unknown) =>
   error instanceof Error
     ? error.message
-    : "Не удалось выполнить запрос. Попробуйте ещё раз.";
+    : uiMessage("Не удалось выполнить запрос. Попробуйте ещё раз.", "Could not complete the request. Try again.");

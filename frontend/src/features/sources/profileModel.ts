@@ -1,6 +1,9 @@
 import type { Profile, SourceSchema } from "../../api";
 
-export const numberText = (value: number) => value.toLocaleString("ru-RU");
+function numberLocale() {
+  try { return localStorage.getItem("evia.language") === "en" ? "en-US" : "ru-RU"; } catch { return "ru-RU"; }
+}
+export const numberText = (value: number) => value.toLocaleString(numberLocale());
 export function rowsText(count: number) {
   const remainder = Math.abs(count) % 100;
   const lastDigit = remainder % 10;
@@ -16,7 +19,7 @@ export function rowsText(count: number) {
 export const percentText = (value: number | null) =>
   value === null
     ? "—"
-    : `${value.toLocaleString("ru-RU", { maximumFractionDigits: 1 })}%`;
+    : `${value.toLocaleString(numberLocale(), { maximumFractionDigits: 1 })}%`;
 export const ratio = (part: number, total: number) =>
   total > 0 ? (part / total) * 100 : null;
 export const typeNames: Record<string, string> = {
