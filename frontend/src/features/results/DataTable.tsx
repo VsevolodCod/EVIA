@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import type { Row } from "../../api";
 import { EviaMascot } from "../../components/EviaMascot";
+import { useLanguage } from "../../language";
 
 export function valueText(value: unknown): string {
   if (value === null || value === undefined) return "—";
@@ -14,6 +15,7 @@ function compactIdentifier(value: string): string {
 }
 
 function IdentifierCell({ field, value }: { field: string; value: unknown }) {
+  const { t } = useLanguage();
   const [copied, setCopied] = useState(false);
   const fullValue = valueText(value);
 
@@ -32,10 +34,10 @@ function IdentifierCell({ field, value }: { field: string; value: unknown }) {
       <button
         className="identifier-copy"
         type="button"
-        aria-label={`Скопировать полный ${field}`}
+        aria-label={t(`Скопировать полный ${field}`, `Copy full ${field}`)}
         onClick={() => void copy()}
       >
-        {copied ? "Готово" : "Копировать"}
+        {copied ? t("Готово", "Copied") : t("Копировать", "Copy")}
       </button>
     </span>
   );
@@ -44,7 +46,7 @@ function IdentifierCell({ field, value }: { field: string; value: unknown }) {
 export function DataTable({
   rows,
   columns,
-  label = "Таблица данных",
+  label,
   copyableIdentifierColumns = [],
 }: {
   rows: Row[];
@@ -52,6 +54,8 @@ export function DataTable({
   label?: string;
   copyableIdentifierColumns?: readonly string[];
 }) {
+  const { t, language } = useLanguage();
+  const tableLabel = label ?? t("Таблица данных", "Data table");
   const [position, setPosition] = useState({ rows, page: 0 });
   const fields = useMemo(
     () => columns ?? [...new Set(rows.flatMap((row) => Object.keys(row)))],
@@ -67,20 +71,20 @@ export function DataTable({
     return (
       <div className="empty-table">
         <EviaMascot state="empty_table" size={80} decorative />
-        <p>Нет строк для отображения</p>
+        <p>{t("Нет строк для отображения", "No rows to display")}</p>
         <span>
-          Результат пуст. Это не означает нулевое значение показателя.
+          {t("Результат пуст. Это не означает нулевое значение показателя.", "The result is empty. This does not mean the metric is zero.")}
         </span>
       </div>
     );
-  if (!fields.length) return <p className="muted">Строки не содержат полей.</p>;
+  if (!fields.length) return <p className="muted">{t("Строки не содержат полей.", "Rows contain no fields.")}</p>;
 
   return (
     <div className="data-table">
       <div
         className="table-scroll"
         role="region"
-        aria-label={label}
+        aria-label={tableLabel}
         tabIndex={0}
       >
         <table>
@@ -113,25 +117,25 @@ export function DataTable({
         </table>
       </div>
       {rows.length > PAGE_SIZE && (
-        <div className="pagination" aria-label={`Страницы: ${label}`}>
+        <div className="pagination" aria-label={t(`Страницы: ${tableLabel}`, `Pages: ${tableLabel}`)}>
           <span aria-live="polite">
-            {start + 1}–{Math.min(start + PAGE_SIZE, rows.length)} из{" "}
-            {rows.length.toLocaleString("ru-RU")}
+            {start + 1}–{Math.min(start + PAGE_SIZE, rows.length)} {t("из", "of")}{" "}
+            {rows.length.toLocaleString(language === "en" ? "en-US" : "ru-RU")}
           </span>
           <div>
             <button
               disabled={page === 0}
-              aria-label="Предыдущие строки"
+              aria-label={t("Предыдущие строки", "Previous rows")}
               onClick={() => setPosition({ rows, page: page - 1 })}
             >
-              ← Назад
+              {t("← Назад", "← Previous")}
             </button>
             <button
               disabled={page === lastPage}
-              aria-label="Следующие строки"
+              aria-label={t("Следующие строки", "Next rows")}
               onClick={() => setPosition({ rows, page: page + 1 })}
             >
-              Далее →
+              {t("Далее →", "Next →")}
             </button>
           </div>
         </div>

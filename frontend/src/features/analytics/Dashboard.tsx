@@ -48,17 +48,19 @@ function LineChart({ values, color, gradient, label }: { values: ChartValue[]; c
 }
 
 function Histogram({ values, color, field }: { values: ChartValue[]; color: string; field: string }) {
+  const { t } = useLanguage();
   const maximum = Math.max(...values.map((value) => value.value), 1);
-  return <div className="histogram" role="img" aria-label={`Распределение поля ${field}`}>
-    {values.map((value) => <div key={value.label}><i style={{ height: `${(value.value / maximum) * 100}%`, backgroundColor: color }}><title>{`${value.label}: ${value.value} строк`}</title></i><span>{value.label}</span></div>)}
+  return <div className="histogram" role="img" aria-label={t(`Распределение поля ${field}`, `Distribution of ${field}`)}>
+    {values.map((value) => <div key={value.label}><i style={{ height: `${(value.value / maximum) * 100}%`, backgroundColor: color }}><title>{t(`${value.label}: ${value.value} строк`, `${value.label}: ${value.value} rows`)}</title></i><span>{value.label}</span></div>)}
   </div>;
 }
 
 function MissingBars({ values, color }: { values: ChartValue[]; color: string }) {
+  const { t } = useLanguage();
   const description = values
     .map((value) => `${value.label}: ${percentText(value.value)}`)
     .join("; ");
-  return <div className="quality-chart" role="img" aria-label={`Пропуски по столбцам: ${description}`}>
+  return <div className="quality-chart" role="img" aria-label={t(`Пропуски по столбцам: ${description}`, `Missing values by column: ${description}`)}>
     {values.map((value) => <div className="quality-row" key={value.label}>
       <span title={value.label}>{value.label}</span>
       <div><i style={{ width: `${value.value}%`, backgroundColor: color }} /></div>
@@ -198,11 +200,11 @@ export function Dashboard({
       <div className="dashboard-actions"><button onClick={exportCsv}>{context === "source" ? t("Скачать предпросмотр", "Download preview") : t("Скачать результат", "Download result")}</button><button className="desktop-export" onClick={exportPdf}>{source ? t("Собрать PDF-отчёт", "Build PDF report") : t("Печать / PDF", "Print / PDF")}</button><button className="mobile-export-trigger" onClick={() => setShowMobileExport(true)}>{t("Ещё", "More")}</button></div>
     </div>
     {showMobileExport && <div className="mobile-export-backdrop" onClick={() => setShowMobileExport(false)}>
-      <section className="mobile-export-sheet" aria-label="Экспорт результатов" onClick={(event) => event.stopPropagation()}>
-        <div className="mobile-export-heading"><h2>Экспорт результатов</h2><button aria-label="Закрыть экспорт" onClick={() => setShowMobileExport(false)}>✕</button></div>
-        <button className="mobile-export-option" onClick={exportCsv}><span>CSV</span><span><strong>Скачать CSV</strong><small>{context === "source" ? "Строки из предпросмотра" : "Строки результата"}</small></span><b>↓</b></button>
-        <button className="mobile-export-option" onClick={exportPdf}><span>PDF</span><span><strong>{source ? "Собрать PDF-отчёт" : "Печать / PDF"}</strong><small>{source ? "Выберите выводы и сохраните файл" : "Сохраните PDF в окне печати"}</small></span><b>↗</b></button>
-        <button className="mobile-export-option" onClick={() => { setShowMobileExport(false); setShowPalette(true); }}><span>●</span><span><strong>Цвета графиков</strong><small>Настроить палитру</small></span><b>↗</b></button>
+      <section className="mobile-export-sheet" aria-label={t("Экспорт результатов", "Export results")} onClick={(event) => event.stopPropagation()}>
+        <div className="mobile-export-heading"><h2>{t("Экспорт результатов", "Export results")}</h2><button aria-label={t("Закрыть экспорт", "Close export")} onClick={() => setShowMobileExport(false)}>✕</button></div>
+        <button className="mobile-export-option" onClick={exportCsv}><span>CSV</span><span><strong>{t("Скачать CSV", "Download CSV")}</strong><small>{context === "source" ? t("Строки из предпросмотра", "Preview rows") : t("Строки результата", "Result rows")}</small></span><b>↓</b></button>
+        <button className="mobile-export-option" onClick={exportPdf}><span>PDF</span><span><strong>{source ? t("Собрать PDF-отчёт", "Build PDF report") : t("Печать / PDF", "Print / PDF")}</strong><small>{source ? t("Выберите выводы и сохраните файл", "Select findings and save the file") : t("Сохраните PDF в окне печати", "Save PDF in the print dialog")}</small></span><b>↗</b></button>
+        <button className="mobile-export-option" onClick={() => { setShowMobileExport(false); setShowPalette(true); }}><span>●</span><span><strong>{t("Цвета графиков", "Chart colors")}</strong><small>{t("Настроить палитру", "Customize palette")}</small></span><b>↗</b></button>
       </section>
     </div>}
     {showPalette && <PaletteEditor colors={colors} gradient={gradient} onChange={updateColors} onClose={() => setShowPalette(false)} />}
@@ -219,19 +221,19 @@ export function Dashboard({
     </section>}
     {hasCharts && <div className="dashboard-section-heading dashboard-charts-heading"><div><h3>{t("Что видно в данных", "Explore the data")}</h3><span className="dashboard-scope-badge">{context === "source" ? t("По предпросмотру", "Based on preview") : t("По результату", "Based on result")}</span></div><button type="button" onClick={() => setShowPalette((open) => !open)} aria-expanded={showPalette}>{t("Цвета графиков", "Chart colors")}</button></div>}
     {hasCharts || missingColumns.length > 0 ? <div className="dashboard-grid">
-      {model.timeline && <ChartCard title={`Динамика по полю ${model.timeline.field}`} unit="строки"><LineChart values={model.timeline.values} color={primary} gradient={gradient} label={`Динамика по полю ${model.timeline.field}`} /><p className="visually-hidden">{model.timeline.values.map((point) => `${point.label}: ${numberText(point.value)}`).join("; ")}</p></ChartCard>}
-      {model.category && <ChartCard title={`Частые значения: ${model.category.field}`} unit="строки"><HorizontalBars values={model.category.values} color={model.timeline ? secondary : primary} label={`Частые значения поля ${model.category.field}`} /></ChartCard>}
-      {model.numeric && <ChartCard title={`Распределение: ${model.numeric.field}`} unit="строки" detailLabel={`Детали распределения ${model.numeric.field}`} detail={<>
-        <h4>Статистика распределения</h4>
+      {model.timeline && <ChartCard title={t(`Динамика по полю ${model.timeline.field}`, `Trend by ${model.timeline.field}`)} unit={t("строки", "rows")}><LineChart values={model.timeline.values} color={primary} gradient={gradient} label={t(`Динамика по полю ${model.timeline.field}`, `Trend by ${model.timeline.field}`)} /><p className="visually-hidden">{model.timeline.values.map((point) => `${point.label}: ${numberText(point.value)}`).join("; ")}</p></ChartCard>}
+      {model.category && <ChartCard title={t(`Частые значения: ${model.category.field}`, `Frequent values: ${model.category.field}`)} unit={t("строки", "rows")}><HorizontalBars values={model.category.values} color={model.timeline ? secondary : primary} label={t(`Частые значения поля ${model.category.field}`, `Frequent values of ${model.category.field}`)} /></ChartCard>}
+      {model.numeric && <ChartCard title={t(`Распределение: ${model.numeric.field}`, `Distribution: ${model.numeric.field}`)} unit={t("строки", "rows")} detailLabel={t(`Детали распределения ${model.numeric.field}`, `Distribution details for ${model.numeric.field}`)} detail={<>
+        <h4>{t("Статистика распределения", "Distribution statistics")}</h4>
         <dl className="chart-detail-stats">
-          <div><dt>Минимум</dt><dd>{numberText(model.numeric.min)}</dd></div>
-          <div><dt>Максимум</dt><dd>{numberText(model.numeric.max)}</dd></div>
-          <div><dt>Среднее</dt><dd>{numberText(Number(model.numeric.mean.toFixed(2)))}</dd></div>
-          <div><dt>Медиана</dt><dd>{numberText(median)}</dd></div>
-          <div><dt>Стандартное отклонение</dt><dd>{numberText(Number(standardDeviation.toFixed(2)))}</dd></div>
+          <div><dt>{t("Минимум", "Minimum")}</dt><dd>{numberText(model.numeric.min)}</dd></div>
+          <div><dt>{t("Максимум", "Maximum")}</dt><dd>{numberText(model.numeric.max)}</dd></div>
+          <div><dt>{t("Среднее", "Mean")}</dt><dd>{numberText(Number(model.numeric.mean.toFixed(2)))}</dd></div>
+          <div><dt>{t("Медиана", "Median")}</dt><dd>{numberText(median)}</dd></div>
+          <div><dt>{t("Стандартное отклонение", "Standard deviation")}</dt><dd>{numberText(Number(standardDeviation.toFixed(2)))}</dd></div>
         </dl>
       </>} footer={<><h4>Пропуски по столбцам</h4>{missingColumns.length ? <MissingBars values={missingColumns} color={secondary} /> : <p>{profile ? "В профиле пропусков нет" : "Профиль источника ещё не загружен"}</p>}</>}><Histogram values={model.numeric.histogram} color={seriesColor(model.numeric.field, colors)} field={model.numeric.field} /><div className="numeric-summary"><span>Мин. <b>{model.numeric.min.toLocaleString("ru-RU")}</b></span><span>Среднее <b>{model.numeric.mean.toLocaleString("ru-RU", { maximumFractionDigits: 2 })}</b></span><span>Макс. <b>{model.numeric.max.toLocaleString("ru-RU")}</b></span></div></ChartCard>}
-      {missingColumns.length > 0 && <ChartCard title="Пропуски по столбцам" unit="доля"><MissingBars values={missingColumns} color={secondary} /></ChartCard>}
-    </div> : <div className="dashboard-empty">Для графиков нужны числовые, текстовые или временные поля.</div>}
+      {missingColumns.length > 0 && <ChartCard title={t("Пропуски по столбцам", "Missing values by column")} unit={t("доля", "share")}><MissingBars values={missingColumns} color={secondary} /></ChartCard>}
+    </div> : <div className="dashboard-empty">{t("Для графиков нужны числовые, текстовые или временные поля.", "Charts require numeric, text, or date fields.")}</div>}
   </div>;
 }
