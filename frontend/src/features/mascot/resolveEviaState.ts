@@ -41,7 +41,13 @@ export function resolveEviaState(context: {
   return context.selectedId ? "waiting" : "welcome";
 }
 
-export function eviaStatus(state: EviaState): string {
+export function eviaStatus(state: EviaState, language: "ru" | "en" = "ru"): string {
+  if (language === "en") {
+    const english: Partial<Record<EviaState, string>> = {
+      welcome: "Hello! Add a CSV to get started.", waiting: "Ready for your question.", listening: "Listening. Send your question when ready.", thinking: "Waiting for the agent's response.", retrying: "Retrying the request.", uploading: "Uploading CSV…", uploaded: "CSV uploaded. You can explore the data.", explaining: "The answer is ready. What next?", warning: "The answer arrived, but some tools failed.", cancelled: "Waiting stopped; the server may still be processing.", invalid_csv: "Check the CSV format and try again.", connection_lost: "Service connection lost. Try again.", permission_denied: "The service denied access to the request.", timeout: "The service reported a timeout.", error: "Could not complete the request. You can retry.",
+    };
+    return english[state] ?? "EVIA is here to help.";
+  }
   const statuses: Partial<Record<EviaState, string>> = {
     welcome: "Привет! Добавьте CSV, и начнём.",
     waiting: "Готова к вашему вопросу.",

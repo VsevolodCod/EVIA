@@ -109,7 +109,7 @@ export default function App({ account, onAccountChange, onLogout }: {
   onAccountChange?: (account: Account) => void;
   onLogout?: () => Promise<void>;
 } = {}) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [sources, setSources] = useState<Source[]>([]);
   const [sourcesLoading, setSourcesLoading] = useState(true);
   const [sourcesError, setSourcesError] = useState("");
@@ -1098,7 +1098,7 @@ export default function App({ account, onAccountChange, onLogout }: {
                   className={`evia-live-status ${["welcome", "waiting", "listening", "explaining"].includes(mascotState) ? "visually-hidden" : ""}`}
                   role="status"
                 >
-                  {eviaStatus(mascotState)}
+                  {eviaStatus(mascotState, language)}
                 </p>
                 {source && (
                   <div className="suggestions">
@@ -1126,7 +1126,7 @@ export default function App({ account, onAccountChange, onLogout }: {
           </div>
           <div className="chat-bottom">
             {attachedDashboard && source && <div className="attached-report" aria-label="Прикреплённый отчёт"><span>Отчёт: <strong>{attachedDashboard.title}</strong></span><button type="button" aria-label="Открепить отчёт" onClick={() => setAttachedDashboard(null)}><Icon name="close" size={14} /></button></div>}
-            {activeEntry && <div className="helper" role="status"><Evia state={mascotState} />{activeEntry.state === "pending" && <strong>{eviaStatus(mascotState)}</strong>}</div>}
+            {activeEntry && <div className="helper" role="status"><Evia state={mascotState} />{activeEntry.state === "pending" && <strong>{eviaStatus(mascotState, language)}</strong>}</div>}
             {archivedChat && !archivedChat.source_id && (
               <p className="history-details-notice">
                 {t("Для продолжения этого старого диалога выберите источник в левой панели.", "To continue this old chat, select a source in the left panel.")}

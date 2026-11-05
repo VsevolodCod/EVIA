@@ -135,7 +135,7 @@ function lineData(value: unknown): { points: Point[]; xLabel: string; yLabel: st
   return { points, xLabel: String(x.label ?? x.field ?? "Категория"), yLabel: String(y.label ?? y.field ?? "Значение") };
 }
 
-function calculationPassport(card: Card): { source: string; formula: string; period: string; filters: string[]; grouping?: string; snapshot?: string; schemaVersion?: number } | null {
+function calculationPassport(card: Card, language: "ru" | "en"): { source: string; formula: string; period: string; filters: string[]; grouping?: string; snapshot?: string; schemaVersion?: number } | null {
   const definition = card.definition;
   if (!object(definition)) return null;
   const measure = definition.type === "kpi" ? definition.field : definition.y;
@@ -150,26 +150,26 @@ function calculationPassport(card: Card): { source: string; formula: string; per
   else if (definition.type === "scatter" && object(definition.x) && object(definition.y))
     formula = `X: ${String(definition.x.field)}; Y: ${String(definition.y.field)}`;
   else if (definition.type === "table" && fields.length)
-    formula = `Поля: ${fields.map(item => String(item.field)).join(", ")}`;
+    formula = `${language === "en" ? "Fields" : "Поля"}: ${fields.map(item => String(item.field)).join(", ")}`;
   else return null;
   const filters = Array.isArray(definition.filters) ? definition.filters.flatMap((item) => {
     if (!object(item) || !object(item.field) || typeof item.field.field !== "string" || typeof item.operator !== "string") return [];
-    const operators: Record<string, string> = { eq: "=", ne: "≠", gt: ">", gte: "≥", lt: "<", lte: "≤", in: "в", not_in: "не в", between: "между", is_null: "пусто", is_not_null: "не пусто" };
+    const operators: Record<string, string> = { eq: "=", ne: "≠", gt: ">", gte: "≥", lt: "<", lte: "≤", in: language === "en" ? "in" : "в", not_in: language === "en" ? "not in" : "не в", between: language === "en" ? "between" : "между", is_null: language === "en" ? "empty" : "пусто", is_not_null: language === "en" ? "not empty" : "не пусто" };
     const value = Array.isArray(item.value) ? item.value.map(String).join(", ") : item.value == null ? "" : String(item.value);
     return [`${item.field.field} ${operators[item.operator] ?? item.operator}${value ? ` ${value}` : ""}`];
   }) : [];
   const result = object(card.data) ? card.data : null;
   const provenance = result && Array.isArray(result.provenance)
     ? result.provenance.find((item) => object(item) && item.source_id === source) : null;
-  const grains: Record<string, string> = { day: "По дням", week: "По неделям", month: "По месяцам", quarter: "По кварталам", year: "По годам" };
+  const grains: Record<string, string> = language === "en" ? { day: "By day", week: "By week", month: "By month", quarter: "By quarter", year: "By year" } : { day: "По дням", week: "По неделям", month: "По месяцам", quarter: "По кварталам", year: "По годам" };
   const x = object(definition.x) ? definition.x : null;
   return {
     source,
     formula,
-    period: filters.length ? "Применены фильтры" : "Весь источник без фильтров",
+    period: filters.length ? (language === "en" ? "Filters applied" : "Применены фильтры") : (language === "en" ? "Full source without filters" : "Весь источник без фильтров"),
     filters,
     grouping: (definition.type === "line" || definition.type === "bar" || definition.type === "pie") && x && typeof x.field === "string"
-      ? `${typeof x.time_grain === "string" ? grains[x.time_grain] ?? x.time_grain : "По исходным значениям"}: ${x.field}`
+      ? `${typeof x.time_grain === "string" ? grains[x.time_grain] ?? x.time_grain : language === "en" ? "By original values" : "По исходным значениям"}: ${x.field}`
       : undefined,
     snapshot: object(provenance) && typeof provenance.snapshot_id === "string" ? provenance.snapshot_id : undefined,
     schemaVersion: object(provenance) && typeof provenance.schema_version === "number" ? provenance.schema_version : undefined,
@@ -336,12 +336,12 @@ function ResultTable({ card }: { card: Card }) {
 }
 
 function GeneratedCard({ card, preference, expandPassport = false }: { card: Card; preference: PalettePreference; expandPassport?: boolean }) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [view, setView] = useState<"line" | "bar">(card.type === "line" ? "line" : "bar");
   useEffect(() => setView(card.type === "line" ? "line" : "bar"), [card.id, card.type]);
   const grouped = card.status === "success" && (card.type === "line" || card.type === "bar");
   const activeType = grouped ? view : card.type;
-  const passport = card.status === "success" ? calculationPassport(card) : null;
+  const passport = card.status === "success" ? calculationPassport(card, language) : null;
   return <section className={`dashboard-card generated-card generated-${activeType}-card`}>
     <div className="chart-heading"><h3>{card.title}</h3>{card.status === "success" && <small>{t(({ kpi: "Показатель", line: "Динамика", bar: "Сравнение", pie: "Доли", scatter: "Связь", table: "Таблица" } as const)[activeType], ({ kpi: "Measure", line: "Trend", bar: "Comparison", pie: "Shares", scatter: "Relationship", table: "Table" } as const)[activeType])}</small>}</div>
     {grouped && <div className="generated-view-switch" role="group" aria-label={`Вид графика «${card.title}»`}
