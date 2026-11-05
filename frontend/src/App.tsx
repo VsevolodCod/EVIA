@@ -700,13 +700,13 @@ export default function App({ account, onAccountChange, onLogout }: {
   return (
     <div className={`app mobile-panel-${mobilePanel} ${mobileOverlay === "upload" ? "mobile-upload-overlay" : ""}`} data-testid="app-shell" data-theme={theme === "system" ? systemDark ? "dark" : "light" : theme}>
       <a className="skip-link" href="#analysis">
-        Перейти к данным
+        {t("Перейти к данным", "Go to data")}
       </a>
       <header className="topbar">
         <a
           className="brand"
           href="#analysis"
-          aria-label="EVIA, рабочее пространство"
+          aria-label={t("EVIA, рабочее пространство", "EVIA workspace")}
           onClick={(event) => {
             if (window.matchMedia?.("(max-width: 640px)").matches) event.preventDefault();
             setMobilePanel("home");
@@ -721,15 +721,15 @@ export default function App({ account, onAccountChange, onLogout }: {
         <aside className="sidebar" aria-label="Навигация рабочего пространства">
           <button className="primary new-analysis" onClick={newAnalysis}>
             <Icon name="plus" />
-            Добавить источник
+            {t("Добавить источник", "Add source")}
           </button>
           {!sourcesLoading && <div className="mobile-home-greeting"><WelcomeGreeting greeting={welcomeGreeting} activeState={mascotState} /></div>}
           <section className="nav-section">
             <div className="nav-heading">
-              <h2>Источники</h2>
+              <h2>{t("Источники", "Sources")}</h2>
               <button
                 className="icon-button"
-                aria-label="Обновить источники"
+                aria-label={t("Обновить источники", "Refresh sources")}
                 onClick={() => void loadSources()}
                 disabled={sourcesLoading}
               >
@@ -738,7 +738,7 @@ export default function App({ account, onAccountChange, onLogout }: {
             </div>
             {sourcesLoading && (
               <p className="sidebar-note" role="status">
-                Загружаем источники…
+                {t("Загружаем источники…", "Loading sources…")}
               </p>
             )}
             {sourcesError && (
@@ -748,7 +748,7 @@ export default function App({ account, onAccountChange, onLogout }: {
               />
             )}
             {!sourcesLoading && !sourcesError && !sources.length && (
-              <p className="sidebar-note">Нет источников</p>
+              <p className="sidebar-note">{t("Нет источников", "No sources")}</p>
             )}
             <div className="source-list">
               {sources.map((item) => (
@@ -788,7 +788,7 @@ export default function App({ account, onAccountChange, onLogout }: {
               aria-pressed={!source && sourceSetup === "postgres"}
               title={postgresStatus?.connected ? "PostgreSQL доступен" : undefined}
             >
-              Подключить PostgreSQL
+              {t("Подключить PostgreSQL", "Connect PostgreSQL")}
             </button>
             <input
               className="visually-hidden"
@@ -819,17 +819,17 @@ export default function App({ account, onAccountChange, onLogout }: {
             )}
           </section>
           <button className={`reports-nav ${showDashboardGallery ? "selected" : ""}`} type="button" aria-pressed={showDashboardGallery} onClick={() => { setShowDashboardGallery(true); setMobilePanel("analytics"); }}>
-            Сохранённые отчёты <Icon name="chevron" size={15} />
+            {t("Сохранённые отчёты", "Saved reports")} <Icon name="chevron" size={15} />
           </button>
           <section className="nav-section history-section">
             <div className="nav-heading">
-              <h2>История диалогов</h2>
+              <h2>{t("История диалогов", "Chat history")}</h2>
               {historyCount > 0 && (
                 <span className="nav-count">{historyCount}</span>
               )}
             </div>
             {historyListLoading ? (
-              <p className="sidebar-note" role="status">Загружаем диалоги…</p>
+              <p className="sidebar-note" role="status">{t("Загружаем диалоги…", "Loading chats…")}</p>
             ) : historyListError ? (
               <ErrorNotice
                 message={historyListError}
@@ -900,7 +900,7 @@ export default function App({ account, onAccountChange, onLogout }: {
                 ))}
               </div>
                 ) : !failedServerChat && (
-                  <p className="sidebar-note">Нет диалогов</p>
+                  <p className="sidebar-note">{t("Нет диалогов", "No chats")}</p>
                 )}
               </>
             )}
@@ -968,7 +968,7 @@ export default function App({ account, onAccountChange, onLogout }: {
               >
                 {!sourcesLoading && <WelcomeGreeting greeting={welcomeGreeting} activeState={mascotState} />}
                 <h1>{uploading ? uploadProgress === 100 ? "Обрабатываем CSV…" : `Загрузка CSV · ${uploadProgress ?? 0}%` : "Добавьте CSV"}</h1>
-                <p>Перетащите файл сюда или выберите его с устройства</p>
+                <p>{t("Перетащите файл сюда или выберите его с устройства", "Drag a file here or choose one from your device")}</p>
                 {selectedUploadFile && <div className="upload-selected-file">
                   <Icon name="file" size={18} />
                   <span>{selectedUploadFile.name}<small>{(selectedUploadFile.size / 1024).toFixed(1)} КБ</small></span>
@@ -995,7 +995,7 @@ export default function App({ account, onAccountChange, onLogout }: {
         </main>
         <aside className="chat-panel" aria-label="Чат с EVIA">
           <header className="chat-header">
-            <h2>AI-помощник</h2><strong className="mobile-chat-brand">EVIA</strong>
+            <h2>{t("AI-помощник", "AI assistant")}</h2><strong className="mobile-chat-brand">EVIA</strong>
             {source && <button className="new-dialog" type="button" onClick={newDialog}><Icon name="plus" size={15} /> Новый диалог</button>}
           </header>
           <div className="chat-content">
@@ -1004,7 +1004,7 @@ export default function App({ account, onAccountChange, onLogout }: {
               {activePage?.hasMore && (
                 <div className="history-pagination">
                   {activePage.loading ? (
-                    <p role="status">Загружаем предыдущие сообщения…</p>
+                    <p role="status">{t("Загружаем предыдущие сообщения…", "Loading previous messages…")}</p>
                   ) : activePage.error ? (
                     <ErrorNotice
                       message={activePage.error}
@@ -1016,7 +1016,7 @@ export default function App({ account, onAccountChange, onLogout }: {
                       className="text-button"
                       onClick={() => historyKey && activePage.nextBefore !== null && void loadChatHistory(historyKey, activeConversationId!, activePage.nextBefore)}
                     >
-                      Показать предыдущие сообщения
+                      {t("Показать предыдущие сообщения", "Show previous messages")}
                     </button>
                   )}
                 </div>
@@ -1030,7 +1030,7 @@ export default function App({ account, onAccountChange, onLogout }: {
                       <span />
                       <span />
                       <span />
-                      <p>Изучаю ваш вопрос…</p>
+                      <p>{t("Изучаю ваш вопрос…", "Looking into your question…")}</p>
                     </div>
                   ) : message.state === "error" ? (
                     <ErrorNotice
@@ -1079,7 +1079,7 @@ export default function App({ account, onAccountChange, onLogout }: {
                           setMobilePanel("analytics");
                         }}
                       >
-                        Открыть результат
+                        {t("Открыть результат", "Open result")}
                         <Icon name="chevron" size={15} />
                       </button>
                       }
@@ -1092,8 +1092,8 @@ export default function App({ account, onAccountChange, onLogout }: {
             ) : (
               <div className="chat-welcome">
                 {source && !sourcesLoading && <WelcomeGreeting greeting={welcomeGreeting} activeState={mascotState} />}
-                <h3>{source ? "Спросите о своих данных" : "Добавьте источник данных"}</h3>
-                <p className="mobile-chat-intro">{source ? "EVIA поможет найти ответ, построить график или разобраться в таблице." : "Загрузите CSV или подключите PostgreSQL, чтобы начать анализ."}</p>
+                <h3>{source ? t("Спросите о своих данных", "Ask about your data") : t("Добавьте источник данных", "Add a data source")}</h3>
+                <p className="mobile-chat-intro">{source ? t("EVIA поможет найти ответ, построить график или разобраться в таблице.", "EVIA can answer questions, create charts and help you explore your data.") : t("Загрузите CSV или подключите PostgreSQL, чтобы начать анализ.", "Upload a CSV or connect PostgreSQL to start analyzing.")}</p>
                 <p
                   className={`evia-live-status ${["welcome", "waiting", "listening", "explaining"].includes(mascotState) ? "visually-hidden" : ""}`}
                   role="status"
@@ -1134,15 +1134,15 @@ export default function App({ account, onAccountChange, onLogout }: {
             )}
             <form className="composer" onSubmit={submit}>
               <label className="visually-hidden" htmlFor="question">
-                Ваш вопрос
+                {t("Ваш вопрос", "Your question")}
               </label>
               <textarea
                 id="question"
                 ref={composer}
                 placeholder={
                   source
-                    ? "Что хотите узнать о данных?"
-                    : "Сначала добавьте источник…"
+                    ? t("Что хотите узнать о данных?", "What would you like to know about your data?")
+                    : t("Сначала добавьте источник…", "First add a data source…")
                 }
                 rows={3}
                 value={draft}
@@ -1167,14 +1167,14 @@ export default function App({ account, onAccountChange, onLogout }: {
                       {source.name}
                     </>
                   ) : (
-                    "Источник не выбран"
+                    t("Источник не выбран", "No source selected")
                   )}
                 </span>
                 {pending ? (
                   <button
                     type="button"
                     className="stop-button"
-                    aria-label="Прекратить ожидание"
+                    aria-label={t("Прекратить ожидание", "Stop waiting")}
                     onClick={() => {
                       if (pending?.conversationId)
                         askControllers.current.get(pending.conversationId)?.abort();
@@ -1186,7 +1186,7 @@ export default function App({ account, onAccountChange, onLogout }: {
                   <button
                     className="send-button"
                     type="submit"
-                    aria-label="Отправить вопрос"
+                    aria-label={t("Отправить вопрос", "Send question")}
                     disabled={
                       !source || !draft.trim() || draft.trim().length > 4000
                     }
@@ -1198,7 +1198,7 @@ export default function App({ account, onAccountChange, onLogout }: {
             </form>
             {source && <div className="mobile-chat-source" aria-label="Прикреплённый источник"><Icon name="file" size={14} /><span>{source.name}{source.source_type === "csv" && !source.name.toLowerCase().endsWith(".csv") ? ".csv" : ""}</span><button type="button" aria-label="Убрать источник из чата" onClick={() => setSelectedId(null)}><Icon name="close" size={14} /></button></div>}
             <div className="composer-hint">
-              <span>Ctrl / ⌘ + Enter — отправить</span>
+              <span>{t("Ctrl / ⌘ + Enter — отправить", "Ctrl / ⌘ + Enter to send")}</span>
               {draft.length > 3500 && <span>{draft.length}/4000</span>}
             </div>
           </div>
@@ -1206,8 +1206,8 @@ export default function App({ account, onAccountChange, onLogout }: {
       </div>
       {mobileOverlay === "settings" && <div className="settings-backdrop" data-testid="settings-backdrop" aria-hidden="true" onClick={() => setMobileOverlay(null)} />}
       {mobileOverlay === "settings" && <section className="mobile-fullscreen mobile-settings" role="dialog" aria-label="Настройки" aria-modal="true" ref={settingsDialog}>
-        <header><h2>Настройки</h2><button aria-label="Закрыть настройки" onClick={() => setMobileOverlay(null)}><Icon name="close" size={19} /></button></header>
-        <h3>Тема</h3>
+        <header><h2>{t("Настройки", "Settings")}</h2><button aria-label={t("Закрыть настройки", "Close settings")} onClick={() => setMobileOverlay(null)}><Icon name="close" size={19} /></button></header>
+        <h3>{t("Тема", "Theme")}</h3>
         <div className="settings-options">
           {([ ["light", "Светлая"], ["dark", "Тёмная"], ["system", "Системная"] ] as const).map(([value, label]) => <button key={value} aria-label={`${label} тема`} aria-pressed={theme === value} onClick={() => chooseTheme(value)}><span>{label}</span>{theme === value && <Icon name="check" size={16} />}</button>)}
         </div>
@@ -1220,7 +1220,7 @@ export default function App({ account, onAccountChange, onLogout }: {
           onClick={() => setMobilePanel("home")}
         >
           <Icon name="home" size={18} />
-          <span>Источники</span>
+          <span>{t("Источники", "Sources")}</span>
         </button>
         <button
           aria-label="Рабочее пространство"
@@ -1228,7 +1228,7 @@ export default function App({ account, onAccountChange, onLogout }: {
           onClick={() => setMobilePanel("analytics")}
         >
           <Icon name="file" size={18} />
-          <span>Данные</span>
+          <span>{t("Данные", "Data")}</span>
         </button>
         <button
           aria-label="Чат"
@@ -1236,7 +1236,7 @@ export default function App({ account, onAccountChange, onLogout }: {
           onClick={() => setMobilePanel("chat")}
         >
           <Icon name="chat" size={18} />
-          <span>Чат</span>
+          <span>{t("Чат", "Chat")}</span>
         </button>
         <button
           aria-label="Настройки"
@@ -1244,7 +1244,7 @@ export default function App({ account, onAccountChange, onLogout }: {
           onClick={openSettings}
         >
           <Icon name="settings" size={18} />
-          <span>Настройки</span>
+          <span>{t("Настройки", "Settings")}</span>
         </button>
       </nav>
     </div>
