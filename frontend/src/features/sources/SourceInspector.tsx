@@ -227,30 +227,30 @@ export function SourceInspector({
               /> : profileError ? (
                 <div className="pane-padding">
                   <ErrorNotice
-                    message={`Не удалось построить профиль: ${profileError}`}
+                    message={t(`Не удалось построить профиль: ${profileError}`, `Could not build profile: ${profileError}`)}
                     onRetry={() => setRevision((value) => value + 1)}
-                    label="Повторить расчёт"
+                    label={t("Повторить расчёт", "Retry calculation")}
                   />
                 </div>
               ) : (
                 <div className="loading-panel" role="status">
                   <EviaMascot state="profiling" size={80} decorative />
-                  Рассчитываем профиль источника…
+                  {t("Рассчитываем профиль источника…", "Calculating source profile…")}
                 </div>
               )
             ) : view === "quality" ? (
               model ? <ProfileQuality model={model} onColumn={openColumn} /> : profileError ? (
                 <div className="pane-padding">
                   <ErrorNotice
-                    message={`Не удалось построить профиль: ${profileError}`}
+                    message={t(`Не удалось построить профиль: ${profileError}`, `Could not build profile: ${profileError}`)}
                     onRetry={() => setRevision((value) => value + 1)}
-                    label="Повторить расчёт"
+                    label={t("Повторить расчёт", "Retry calculation")}
                   />
                 </div>
               ) : (
                 <div className="loading-panel" role="status">
                   <EviaMascot state="profiling" size={80} decorative />
-                  Рассчитываем профиль источника…
+                  {t("Рассчитываем профиль источника…", "Calculating source profile…")}
                 </div>
               )
             ) : view === "preview" ? (
@@ -278,15 +278,15 @@ export function SourceInspector({
                 {source.import_report && <details className="csv-import-details">
                   <summary>{t("Отчёт об импорте", "Import report")}</summary>
                   <p>{t(`Принято ${numberText(source.import_report.accepted_rows)} из ${numberText(source.import_report.rows_read)} строк · отклонено ${numberText(source.import_report.rejected_rows)}`, `Accepted ${numberText(source.import_report.accepted_rows)} of ${numberText(source.import_report.rows_read)} rows · rejected ${numberText(source.import_report.rejected_rows)}`)}</p>
-                  <p>Кодировка: {source.import_report.encoding.toUpperCase()} · разделитель: {source.import_report.delimiter === "\t" ? "табуляция" : source.import_report.delimiter}</p>
+                  <p>{t("Кодировка", "Encoding")}: {source.import_report.encoding.toUpperCase()} · {t("разделитель", "delimiter")}: {source.import_report.delimiter === "\t" ? t("табуляция", "tab") : source.import_report.delimiter}</p>
                   {source.import_report.warnings.length > 0 && <ul>{source.import_report.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>}
                   {source.csv_versions?.map((version, index) => <a
                     key={version.snapshot_id}
                     href={`/sources/${encodeURIComponent(source.source_id)}/versions/${encodeURIComponent(version.snapshot_id)}/download`}
-                  >Скачать оригинал {index + 1}</a>)}
+                  >{t("Скачать оригинал", "Download original")} {index + 1}</a>)}
                   {onReimport && <label className="csv-reimport">
-                    Повторно импортировать CSV
-                    <input type="file" accept=".csv,text/csv" aria-label="Повторно импортировать CSV" onChange={(event) => {
+                    {t("Повторно импортировать CSV", "Reimport CSV")}
+                    <input type="file" accept=".csv,text/csv" aria-label={t("Повторно импортировать CSV", "Reimport CSV")} onChange={(event) => {
                       const file = event.target.files?.[0];
                       if (file) onReimport(file, source.source_id);
                       event.target.value = "";
@@ -310,17 +310,17 @@ export function SourceInspector({
                               <small>
                                 {typeLabel(field.inferred_type)}
                                 {field.is_identifier_candidate
-                                  ? " · Возможный идентификатор"
+                                  ? t(" · Возможный идентификатор", " · Possible identifier")
                                   : ""}
                               </small>
                               {field.description && <p>{field.description}</p>}
                             </div>
                             <span className="nullable">
                               {field.nullable === null
-                                ? "Нет выборки"
+                                ? t("Нет выборки", "No sample")
                                 : field.nullable
-                                  ? "Есть пропуски"
-                                  : "Без пропусков"}
+                                  ? t("Есть пропуски", "Missing values")
+                                  : t("Без пропусков", "No missing values")}
                             </span>
                           </div>
                         ))}
@@ -332,13 +332,11 @@ export function SourceInspector({
             )}
             {current.profile && model && ["profile", "quality"].includes(view) && (
               <details className="profile-method">
-                <summary>Как рассчитан профиль</summary>
+                <summary>{t("Как рассчитан профиль", "How the profile is calculated")}</summary>
                 <p>
-                  Источник: {source.name}. Версия схемы:{" "}
-                  {current.schema.version}. Число строк датасета берётся из
-                  схемы; {current.profile.coverage === "full"
-                    ? "заполненность, NULL, пустые строки и уникальность рассчитаны по всему датасету. Частые значения — из профиля выборки."
-                    : "остальные показатели — из профиля выборки. Заполненность — доля непустых ячеек среди ячеек с доступной статистикой. Частые значения сравниваются как исходные строки."}
+                  {t(`Источник: ${source.name}. Версия схемы: ${current.schema.version}. Число строк датасета берётся из схемы;`, `Source: ${source.name}. Schema version: ${current.schema.version}. Dataset row count comes from the schema;`)}{" "}{current.profile.coverage === "full"
+                    ? t("заполненность, NULL, пустые строки и уникальность рассчитаны по всему датасету. Частые значения — из профиля выборки.", "completeness, NULLs, empty strings and uniqueness cover the full dataset. Frequent values come from the sample profile.")
+                    : t("остальные показатели — из профиля выборки. Заполненность — доля непустых ячеек среди ячеек с доступной статистикой. Частые значения сравниваются как исходные строки.", "other metrics come from the sample profile. Completeness is the share of non-empty cells among cells with available statistics. Frequent values are compared as original strings.")}
                 </p>
                 <p>{current.profile.note}</p>
               </details>
