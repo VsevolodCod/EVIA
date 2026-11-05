@@ -200,7 +200,7 @@ function ResultLine({ card, colors, gradient }: { card: Card; colors: string[]; 
     {object(card.data) && card.data.limit_reached === true && <p className="generated-limit-note">
       {t(`Показано точек: ${chart.points.length}. Достигнут лимит выдачи; в источнике могут быть другие группы. Уточните период или фильтры.`, `Points shown: ${chart.points.length}. The result limit was reached; the source may contain other groups. Refine the period or filters.`)}
     </p>}
-    <svg className="generated-line-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${card.title}: ${chart.yLabel} по ${chart.xLabel}`}>
+    <svg className="generated-line-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={t(`${card.title}: ${chart.yLabel} по ${chart.xLabel}`, `${card.title}: ${chart.yLabel} by ${chart.xLabel}`)}>
       <defs><linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1"><stop stopColor={colors[0]} stopOpacity=".2" /><stop offset="1" stopColor={colors[0]} stopOpacity="0" /></linearGradient></defs>
       {[0, .5, 1].map((step) => {
         const value = minimum + step * span;
@@ -251,8 +251,8 @@ function ResultBar({ card, colors }: { card: Card; colors: string[] }) {
   const series = hasSeries ? [...new Map(chart.points.map((point) => [seriesKey(point), seriesLabel(point)])).entries()] : [];
   return <>
     <LimitNote data={card.data} count={chart.points.length} />
-    <div className="generated-chart-scroll" role="region" aria-label={`Прокрутка графика ${card.title}`} tabIndex={0}>
-      <svg className="generated-bar-chart" width={width} viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${card.title}: ${chart.yLabel} по ${chart.xLabel}`}>
+    <div className="generated-chart-scroll" role="region" aria-label={t(`Прокрутка графика ${card.title}`, `Scroll chart ${card.title}`)} tabIndex={0}>
+      <svg className="generated-bar-chart" width={width} viewBox={`0 0 ${width} ${height}`} role="img" aria-label={t(`${card.title}: ${chart.yLabel} по ${chart.xLabel}`, `${card.title}: ${chart.yLabel} by ${chart.xLabel}`)}>
         <line x1={left} x2={width - right} y1={baseline} y2={baseline} stroke="#82968b" />
         {chart.points.map((point, index) => {
           const value = numeric(point.y);
@@ -282,9 +282,9 @@ function ResultPie({ card }: { card: Card }) {
   if (!chart || !chart.points.length) return <p className="generated-empty">{t("Нет категорий для круговой диаграммы.", "No categories for the pie chart.")}</p>;
   if (object(card.data) && card.data.limit_reached === true)
     return <p className="generated-empty">{t("Доли не показаны: результат ограничен и не включает все категории.", "Shares are unavailable because the limited result does not include every category.")}</p>;
-  const slices = pieChartData(chart.points.map((point) => ({ label: String(point.x ?? "Нет подписи"), value: numeric(point.y) })));
+  const slices = pieChartData(chart.points.map((point) => ({ label: String(point.x ?? t("Нет подписи", "No label")), value: numeric(point.y) })));
   if (!slices) return <p className="generated-empty">{t("Для круговой диаграммы нужны положительные значения без отрицательных долей.", "The pie chart requires positive values without negative shares.")}</p>;
-  return <><PieChart slices={slices} label={`${card.title}: доли ${chart.yLabel} по ${chart.xLabel}`} />
+  return <><PieChart slices={slices} label={t(`${card.title}: доли ${chart.yLabel} по ${chart.xLabel}`, `${card.title}: shares of ${chart.yLabel} by ${chart.xLabel}`)} />
     {chart.points.some((point) => numeric(point.y) === 0) && <p className="generated-limit-note">{t("Нулевые категории не образуют сектор.", "Zero categories do not form a slice.")}</p>}
     <div className="generated-axis-label">{chart.xLabel} · {chart.yLabel}</div></>;
 }
@@ -309,7 +309,7 @@ function ResultScatter({ card, color }: { card: Card; color: string }) {
   };
   return <>
     <LimitNote data={card.data} count={points.length} />
-    <svg className="generated-scatter-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${card.title}: ${chart.yLabel} по ${chart.xLabel}`}>
+    <svg className="generated-scatter-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={t(`${card.title}: ${chart.yLabel} по ${chart.xLabel}`, `${card.title}: ${chart.yLabel} by ${chart.xLabel}`)}>
       <line x1={left} x2={left} y1={top} y2={height - bottom} stroke="#82968b" />
       <line x1={left} x2={width - right} y1={height - bottom} y2={height - bottom} stroke="#82968b" />
       {points.map((point, index) => <circle key={index} data-point="true"
@@ -344,8 +344,8 @@ function GeneratedCard({ card, preference, expandPassport = false }: { card: Car
   const passport = card.status === "success" ? calculationPassport(card, language) : null;
   return <section className={`dashboard-card generated-card generated-${activeType}-card`}>
     <div className="chart-heading"><h3>{card.title}</h3>{card.status === "success" && <small>{t(({ kpi: "Показатель", line: "Динамика", bar: "Сравнение", pie: "Доли", scatter: "Связь", table: "Таблица" } as const)[activeType], ({ kpi: "Measure", line: "Trend", bar: "Comparison", pie: "Shares", scatter: "Relationship", table: "Table" } as const)[activeType])}</small>}</div>
-    {grouped && <div className="generated-view-switch" role="group" aria-label={`Вид графика «${card.title}»`}
-      title="Линия и столбцы показывают те же вычисленные группы. Точки и таблица требуют нового расчёта исходных строк.">
+    {grouped && <div className="generated-view-switch" role="group" aria-label={t(`Вид графика «${card.title}»`, `Chart view for ${card.title}`)}
+      title={t("Линия и столбцы показывают те же вычисленные группы. Точки и таблица требуют нового расчёта исходных строк.", "Line and bar views show the same computed groups. Scatter and table views require a new calculation from the original rows.")}>
       <button type="button" aria-pressed={view === "line"} onClick={() => setView("line")}>{t("Линия", "Line")}</button>
       <button type="button" aria-pressed={view === "bar"} onClick={() => setView("bar")}>{t("Столбцы", "Bars")}</button>
     </div>}
