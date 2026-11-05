@@ -109,7 +109,7 @@ function ColumnCard({
   sampleSize: number;
   initialOpen: boolean;
 }) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const stats = field.stats;
   const exact = stats && hasExactStats(stats);
   const total = stats
@@ -128,7 +128,7 @@ function ColumnCard({
           <span className="column-card-title">
             <strong>{field.name}</strong>
             <small>
-              {typeLabel(field.type)}
+              {typeLabel(field.type, language)}
             {field.identifier ? t(" · Гипотеза: кандидат в идентификаторы", " · Possible identifier") : ""}
             </small>
           </span>

@@ -63,7 +63,7 @@ export function SourceInspector({
   onDelete?: (sourceId: string) => Promise<void>;
   deleteDisabled?: boolean;
 }) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
   async function deleteCsv() {
@@ -308,7 +308,7 @@ export function SourceInspector({
                             <div>
                               <strong>{field.name}</strong>
                               <small>
-                                {typeLabel(field.inferred_type)}
+                                {typeLabel(field.inferred_type, language)}
                                 {field.is_identifier_candidate
                                   ? t(" · Возможный идентификатор", " · Possible identifier")
                                   : ""}

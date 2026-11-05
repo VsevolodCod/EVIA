@@ -168,7 +168,7 @@ export function ReportBuilder({ source, schema, rows, profile, entries, onClose 
       </section>
       <section className="report-section"><h2>{t("Состав данных", "Data structure")}</h2>
         {fields.length ? <table><thead><tr><th>{t("Поле", "Field")}</th><th>{t("Тип", "Type")}</th><th>{t("Пропуски", "Missing")}</th></tr></thead><tbody>
-          {fields.map((field) => <tr key={field.name}><td>{field.name}</td><td>{typeLabel(field.inferred_type)}</td>
+          {fields.map((field) => <tr key={field.name}><td>{field.name}</td><td>{typeLabel(field.inferred_type, language)}</td>
             <td>{profile?.columns[field.name] ? numberText(profile.coverage === "full" && hasExactStats(profile.columns[field.name])
               ? profile.columns[field.name].null_count : profile.columns[field.name].sample_null_count) : "—"}</td></tr>)}
         </tbody></table> : <p>{t("Схема источника пуста.", "The source schema is empty.")}</p>}

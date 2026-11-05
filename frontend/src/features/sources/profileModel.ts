@@ -29,7 +29,8 @@ export const typeNames: Record<string, string> = {
   datetime: "Дата и время",
   unknown: "Не определён",
 };
-export const typeLabel = (type: string) => typeNames[type] ?? type;
+const englishTypeNames: Record<string, string> = { string: "Text", integer: "Integer", number: "Number", float: "Number", boolean: "Yes / no", date: "Date", datetime: "Date and time", unknown: "Unknown" };
+export const typeLabel = (type: string, language: "ru" | "en" = "ru") => (language === "en" ? englishTypeNames : typeNames)[type] ?? type;
 export type ProfileField = {
   name: string;
   type: string;
