@@ -150,10 +150,10 @@ test("switches the workspace to English and remembers the choice", async () => {
   fireEvent.click(await screen.findByRole("button", { name: "Открыть настройки" }));
   fireEvent.change(screen.getByRole("combobox", { name: "Язык" }), { target: { value: "en" } });
 
-  expect(await screen.findByRole("navigation", { name: "Workspace navigation" })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Home" })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Analysis" })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Chat" })).toBeInTheDocument();
+  const navigation = await screen.findByRole("navigation", { name: "Workspace navigation" });
+  expect(within(navigation).getByRole("button", { name: "Home" })).toBeInTheDocument();
+  expect(within(navigation).getByRole("button", { name: "Analysis" })).toBeInTheDocument();
+  expect(within(navigation).getByRole("button", { name: "Chat" })).toBeInTheDocument();
   expect(localStorage.getItem("evia.language")).toBe("en");
   expect(document.documentElement.lang).toBe("en");
 });
