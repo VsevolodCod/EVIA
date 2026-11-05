@@ -1,6 +1,6 @@
 """Benchmark local Ollama candidates on the same synthetic CSV questions.
 
-Run: python -m scripts.verify_local_models qwen2.5-coder:3b llama3.2:3b
+Run: python -m scripts.verifiers.verify_local_models qwen2.5-coder:3b llama3.2:3b
 """
 
 import argparse

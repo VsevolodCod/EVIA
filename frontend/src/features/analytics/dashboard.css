@@ -408,3 +408,21 @@
 .dashboard .kpi-grid .dashboard-card:first-child :is(span,strong,small) { color: #fff; }
 .app[data-theme="dark"] .dashboard .kpi-grid .dashboard-card:first-child { background: #147d50 !important; border-color: #147d50 !important; color: #fff !important; }
 .app[data-theme="dark"] .dashboard .kpi-grid .dashboard-card:first-child :is(span,strong,small) { color: #fff !important; }
+.app[data-theme="dark"] .dashboard { color: #e5f0ef; }
+.app[data-theme="dark"] .dashboard-preview,
+.app[data-theme="dark"] .dashboard-card { background: #192a31; border-color: #315057; color: #e5f0ef; }
+.app[data-theme="dark"] .dashboard-preview { box-shadow: 0 12px 28px #00000020, 0 1px 2px #00000024; }
+.app[data-theme="dark"] :is(.dashboard-section-heading h3,.chart-heading h3,.kpi-grid strong,.bar-row b,.quality-row b,.numeric-summary b,.chart-detail h4,.chart-detail-stats dd) { color: #e5f0ef; }
+.app[data-theme="dark"] :is(.dashboard-top p,.dashboard-empty-state,.dashboard-empty,.dashboard-scope-badge,.kpi-grid span,.kpi-grid small,.chart-heading small,.bar-row > span,.quality-row,.numeric-summary,.histogram span,.chart-detail-stats dt,.chart-detail-footer p) { color: #b4c4c4; }
+.app[data-theme="dark"] :is(.bar-row > div,.quality-row > div) { background: #2c4147; }
+.app[data-theme="dark"] :is(.histogram,.numeric-summary) { border-color: #31474c; }
+.app[data-theme="dark"] .line-chart line { stroke: #34494f; }
+.app[data-theme="dark"] .line-chart text { fill: #a9bcbb; }
+.app[data-theme="dark"] .dashboard-empty { background: #16282f; border-color: #3a555b; color: #b4c4c4; }
+.app[data-theme="dark"] .chart-card-expanded { background: #12232a; }
+.app[data-theme="dark"] .chart-card-expanded .chart-heading { background: #12232a; }
+.app[data-theme="dark"] .chart-card-expanded :is(.chart-detail,.histogram,.numeric-summary,.chart-detail-footer,.bar-chart,.quality-chart,.line-chart) { background: #192a31; border-color: #315057; color: #e5f0ef; }
+.app[data-theme="dark"] .chart-card-expanded .chart-detail-stats > div { border-color: #31474c; }
+.app[data-theme="dark"] .mobile-export-sheet { background: #192a31; color: #e5f0ef; }
+.app[data-theme="dark"] .mobile-export-option { background: #20363d; border-color: #315057; color: #e5f0ef; }
+.app[data-theme="dark"] .mobile-export-option small { color: #a9bcbb; }

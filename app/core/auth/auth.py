@@ -1,4 +1,5 @@
 """PostgreSQL account, session and recovery-code storage."""
+from __future__ import annotations
 
 import hashlib
 import hmac
@@ -80,7 +81,7 @@ class Account:
     avatar_updated_at: datetime | None = None
 
     @classmethod
-    def from_row(cls, row: UserRow) -> "Account":
+    def from_row(cls, row: UserRow) -> Account:
         return cls(row.id, row.email, row.name, row.created_at, row.avatar_updated_at)
 
 

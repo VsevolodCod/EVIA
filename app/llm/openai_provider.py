@@ -1,5 +1,4 @@
 import json
-import asyncio
 from typing import Any
 
 import httpx
@@ -50,8 +49,7 @@ class OpenAIModel(AsyncModel):
         async with httpx.AsyncClient(
             timeout=self.timeout,
         ) as client:
-            # Был организованный нормальный retry-модуль
-            # for attempt in range(3):
+            # AgentRuntime owns the retry budget for every provider.
             response = await client.post(
                 self.url,
                 headers={
@@ -60,9 +58,6 @@ class OpenAIModel(AsyncModel):
                 },
                 json=payload,
             )
-            # if response.status_code == 502 and attempt < 2:
-            #     await asyncio.sleep(0.5 * (2 ** attempt))
-            #     continue
             response.raise_for_status()
             return response.json()
 

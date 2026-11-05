@@ -84,7 +84,13 @@ def test_app_runs_csv_to_mock_over_http_and_stops(tmp_path, dev):
                                             json={'question': question, 'source_ids': [source_id]})
                     assert continued.status_code == 200
                     assert continued.json()['chat_id'] == chat_id
-                assert client.get(f'/chats/{chat_id}').json()['total_messages'] == 4
+                history = client.get(f'/chats/{chat_id}').json()
+                assert history['total_messages'] == len(history['messages']) == 6
+                assert [message['role'] for message in history['messages']] == [
+                    'user', 'assistant', 'tool', 'assistant', 'user', 'assistant',
+                ]
+                assert history['messages'][1]['tool_calls']
+                assert history['messages'][2]['tool_call_id']
         finally:
             try:
                 if process.poll() is None:

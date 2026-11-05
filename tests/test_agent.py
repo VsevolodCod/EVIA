@@ -8,6 +8,7 @@ from app.schema_catalog import SchemaCatalog
 from app.source_service import SourceService
 from app.tools import build_tool_registry
 from app.models import LLMResponse
+from app.agent_additions.retry_agent import LLMRetryPolicy
 
 
 @pytest.mark.asyncio
@@ -84,6 +85,28 @@ async def test_history_is_optional_and_not_mutated(tmp_path):
         await agent.ask('next', ['source-B'], history=history)
         assert [message.content for message in llm.messages[1:]][0] == 'earlier'
         assert len(history) == 1
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
+async def test_agent_uses_the_requested_response_language(tmp_path):
+    class RecordingLLM:
+        def __init__(self):
+            self.messages = []
+
+        async def chat(self, messages, tools=None):
+            self.messages = list(messages)
+            return LLMResponse(content="The answer is 42.", finish_reason="stop")
+
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    try:
+        llm = RecordingLLM()
+        agent = AgentRuntime(llm, build_tool_registry(catalog, SourceService(tmp_path / "data", catalog)))
+        response = await agent.ask("What is the average?", response_language="en")
+        assert response.answer == "The answer is 42."
+        assert "Respond in English" in llm.messages[0].content
+        assert "do not translate source names" in llm.messages[0].content
     finally:
         catalog.close()
 
@@ -168,7 +191,7 @@ async def test_agent_retries_transient_502_without_spending_a_step(monkeypatch):
     async def no_wait(_delay):
         return None
 
-    monkeypatch.setattr("app.agent.asyncio.sleep", no_wait)
+    monkeypatch.setattr("app.agent_additions.retry_agent.asyncio.sleep", no_wait)
     llm = LLM()
     result = await AgentRuntime(llm, Tools(), max_steps=1).ask("Вопрос")
     assert result.status == "answered"
@@ -178,7 +201,7 @@ async def test_agent_retries_transient_502_without_spending_a_step(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_openai_provider_502_is_not_retried_again_by_agent(monkeypatch):
+async def test_openai_provider_502_uses_the_agent_retry_budget(monkeypatch):
     class FailingOpenAI(OpenAIProvider):
         calls = 0
 
@@ -194,11 +217,11 @@ async def test_openai_provider_502_is_not_retried_again_by_agent(monkeypatch):
     async def no_wait(_delay):
         return None
 
-    monkeypatch.setattr("app.agent.asyncio.sleep", no_wait)
+    monkeypatch.setattr("app.agent_additions.retry_agent.asyncio.sleep", no_wait)
     provider = FailingOpenAI.__new__(FailingOpenAI)
     with pytest.raises(httpx.HTTPStatusError):
-        await AgentRuntime(provider, Tools()).ask("Вопрос")
-    assert provider.calls == 1
+        await AgentRuntime(provider, Tools(), retry_policy=LLMRetryPolicy(max_attempts=3)).ask("Вопрос")
+    assert provider.calls == 3
 
 
 @pytest.mark.asyncio

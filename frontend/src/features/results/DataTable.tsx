@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import type { Row } from "../../api";
 import { EviaMascot } from "../../components/EviaMascot";
+import { useLanguage } from "../../i18n";
 
 export function valueText(value: unknown): string {
   if (value === null || value === undefined) return "—";
@@ -14,6 +15,7 @@ function compactIdentifier(value: string): string {
 }
 
 function IdentifierCell({ field, value }: { field: string; value: unknown }) {
+  const { t } = useLanguage();
   const [copied, setCopied] = useState(false);
   const fullValue = valueText(value);
 
@@ -32,10 +34,10 @@ function IdentifierCell({ field, value }: { field: string; value: unknown }) {
       <button
         className="identifier-copy"
         type="button"
-        aria-label={`Скопировать полный ${field}`}
+        aria-label={`${t("Скопировать полный")} ${field}`}
         onClick={() => void copy()}
       >
-        {copied ? "Готово" : "Копировать"}
+        {copied ? t("Готово") : t("Копировать")}
       </button>
     </span>
   );
@@ -52,6 +54,7 @@ export function DataTable({
   label?: string;
   copyableIdentifierColumns?: readonly string[];
 }) {
+  const { t } = useLanguage();
   const [position, setPosition] = useState({ rows, page: 0 });
   const fields = useMemo(
     () => columns ?? [...new Set(rows.flatMap((row) => Object.keys(row)))],
@@ -67,13 +70,13 @@ export function DataTable({
     return (
       <div className="empty-table">
         <EviaMascot state="empty_table" size={80} decorative />
-        <p>Нет строк для отображения</p>
+        <p>{t("Нет строк для отображения")}</p>
         <span>
-          Результат пуст. Это не означает нулевое значение показателя.
+          {t("Результат пуст. Это не означает нулевое значение показателя.")}
         </span>
       </div>
     );
-  if (!fields.length) return <p className="muted">Строки не содержат полей.</p>;
+  if (!fields.length) return <p className="muted">{t("Строки не содержат полей.")}</p>;
 
   return (
     <div className="data-table">

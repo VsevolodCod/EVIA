@@ -70,7 +70,7 @@ Commit: `git commit -am "feat(profile): define exact snapshot statistics contrac
 ### Task 2: Точные агрегаты DuckDB
 
 **Files:**
-- Modify: `app/data_engine.py`
+- Modify: `app/data_sources/duckdb_engine/data_engine.py`
 - Test: `tests/test_duckdb_engine.py`
 
 - [ ] **Step 1: Write failing tests for exact counts and numeric/date boundaries**
@@ -203,7 +203,7 @@ assert profile["processed_rows"] == source.import_report.accepted_rows
 
 - [ ] **Step 3: Run all backend tests, frontend tests, production build and audit command**
 
-Run: `python -m pytest -q && npm test -- --run && npm run build && python -m scripts.verify_csv_imports 'прогон таски 5' --report /tmp/evia-issue8-audit.json`
+Run: `python -m pytest -q && npm test -- --run && npm run build && python -m scripts.verifiers.verify_csv_imports 'прогон таски 5' --report /tmp/evia-issue8-audit.json`
 
 - [ ] **Step 4: Review working tree and commit documentation**
 

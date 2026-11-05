@@ -1,4 +1,3 @@
-import csv
 import errno
 import io
 import logging
@@ -13,13 +12,13 @@ from pydantic import ValidationError
 import duckdb
 
 from app.data_sources.csv_adapter import CSVAdapter
-from app.data_sources.csv_format import (
+from app.data_sources.csv_tools.csv_format import (
     PARSER_VERSION,
     SAMPLE_CHARS,
     detect_delimiter,
 )
-from app.data_engine import DuckDBDataEngine
-from app.csv_import import CSVImportError, ImportReport, copy_original, scan_csv, require_import_space
+from app.data_sources.duckdb_engine.data_engine import DuckDBDataEngine
+from app.data_sources.csv_tools.csv_import import CSVImportError, ImportReport, copy_original, scan_csv, require_import_space
 from app.data_sources.postgresql_adapter import PostgreSQLAdapter
 from app.contracts.v1 import Profile, Provenance, QueryResult
 from app.models import CSVVersion, DataSource, SourceSchema, utc_now

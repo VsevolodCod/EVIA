@@ -1,7 +1,6 @@
 """Acceptance cases for a lossless, versioned CSV import."""
 
 from io import BytesIO
-from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 from threading import Barrier, Event
 
@@ -117,7 +116,7 @@ def test_profile_can_open_while_a_readonly_query_is_finishing(service, monkeypat
 def test_header_spacing_is_preserved_and_case_duplicate_is_reported(service):
     source = service.register_csv("spaces.csv", b" a ,b\n1,2\n")
     assert service.preview(source.source_id) == [{" a ": "1", "b": "2"}]
-    from app.csv_import import CSVImportError
+    from app.data_sources.csv_tools.csv_import import CSVImportError
     with pytest.raises(CSVImportError, match="duplicate column names"):
         service.register_csv("duplicate.csv", b"a,A\n1,2\n")
 
@@ -147,7 +146,7 @@ def test_mixed_tail_and_ambiguous_date_are_explicit_in_full_file_report(service)
 
 
 def test_bad_row_has_counted_rejection_and_no_published_source(service):
-    from app.csv_import import CSVImportError
+    from app.data_sources.csv_tools.csv_import import CSVImportError
 
     with pytest.raises(CSVImportError) as caught:
         service.register_csv("bad.csv", b"id;value\n001;10\n002;20;extra\n")
@@ -294,7 +293,7 @@ def test_legacy_postgresql_profile_is_explicitly_sampled_with_a_stable_snapshot(
 
 
 def test_invalid_reimport_leaves_previous_snapshot_and_catalog_untouched(service):
-    from app.csv_import import CSVImportError
+    from app.data_sources.csv_tools.csv_import import CSVImportError
 
     first = service.register_csv("sales.csv", b"id;amount\n001;10\n")
     with pytest.raises(CSVImportError):
@@ -319,7 +318,7 @@ def test_stale_reimport_cannot_replace_a_newer_version(service):
 
 
 def test_concurrent_reimports_do_not_lose_a_successful_snapshot(service, monkeypatch):
-    from app.csv_import import CSVImportError
+    from app.data_sources.csv_tools.csv_import import CSVImportError
 
     first = service.register_csv("sales.csv", b"id;amount\n001;10\n")
     monkeypatch.setattr(service.data_engine, "import_csv", lambda *args, **kwargs: None)
@@ -352,7 +351,7 @@ def test_concurrent_reimports_do_not_lose_a_successful_snapshot(service, monkeyp
 
 
 def test_upload_size_limit_is_reported_and_cleans_partial_copy(service, monkeypatch):
-    from app import csv_import
+    from app.data_sources.csv_tools import csv_import
 
     monkeypatch.setattr(csv_import, "MAX_CSV_BYTES", 15)
     with pytest.raises(csv_import.CSVImportError) as caught:
@@ -387,7 +386,7 @@ def test_missing_typed_table_is_rebuilt_from_raw_even_without_normalized_copy(se
 def test_low_storage_rejects_reimport_and_preserves_current_snapshot(service, monkeypatch):
     import shutil
     from types import SimpleNamespace
-    from app.csv_import import CSVImportError
+    from app.data_sources.csv_tools.csv_import import CSVImportError
 
     original = b"id,amount\n1,10\n"
     source = service.register_csv("sales.csv", original)
@@ -406,7 +405,7 @@ def test_low_storage_rejects_reimport_and_preserves_current_snapshot(service, mo
 def test_disk_full_during_copy_has_storage_error_and_removes_partial_file(service, monkeypatch):
     import errno
     import app.source_service as module
-    from app.csv_import import CSVImportError
+    from app.data_sources.csv_tools.csv_import import CSVImportError
 
     def interrupted_copy(stream, target):
         target.write_bytes(b"partial")
@@ -423,7 +422,7 @@ def test_disk_full_during_copy_has_storage_error_and_removes_partial_file(servic
 
 def test_disk_full_during_materialization_preserves_previous_version(service, monkeypatch):
     import duckdb
-    from app.csv_import import CSVImportError
+    from app.data_sources.csv_tools.csv_import import CSVImportError
 
     source = service.register_csv("sales.csv", b"id\n1\n")
     before = set(service.data_dir.glob("*.csv"))
@@ -441,7 +440,7 @@ def test_disk_full_during_materialization_preserves_previous_version(service, mo
 def test_known_upload_size_is_checked_before_writing_original(tmp_path, monkeypatch):
     import shutil
     from types import SimpleNamespace
-    from app.csv_import import copy_original, CSVImportError, IMPORT_RESERVE_BYTES
+    from app.data_sources.csv_tools.csv_import import copy_original, CSVImportError, IMPORT_RESERVE_BYTES
 
     target = tmp_path / "new.csv"
     payload = b"id\n1\n"
@@ -458,7 +457,7 @@ def test_known_upload_size_is_checked_before_writing_original(tmp_path, monkeypa
 def test_streaming_upload_checks_capacity_between_chunks(tmp_path, monkeypatch):
     import shutil
     from types import SimpleNamespace
-    from app.csv_import import copy_original, CSVImportError, IMPORT_RESERVE_BYTES
+    from app.data_sources.csv_tools.csv_import import copy_original, CSVImportError, IMPORT_RESERVE_BYTES
 
     class NonSeekable(BytesIO):
         def seekable(self):

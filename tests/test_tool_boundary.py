@@ -46,3 +46,17 @@ def test_tool_arguments_are_checked_recursively_before_handler():
         assert "SECRET_CANARY" not in result.model_dump_json()
     assert not called
     assert registry.execute("build", {"definition": {"source_id": "s", "limit": 1}}).ok
+
+
+def test_validation_diagnostics_describe_schema_without_echoing_bad_values():
+    registry = ToolRegistry()
+    registry.register(ToolDefinition(
+        name="probe", description="test", parameters={"limit": {"type": "integer"}},
+        required=["limit"], handler=lambda **_: None,
+    ))
+    result = registry.execute("probe", {"limit": "SECRET_CANARY"})
+    assert result.error == "INVALID_TOOL_ARGUMENTS"
+    assert result.data == {"validation_errors": [{
+        "schema_path": ["properties", "limit", "type"], "validator": "type",
+    }]}
+    assert "SECRET_CANARY" not in result.model_dump_json()

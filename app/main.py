@@ -18,20 +18,20 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 
-from app.auth import AuthStore
-from app.auth_routes import router as auth_router, COOKIE
-from app.ownership import current_owner
+from app.core.auth import AuthStore
+from app.core.auth import router as auth_router, COOKIE
+from app.core.auth import current_owner
 
 from app.agent import AgentRuntime
 from app.contracts.v1 import AgentResponse
 from app.config import PROJECT_ROOT, get_settings
-from app.csv_import import CSVImportError
+from app.data_sources.csv_tools.csv_import import CSVImportError
 from app.data_sources.postgresql_adapter import PostgresSourceError, PostgreSQLAdapter
 from app.db import create_chat_database, initialize_chat_database
 from app.llm.factory import create_llm_provider
-from app.models import AnalysisPayload, AskRequest, AskResponse, ChatMessage, DataSource, CSVVersion, Chat, ChatCreateRequest, ChatSummary, \
+from app.models import AnalysisPayload, AskRequest, ChatMessage, DataSource, CSVVersion, Chat, ChatCreateRequest, ChatSummary, \
     ChatHistoryResponse
-from app.retry_agent import LLMRetryPolicy
+from app.agent_additions.retry_agent import LLMRetryPolicy
 from app.schema_catalog import SchemaCatalog
 from app.source_service import SourceDeletionStorageError, SourceService
 from app.tools import build_tool_registry
@@ -367,6 +367,7 @@ async def ask_agent(body: AskRequest):
         return await agent.ask(
             question=body.question,
             source_ids=body.source_ids,
+            **({"response_language": body.response_language} if body.response_language != "ru" else {}),
             **({"dashboard_id": body.dashboard_id} if body.dashboard_id is not None else {}),
         )
 
@@ -431,6 +432,7 @@ async def chat_agent(
         answer = await agent.ask(
             question=body.question,
             source_ids=[chat.source_id],
+            **({"response_language": body.response_language} if body.response_language != "ru" else {}),
             **({"dashboard_id": body.dashboard_id} if body.dashboard_id is not None else {}),
             history=chat.messages[:-1],
         )

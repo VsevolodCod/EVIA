@@ -135,26 +135,31 @@ def test_timeout_interrupts_query_and_next_query_succeeds(tmp_path):
         catalog.close()
 
 
-def test_query_tool_exposes_only_guarded_executor(service_and_source):
+def test_chart_tool_uses_guarded_executor_without_exposing_raw_sql(service_and_source, monkeypatch):
     from app.tools import build_tool_registry
 
     service, source = service_and_source
     registry = build_tool_registry(service.catalog, service)
-    table = service.data_engine.table_name(source)
-
-    allowed = registry.execute(
-        "query_data",
-        {"source_id": source.source_id, "sql": 'SELECT COUNT(*) AS "count" FROM source'},
-    )
+    from unittest.mock import Mock
+    query = Mock(wraps=service.query)
+    monkeypatch.setattr(service, 'query', query)
+    allowed = registry.execute("build_chart", {"definition": {
+        "type": "kpi", "title": "Count", "aggregate": "count",
+        "field": {"source_id": source.source_id, "field": "id"},
+    }})
     blocked = registry.execute(
         "query_data",
         {"source_id": source.source_id, "sql": "SELECT * FROM read_csv_auto('/etc/passwd')"},
     )
 
     assert allowed.ok is True
-    assert allowed.data.rows == [[3]]
+    assert allowed.data['success']
+    assert allowed.data['result']['value'] == 3
+    query.assert_called_once()
+    assert query.call_args.args[0] == source.source_id
     assert blocked.ok is False
-    assert blocked.error == "QUERY_REJECTED"
+    assert blocked.error == "Unknown tool"
+    assert 'query_data' not in {tool['function']['name'] for tool in registry.descriptions()}
 
 
 def test_result_byte_budget_is_enforced_before_tool_output(service_and_source):

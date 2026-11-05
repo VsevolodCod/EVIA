@@ -11,7 +11,7 @@
 Проверка девяти исходных файлов воспроизводится локально:
 
 ```bash
-python -m scripts.verify_csv_imports '/path/to/прогон таски 5' \
+python -m scripts.verifiers.verify_csv_imports '/path/to/прогон таски 5' \
   --report /tmp/evia-csv-audit.json \
   --summary docs/issue-7-originals-audit.json
 ```

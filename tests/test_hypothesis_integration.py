@@ -7,14 +7,15 @@ from app.source_service import SourceService
 from app.tools.registration import build_tool_registry
 
 
-def test_hypothesis_tools_use_simple_model_contract_and_preserve_sql_tool(tmp_path):
+def test_hypothesis_tools_use_simple_model_contract_without_raw_sql(tmp_path):
     catalog = SchemaCatalog(tmp_path / "catalog.db")
     sources = SourceService(tmp_path / "data", catalog)
     try:
         registry = build_tool_registry(catalog, sources)
         tools = {item["function"]["name"]: item["function"]["parameters"]
                  for item in registry.descriptions()}
-        assert "query_data" in tools
+        assert "query_data" not in tools
+        assert "build_chart" in tools
         for name in ("compare_groups", "analyze_relationship"):
             assert name in tools
             assert "$ref" not in str(tools[name])

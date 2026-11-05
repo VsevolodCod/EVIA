@@ -40,3 +40,16 @@
 .account-popover[data-theme="dark"] :is(.account-photo-upload,.account-photo-actions button,.account-popover form button,.account-popover form input) { background: #223840; color: #e5f0ef; border-color: #315057; }
 .account-popover[data-theme="dark"] .account-avatar-large { background: #164b40; color: #e5f0ef; }
 .account-popover[data-theme="dark"] form { border-color: #315057; }
+.auth-page[data-theme="dark"],.auth-loading[data-theme="dark"]{color:#e5f0ef;background:radial-gradient(circle at 15% 20%,#164b40,transparent 36%),#12232a;color-scheme:dark}
+.auth-page[data-theme="dark"] .auth-brand{color:#73d5a7}
+.auth-page[data-theme="dark"] .auth-card{background:#192a31;color:#e5f0ef;border-color:#315057;box-shadow:0 20px 60px #0005}
+.auth-page[data-theme="dark"] .auth-card h1{color:#e5f0ef}
+.auth-page[data-theme="dark"] .auth-tabs{background:#12232a}
+.auth-page[data-theme="dark"] .auth-card input,.auth-page[data-theme="dark"] .auth-language select{background:#20363d;color:#e5f0ef;border-color:#456168;color-scheme:dark}
+.auth-page[data-theme="dark"] .auth-hint{color:#a8bcba}
+.auth-page[data-theme="dark"] .auth-language{position:absolute;top:20px;right:24px;display:flex;align-items:center;gap:8px;color:#b4c4c4;font-size:13px}
+.auth-page:not([data-theme="dark"]) .auth-language{position:absolute;top:20px;right:24px;display:flex;align-items:center;gap:8px;color:#60766b;font-size:13px}
+.auth-language select{padding:8px 10px;border:1px solid #d8e5dc;border-radius:9px;background:#fff;color:#203d32}
+.account-popover[data-theme="dark"] .account-logout{background:#342421;color:#ffd8d1;border-color:#704642}
+.account-popover[data-theme="dark"] :is(.account-photo-upload,.account-photo-actions button,.account-popover form button):hover{background:#29473e}
+.account-popover[data-theme="dark"] .account-heading button:hover{background:#20363d}

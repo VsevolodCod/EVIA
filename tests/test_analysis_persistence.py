@@ -205,9 +205,9 @@ async def test_chat_analysis_roundtrip_restart_source_changes_and_conflicts(tmp_
             if messages[-1].role == 'tool':
                 return LLMResponse(content='Сумма рассчитана по выбранному источнику.')
             from app.models import ToolCall
-            return LLMResponse(tool_calls=[ToolCall(name='query_data', arguments={
-                'source_id': source.source_id,
-                'sql': 'SELECT SUM(TRY_CAST(revenue AS BIGINT)) AS total FROM source',
+            return LLMResponse(tool_calls=[ToolCall(name='build_chart', arguments={
+                'definition': {'type': 'kpi', 'title': 'Total revenue', 'aggregate': 'sum',
+                               'field': {'source_id': source.source_id, 'field': 'revenue'}},
             })], finish_reason='tool_calls')
 
     catalog = SchemaCatalog(tmp_path / 'catalog.db')
@@ -228,10 +228,12 @@ async def test_chat_analysis_roundtrip_restart_source_changes_and_conflicts(tmp_
         result = await client.post(endpoint, json={'question': 'Total?', 'source_ids': [source.source_id]})
         assert result.status_code == 200
         answer = result.json()
-        assert answer['results'][0]['rows'] == [[300]]
+        calculation = answer['tool_results'][0]['data']
+        assert calculation['success']
+        assert calculation['result']['value'] == 300
         assert answer['timing']['elapsed_ms'] > 0
-        assert answer['tool_results'][0]['tool_name'] == 'query_data'
-        assert answer['results'][0]['provenance']
+        assert answer['tool_results'][0]['tool_name'] == 'build_chart'
+        assert calculation['result']['provenance']
         history = (await client.get(f'/chats/{chat_id}')).json()
         assert history['source_id'] == source.source_id
         assert history['messages'][0]['analysis_payload'] is None
@@ -249,8 +251,9 @@ async def test_chat_analysis_roundtrip_restart_source_changes_and_conflicts(tmp_
             sources.register_csv('sales.csv', b'month,revenue\n2026-01,999\n', source_id=source.source_id)
             followup = await client.post(endpoint, json={'question': 'Again?'})
             assert followup.status_code == 200
-            assert followup.json()['results'][0]['rows'] == [[999]]
-            assert followup.json()['results'][0]['provenance'] != answer['results'][0]['provenance']
+            recalculated = followup.json()['tool_results'][0]['data']['result']
+            assert recalculated['value'] == 999
+            assert recalculated['provenance'] != calculation['result']['provenance']
             assert all('analysis_payload' not in message for message in provider.histories[-1])
             # Removing a source still permits archived history and original snapshot reads.
             from sqlalchemy import delete

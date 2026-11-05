@@ -1,18 +1,21 @@
 import { useEffect, useState } from "react";
 import { api, errorMessage, type SavedDashboardInfo } from "../../api";
 import { ErrorNotice } from "../../components";
+import { useLanguage } from "../../i18n";
 import { SavedDashboard } from "./SavedDashboard";
 import "./dashboardGallery.css";
 
 type GalleryItem = SavedDashboardInfo["dashboard"] & { origin_chat_id?: string | null };
 
-function chartsText(count: number) {
+function chartsText(count: number, locale: "ru" | "en") {
+  if (locale === "en") return `${count} ${count === 1 ? "chart" : "charts"}`;
   const remainder = count % 100;
   const digit = remainder % 10;
   return `${count} ${remainder > 10 && remainder < 20 ? "графиков" : digit === 1 ? "график" : digit > 1 && digit < 5 ? "графика" : "графиков"}`;
 }
 
 export function DashboardGallery({ onClose, onAttach, onOpenOrigin }: { onClose: () => void; onAttach?: (id: string, title: string) => void; onOpenOrigin?: (chatId: string) => boolean }) {
+  const { t, locale } = useLanguage();
   const [revision, setRevision] = useState(0);
   const [items, setItems] = useState<GalleryItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -53,6 +56,12 @@ export function DashboardGallery({ onClose, onAttach, onOpenOrigin }: { onClose:
     return () => controller.abort();
   }, [revision]);
 
+  useEffect(() => {
+    const syncSelection = () => setSelectedId(new URLSearchParams(window.location.search).get("dashboard"));
+    window.addEventListener("popstate", syncSelection);
+    return () => window.removeEventListener("popstate", syncSelection);
+  }, []);
+
   const selected = items.find((item) => item.id === selectedId);
   function select(id: string) {
     setSelectedId(id);
@@ -81,33 +90,33 @@ export function DashboardGallery({ onClose, onAttach, onOpenOrigin }: { onClose:
       setDeleting(false);
     }
   }
-  return <section className="dashboard-gallery" aria-label="Сохранённые отчёты">
+  return <section className="dashboard-gallery" aria-label={t("Сохранённые отчёты")}>
     <header className="dashboard-gallery-heading">
-      <div><span>Рабочее пространство</span><h1>Сохранённые отчёты</h1><p>Графики и показатели, которые EVIA сохранила после анализа.</p></div>
-      <div className="dashboard-gallery-actions"><button type="button" onClick={onClose}>К источнику</button><button type="button" onClick={() => setRevision((value) => value + 1)}>Обновить список</button></div>
+      <div><span>{t("Рабочее пространство")}</span><h1>{t("Сохранённые отчёты")}</h1><p>{t("Графики и показатели, которые EVIA сохранила после анализа.")}</p></div>
+      <div className="dashboard-gallery-actions"><button type="button" onClick={onClose}>{t("К источнику")}</button><button type="button" onClick={() => setRevision((value) => value + 1)}>{t("Обновить список")}</button></div>
     </header>
-    {error && <ErrorNotice message={error} onRetry={() => setRevision((value) => value + 1)} label="Повторить загрузку отчётов" />}
-    {loading && <p className="dashboard-gallery-status" role="status">Загружаем отчёты…</p>}
-    {!loading && !error && !items.length && <div className="dashboard-gallery-empty"><h2>Пока нет сохранённых отчётов</h2><p>Попросите EVIA построить дашборд по выбранному источнику — готовый отчёт появится здесь.</p></div>}
-    {items.length > 0 && <div className="dashboard-gallery-list" aria-label="Список отчётов">
+    {error && <ErrorNotice message={error} onRetry={() => setRevision((value) => value + 1)} label={t("Повторить загрузку отчётов")} />}
+    {loading && <p className="dashboard-gallery-status" role="status">{t("Загружаем отчёты…")}</p>}
+    {!loading && !error && !items.length && <div className="dashboard-gallery-empty"><h2>{t("Пока нет сохранённых отчётов")}</h2><p>{t("Попросите EVIA построить дашборд по выбранному источнику — готовый отчёт появится здесь.")}</p></div>}
+    {items.length > 0 && <div className="dashboard-gallery-list" aria-label={t("Список отчётов")}>
       {items.map((item) => <button key={item.id} type="button" className={selectedId === item.id ? "selected" : ""} aria-pressed={selectedId === item.id} onClick={() => select(item.id)}>
-        <span className="dashboard-gallery-tile" aria-hidden="true">▥</span><span><strong>{item.title}</strong><small>{chartsText(item.charts.length)}{item.summary ? ` · ${item.summary}` : ""}</small></span><span aria-hidden="true">→</span>
+        <span className="dashboard-gallery-tile" aria-hidden="true">▥</span><span><strong>{item.title}</strong><small>{chartsText(item.charts.length, locale)}{item.summary ? ` · ${item.summary}` : ""}</small></span><span aria-hidden="true">→</span>
       </button>)}
     </div>}
     {selected && <div className="dashboard-gallery-open">
       <div className="dashboard-gallery-open-actions">
-        {onAttach && <button type="button" className="dashboard-gallery-attach" onClick={() => onAttach(selected.id, selected.title)}>Обсудить этот отчёт в чате →</button>}
+        {onAttach && <button type="button" className="dashboard-gallery-attach" onClick={() => onAttach(selected.id, selected.title)}>{t("Обсудить этот отчёт в чате →")}</button>}
         {selected.origin_chat_id && onOpenOrigin && <button type="button" onClick={() => {
-          if (!onOpenOrigin(selected.origin_chat_id!)) setError("Исходный диалог больше не доступен.");
-        }}>Открыть исходный диалог</button>}
-        <button type="button" onClick={() => setDeleteId(selected.id)}>Удалить отчёт</button>
+          if (!onOpenOrigin(selected.origin_chat_id!)) setError(t("Исходный диалог больше не доступен."));
+        }}>{t("Открыть исходный диалог")}</button>}
+        <button type="button" onClick={() => setDeleteId(selected.id)}>{t("Удалить отчёт")}</button>
       </div>
       <SavedDashboard id={selected.id} editable />
     </div>}
-    {deleteId && <div className="dashboard-gallery-confirm-backdrop"><div role="dialog" aria-modal="true" aria-label="Удалить отчёт" className="dashboard-gallery-confirm">
-      <h2>Удалить отчёт?</h2><p>Отчёт исчезнет из списка. Это действие нельзя отменить.</p>
-      <div><button type="button" disabled={deleting} onClick={() => setDeleteId(null)}>Отмена</button>
-        <button type="button" disabled={deleting} onClick={() => void removeSelected()}>{deleting ? "Удаляем…" : "Удалить"}</button></div>
+    {deleteId && <div className="dashboard-gallery-confirm-backdrop"><div role="dialog" aria-modal="true" aria-label={t("Удалить отчёт")} className="dashboard-gallery-confirm">
+      <h2>{t("Удалить отчёт?")}</h2><p>{t("Отчёт исчезнет из списка. Это действие нельзя отменить.")}</p>
+      <div><button type="button" disabled={deleting} onClick={() => setDeleteId(null)}>{t("Отмена")}</button>
+        <button type="button" disabled={deleting} onClick={() => void removeSelected()}>{deleting ? t("Удаляем…") : t("Удалить")}</button></div>
     </div></div>}
   </section>;
 }

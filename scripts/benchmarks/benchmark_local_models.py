@@ -1,7 +1,7 @@
 """Compare at least two downloaded Ollama models on the public EVIA corpus.
 
 Example:
-  python -m scripts.benchmark_local_models qwen2.5-coder:7b qwen2.5-coder:3b \
+  python -m scripts.benchmarks.benchmark_local_models qwen2.5-coder:7b qwen2.5-coder:3b \
     --output /tmp/evia-model-benchmark.json --markdown /tmp/evia-model-benchmark.md
 """
 
@@ -20,14 +20,14 @@ from typing import Sequence
 
 from app.agent import AgentRuntime
 from app.config import Settings
-from app.evaluation import load_corpus
+from scripts.benchmarks.tools.evaluation import load_corpus
 from app.llm.factory import create_llm_provider
-from app.model_benchmark import BenchmarkReport, BenchmarkRunner, OllamaMetadataClient
+from scripts.benchmarks.tools.model_benchmark import BenchmarkReport, BenchmarkRunner, OllamaMetadataClient
 from app.source_service import SourceService
 from app.tools import build_tool_registry
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CORPUS = ROOT / "evals" / "v1"
 
 

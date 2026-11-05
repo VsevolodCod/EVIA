@@ -40,7 +40,7 @@ def test_validation_error_is_an_invalid_json_plan():
 
 Run: `pytest tests/test_model_benchmark.py -q`
 
-Expected: failure because `app.model_benchmark` does not exist.
+Expected: failure because `scripts.benchmarks.tools.model_benchmark` does not exist.
 
 - [ ] **Step 3: Implement immutable `CaseOutcome`, `RunSummary`, `score_response`, and `summarize_runs`**
 
@@ -58,12 +58,12 @@ class CaseOutcome:
     elapsed_ms: float
 
 def score_response(case: EvaluationCase, response: AgentResponse, mode: str) -> CaseOutcome:
-    # computed: match columns/rows using Decimal tolerance from app.evaluation
+    # computed: match columns/rows using Decimal tolerance from scripts.benchmarks.tools.evaluation
     # safe: only status=clarification and analysis.sql is None succeeds
     # VALIDATION_ERROR and unavailable/incomplete outputs are never JSON-valid
 ```
 
-Expose a non-private `rows_match` helper from `app.evaluation` instead of duplicating Decimal/NULL/order comparison. Count all outcomes in EX and JSON denominators, count SQL only for computed cases, and calculate percentiles with nearest-rank semantics for deterministic one-item samples.
+Expose a non-private `rows_match` helper from `scripts.benchmarks.tools.evaluation` instead of duplicating Decimal/NULL/order comparison. Count all outcomes in EX and JSON denominators, count SQL only for computed cases, and calculate percentiles with nearest-rank semantics for deterministic one-item samples.
 
 - [ ] **Step 4: Run the focused tests and confirm they pass**
 
@@ -139,7 +139,7 @@ git commit -m "feat(evals): run versioned corpus against local models"
 ### Task 3: CLI, reports, and operational documentation
 
 **Files:**
-- Create: `scripts/benchmark_local_models.py`
+- Create: `scripts/benchmarks/benchmark_local_models.py`
 - Modify: `README.md`
 - Modify: `docs/local-llm-evaluation-2026-10-20.md`
 - Test: `tests/test_model_benchmark.py`
@@ -161,7 +161,7 @@ def test_cli_writes_versioned_json_and_short_markdown_report(tmp_path, monkeypat
 
 Run: `pytest tests/test_model_benchmark.py -q`
 
-Expected: FAIL because `scripts.benchmark_local_models` does not exist.
+Expected: FAIL because `scripts.benchmarks.benchmark_local_models` does not exist.
 
 - [ ] **Step 3: Add an argparse CLI and renderer**
 
@@ -185,7 +185,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit CLI and docs**
 
 ```bash
-git add scripts/benchmark_local_models.py README.md docs/local-llm-evaluation-2026-10-20.md tests/test_model_benchmark.py
+git add scripts/benchmarks/benchmark_local_models.py README.md docs/local-llm-evaluation-2026-10-20.md tests/test_model_benchmark.py
 git commit -m "feat(evals): publish reproducible local model benchmark"
 ```
 
@@ -203,7 +203,7 @@ Expected: all non-optional tests pass.
 
 - [ ] **Step 2: Run the documented benchmark against two installed models**
 
-Run: `LLM_PROVIDER=ollama THINKING=0 MAX_TOKENS_G=512 TIMEOUT=120 python -m scripts.benchmark_local_models qwen2.5-coder:7b qwen2.5-coder:3b --output /tmp/evia-model-benchmark.json --markdown /tmp/evia-model-benchmark.md`
+Run: `LLM_PROVIDER=ollama THINKING=0 MAX_TOKENS_G=512 TIMEOUT=120 python -m scripts.benchmarks.benchmark_local_models qwen2.5-coder:7b qwen2.5-coder:3b --output /tmp/evia-model-benchmark.json --markdown /tmp/evia-model-benchmark.md`
 
 Expected: both artifacts record the same corpus version, every denominator, cold/warm modes, timing percentiles and per-case failures. The runner may exit non-zero if a model fails; record that finding rather than hiding it.
 
@@ -217,6 +217,6 @@ Expected: no matches.
 
 ```bash
 git status --short
-git add app/evaluation.py app/model_benchmark.py scripts/benchmark_local_models.py tests/test_model_benchmark.py README.md docs/local-llm-evaluation-2026-10-20.md
+git add app/evaluation.py app/model_benchmark.py scripts/benchmarks/benchmark_local_models.py tests/test_model_benchmark.py README.md docs/local-llm-evaluation-2026-10-20.md
 git commit -m "test(evals): verify local model benchmark"
 ```

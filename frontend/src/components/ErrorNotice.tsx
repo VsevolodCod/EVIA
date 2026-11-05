@@ -1,4 +1,5 @@
 import { Icon } from "./Icon";
+import { useLanguage } from "../i18n";
 
 export function ErrorNotice({
   message,
@@ -9,13 +10,14 @@ export function ErrorNotice({
   onRetry?: () => void;
   label?: string;
 }) {
+  const { t } = useLanguage();
   return (
     <div className="error-notice" role="alert">
-      <p>{message}</p>
+      <p>{t(message)}</p>
       {onRetry && (
         <button className="text-button" onClick={onRetry}>
           <Icon name="refresh" />
-          {label}
+          {t(label)}
         </button>
       )}
     </div>

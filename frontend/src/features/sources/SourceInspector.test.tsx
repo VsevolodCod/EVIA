@@ -150,10 +150,12 @@ function Workspace({
   current = source,
   entry,
   initial = "overview" as View,
+  onOpenChat,
 }: {
   current?: Source;
   entry?: Entry;
   initial?: View;
+  onOpenChat?: () => void;
 }) {
   const [view, setView] = useState<View>(initial);
   return (
@@ -162,6 +164,7 @@ function Workspace({
       entry={entry}
       view={view}
       setView={setView}
+      onOpenChat={onOpenChat}
     />
   );
 }
@@ -187,7 +190,39 @@ it("places the source identity above its sections and keeps results contextual",
   const navigation = container.querySelector(".analytics-tabs");
   expect(navigation).not.toBeNull();
   expect(title.compareDocumentPosition(navigation!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  expect(screen.queryByRole("button", { name: "Результат анализа" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Результат анализа" })).toBeInTheDocument();
+});
+
+it("shows a polished empty result state and opens chat when no analysis exists", async () => {
+  setup();
+  const onOpenChat = vi.fn();
+  const { container } = render(<Workspace onOpenChat={onOpenChat} />);
+  await screen.findByRole("heading", { name: "Обзор источника" });
+
+  fireEvent.click(screen.getByRole("button", { name: "Результат анализа" }));
+
+  expect(await screen.findByRole("heading", { name: "Пока нет сделанных анализов" })).toBeInTheDocument();
+  expect(screen.queryByText("Задайте вопрос EVIA в чате — результат появится здесь после выполнения анализа.")).not.toBeInTheDocument();
+  const emptyState = container.querySelector(".analysis-empty-no-result");
+  expect(emptyState?.firstElementChild).toHaveClass("analysis-empty-mascot");
+  expect(emptyState?.querySelector(".analysis-empty-content")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Перейти в чат с EVIA" }));
+  expect(onOpenChat).toHaveBeenCalledOnce();
+});
+
+it("groups source deletion and refresh together beside the source title", async () => {
+  setup();
+  const { container } = render(<SourceInspector
+    source={source}
+    view="overview"
+    setView={() => {}}
+    onDelete={() => Promise.resolve()}
+  />);
+  await screen.findByRole("heading", { name: "Обзор источника" });
+  const actions = container.querySelector(".source-header-actions");
+  expect(actions).not.toBeNull();
+  expect(within(actions as HTMLElement).getByRole("button", { name: "Удалить CSV" })).toBeInTheDocument();
+  expect(within(actions as HTMLElement).getByRole("button", { name: /Обновить/ })).toBeInTheDocument();
 });
 
 it("shows import accounting and allows replacing a CSV with a new snapshot", async () => {

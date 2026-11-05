@@ -11,7 +11,7 @@ fixtures без пользовательских или конкурсных с�
 по колонкам, порядку строк, NULL и числовому допуску.
 
 ```sh
-python -m scripts.verify_eval_corpus --output /tmp/evia-eval-corpus.json
+python -m scripts.verifiers.verify_eval_corpus --output /tmp/evia-eval-corpus.json
 ```
 
 Ненулевой код означает несовпадение SHA-256 fixture, неприемлемый SQL или

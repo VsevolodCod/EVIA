@@ -73,9 +73,9 @@ def test_real_workspace_keyboard_mobile_and_safe_markdown(server):
             page.on('request', lambda request: external.append(request.url) if not request.url.startswith(server + '/') else None)
             page.goto(server)
             expect(page).to_have_title('EVIA')
-            expect(page.get_by_text('Нет источников', exact=True)).to_be_visible()
+            expect(page.get_by_text('Пока нет подключённых источников', exact=True)).to_be_visible()
             page.keyboard.press('Tab')
-            expect(page.get_by_role('link', name='Перейти к данным')).to_be_focused()
+            expect(page.get_by_role('link', name='Перейти к содержимому')).to_be_focused()
             upload = page.get_by_role('button', name='Выбрать CSV', exact=True)
             upload.focus()
             with page.expect_file_chooser() as chooser:
@@ -89,6 +89,7 @@ def test_real_workspace_keyboard_mobile_and_safe_markdown(server):
             expect(page.get_by_role('heading', name='Структура источника')).to_be_visible()
             page.get_by_role('button', name='Столбцы', exact=True).click()
             expect(page.get_by_role('heading', name='Столбцы данных')).to_be_visible()
+            page.get_by_role('navigation', name='Навигация рабочего пространства').get_by_role('button', name='Чат').click()
             question = page.get_by_role('textbox', name='Ваш вопрос')
             first_question = 'Что есть в данных? ' * 12
             question.fill(first_question)
@@ -97,7 +98,6 @@ def test_real_workspace_keyboard_mobile_and_safe_markdown(server):
             assert sent.value.post_data_json == {'question': first_question.strip(), 'source_ids': [source_id]}
             chat_id = parse_qs(urlparse(sent.value.url).query)['chat_id'][0]
             expect(page.get_by_role('region', name='Ответ EVIA').get_by_text('Тестовый режим показал первые строки выбранного источника.', exact=False)).to_be_visible()
-            assert page.locator('.history-list').evaluate('(node) => node.scrollWidth <= node.clientWidth')
             page.get_by_role('button', name='Открыть результат', exact=True).click()
             expect(page.get_by_role('region', name='Таблица результата').get_by_text('0001', exact=True)).to_be_visible()
             page.get_by_text('Таблица и детали расчёта', exact=True).click()
@@ -105,8 +105,8 @@ def test_real_workspace_keyboard_mobile_and_safe_markdown(server):
             # Server source binding and the complete tool result survive without the old browser cache.
             page.evaluate("localStorage.removeItem('evia.chat-sources.v1')")
             page.reload()
-            page.get_by_role('button', name='sales', exact=True).click()
-            page.get_by_role('button', name=first_question.strip()).click()
+            page.get_by_role('navigation', name='Навигация рабочего пространства').get_by_role('button', name='Главная').click()
+            page.locator('.home-chat-list button').first.click()
             expect(page.get_by_role('region', name='Ответ EVIA').get_by_text('Тестовый режим показал первые строки выбранного источника.', exact=False)).to_be_visible()
             page.get_by_role('button', name='Открыть результат', exact=True).click()
             page.get_by_text('Таблица и детали расчёта', exact=True).click()
@@ -116,13 +116,15 @@ def test_real_workspace_keyboard_mobile_and_safe_markdown(server):
             page.emulate_media(reduced_motion='reduce')
             assert page.locator('.evia-mascot img').evaluate_all('(nodes) => nodes.every(n => getComputedStyle(n).animationName === "none")')
 
+            page.get_by_role('navigation', name='Навигация рабочего пространства').get_by_role('button', name='Главная').click()
             page.get_by_label('Загрузить CSV').set_input_files({
                 'name': 'second.csv', 'mimeType': 'text/csv', 'buffer': b'id,value\n0099,5\n'})
             expect(page.get_by_role('heading', name='second')).to_be_visible()
             page.get_by_role('button', name='Данные', exact=True).click()
             expect(page.get_by_role('region', name='Предпросмотр источника').get_by_text('0099')).to_be_visible()
             expect(page.get_by_text('Тестовый режим показал первые строки выбранного источника.', exact=False)).to_have_count(0)
-            page.get_by_role('button', name='sales', exact=True).click()
+            page.get_by_role('navigation', name='Навигация рабочего пространства').get_by_role('button', name='Главная').click()
+            page.locator('.home-chat-list button').first.click()
             expect(page.get_by_text('Тестовый режим показал первые строки выбранного источника.', exact=False)).to_be_visible()
 
             # Synthetic hostile response verifies browser rendering, not model quality.
@@ -143,7 +145,7 @@ def test_real_workspace_keyboard_mobile_and_safe_markdown(server):
             page.get_by_role('button', name='Открыть результат', exact=True).last.click()
             expect(page.get_by_text('Нет строк для отображения', exact=True)).to_be_visible()
             page.set_viewport_size({'width': 390, 'height': 844})
-            page.get_by_role('button', name='Чат').click()
+            page.get_by_role('navigation', name='Мобильная навигация').get_by_role('button', name='Чат').click()
             mobile_question = page.get_by_role('textbox', name='Ваш вопрос')
             mobile_question.scroll_into_view_if_needed()
             expect(mobile_question).to_be_visible()
@@ -175,7 +177,6 @@ def test_profile_overview_drilldown_search_and_responsive_layout(server):
             expect(page.get_by_role('heading', name='retail-demo')).to_be_visible()
             expect(page.locator('.kpi-grid .dashboard-card').first).to_contain_text('6')
             expect(page.get_by_text('Заполненность источника', exact=True)).to_be_visible()
-            expect(page.get_by_role('textbox', name='Ваш вопрос')).to_be_in_viewport()
             page.screenshot(path=str(artifacts / 'analytics-overview-desktop.png'), full_page=True)
             page.set_viewport_size({'width': 1440, 'height': 600})
             page.get_by_role('button', name='Собрать PDF-отчёт').click()
@@ -240,6 +241,7 @@ def test_profile_overview_drilldown_search_and_responsive_layout(server):
             page.screenshot(path=str(artifacts / 'analytics-quality-desktop.png'), full_page=True)
             page.get_by_role('button', name='Данные', exact=True).click()
             expect(page.get_by_role('region', name='Предпросмотр источника').get_by_text('1200', exact=True)).to_be_visible()
+            page.get_by_role('navigation', name='Навигация рабочего пространства').get_by_role('button', name='Чат').click()
             page.get_by_role('textbox', name='Ваш вопрос').fill('Какие данные доступны?')
             page.get_by_role('button', name='Отправить вопрос').click()
             page.get_by_role('button', name='Открыть результат', exact=True).click()
@@ -250,9 +252,11 @@ def test_profile_overview_drilldown_search_and_responsive_layout(server):
             page.screenshot(path=str(artifacts / 'analytics-result-desktop.png'), full_page=True)
             # Reload and choose the same persisted source: the overview uses the same real profile.
             page.reload()
+            page.get_by_role('navigation', name='Навигация рабочего пространства').get_by_role('button', name='Главная').click()
             page.get_by_role('button', name='retail-demo', exact=True).click()
             expect(page.locator('.kpi-grid .dashboard-card').first).to_contain_text('6')
             # New data must clear both search context and old profile immediately.
+            page.get_by_role('navigation', name='Навигация рабочего пространства').get_by_role('button', name='Главная').click()
             page.get_by_label('Загрузить CSV').set_input_files({
                 'name': 'second.csv', 'mimeType': 'text/csv', 'buffer': b'id\n1\n2\n',
             })

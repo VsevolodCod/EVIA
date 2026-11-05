@@ -122,7 +122,7 @@ def test_postgresql_executor_rejects_write_multistatement_and_external_functions
 
     from app.config import PostgresSettings
     from app.data_sources.postgresql_adapter import PostgreSQLAdapter
-    from app.postgresql_sql import PostgresQueryError
+    from app.data_sources.postgresql_tools.postgresql_sql import PostgresQueryError
 
     adapter = PostgreSQLAdapter(
         PostgresSettings(
@@ -260,12 +260,13 @@ async def test_postgresql_status_endpoint_is_secret_free_when_unconfigured():
     assert "postgresql://" not in response.text
 
 
-def test_query_tool_returns_only_postgresql_stable_error_code(tmp_path):
+def test_internal_postgresql_query_rejects_writes_without_exposing_raw_sql_tool(tmp_path):
     from app.config import PostgresSettings
     from app.data_sources.postgresql_adapter import PostgreSQLAdapter
     from app.schema_catalog import SchemaCatalog
     from app.source_service import SourceService
     from app.tools import build_tool_registry
+    from app.data_sources.postgresql_tools.postgresql_sql import PostgresQueryError
 
     source = PostgreSQLAdapter(
         PostgresSettings(
@@ -286,11 +287,14 @@ def test_query_tool_returns_only_postgresql_stable_error_code(tmp_path):
             )
         ))
         catalog.upsert_source(source)
+        with pytest.raises(PostgresQueryError) as rejected:
+            service.query(source.source_id, "DELETE FROM source")
+        assert rejected.value.code == "QUERY_REJECTED"
         result = build_tool_registry(catalog, service).execute(
             "query_data", {"source_id": source.source_id, "sql": "DELETE FROM source"}
         )
         assert result.ok is False
-        assert result.error == "QUERY_REJECTED"
+        assert result.error == "Unknown tool"
     finally:
         catalog.close()
 

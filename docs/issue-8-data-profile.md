@@ -72,7 +72,7 @@ ID или код по названию поля. Это гипотезы о гр
 тексты исключений или секреты.
 
 ```bash
-python -m scripts.verify_csv_profiles '/path/to/прогон таски 5' \
+python -m scripts.verifiers.verify_csv_profiles '/path/to/прогон таски 5' \
   --output docs/issue-8-originals-profile-audit.json
 ```
 
@@ -85,7 +85,7 @@ python -m scripts.verify_csv_profiles '/path/to/прогон таски 5' \
 
 ```bash
 python -m pytest -q tests/test_verify_csv_profiles.py
-python -m scripts.verify_csv_profiles '/Users/vsevolod/Desktop/program/Linza-BI/прогон таски 5' \
+python -m scripts.verifiers.verify_csv_profiles '/Users/vsevolod/Desktop/program/Linza-BI/прогон таски 5' \
   --output docs/issue-8-originals-profile-audit.json
 ```
 

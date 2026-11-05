@@ -465,10 +465,10 @@ export const api = {
     if (before !== undefined) query.set("before", String(before));
     return request(`/chats/${encodeURIComponent(chatId)}?${query}`, chatHistorySchema, { signal });
   },
-  chat: async (question: string, id: string, chatId: string, signal?: AbortSignal, dashboardId?: string) => {
+  chat: async (question: string, id: string, chatId: string, signal?: AbortSignal, dashboardId?: string, responseLanguage: "ru" | "en" = "ru") => {
     const result = await request(`/agent/chat?chat_id=${encodeURIComponent(chatId)}`, answerSchema, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question, source_ids: [id], ...(dashboardId ? { dashboard_id: dashboardId } : {}) }), signal,
+      body: JSON.stringify({ question, source_ids: [id], ...(dashboardId ? { dashboard_id: dashboardId } : {}), ...(responseLanguage === "en" ? { response_language: responseLanguage } : {}) }), signal,
     });
     if (result.chat_id !== chatId) throw new Error("Сервер вернул ответ другого диалога. Повторите запрос.");
     return result;

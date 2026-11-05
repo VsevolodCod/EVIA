@@ -1,6 +1,6 @@
 """Benchmark EVIA inside Railway with isolated synthetic data and the configured LLM.
 
-Run on Railway only: python -m scripts.benchmark_railway_agent
+Run on Railway only: python -m scripts.benchmarks.benchmark_railway_agent
 The script does not read or write user sources and never prints API credentials.
 """
 

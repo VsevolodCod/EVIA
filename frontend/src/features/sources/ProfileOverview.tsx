@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 import type { Profile } from "../../api";
 import { Icon } from "../../components/Icon";
+import { useLanguage } from "../../i18n";
 import {
   numberText,
   percentText,
@@ -21,33 +22,33 @@ export function ProfileOverview({
   onQuality: () => void;
   onColumns: () => void;
 }) {
+  const { t } = useLanguage();
   return (
     <div className="analytics-section">
       <div className="analytics-title">
         <div>
-          <span className="analytics-kicker">ДАННЫЕ В ФОКУСЕ</span>
-          <h2>Обзор данных</h2>
+          <span className="analytics-kicker">{t("ДАННЫЕ В ФОКУСЕ")}</span>
+          <h2>{t("Обзор данных")}</h2>
         </div>
         <span className="analytics-badge">
-          <Icon name="check" size={14} /> Профиль рассчитан
+          <Icon name="check" size={14} /> {t("Профиль рассчитан")}
         </span>
       </div>
       {profile.sample_size === 0 && (
-        <p className="analytics-notice">В выборке нет строк</p>
+        <p className="analytics-notice">{t("В выборке нет строк")}</p>
       )}
       {model.profiledCount < model.fields.length && (
         <p className="analytics-notice">
-          Профиль доступен для {model.profiledCount} из {model.fields.length}{" "}
-          столбцов. Показатели рассчитаны только по ним.
+          {t("Профиль доступен для")} {model.profiledCount} {t("из")} {model.fields.length} {t("столбцов. Показатели рассчитаны только по ним.")}
         </p>
       )}
       <div className="analytics-grid">
         <section
           className="insight-card completeness-card"
-          aria-label="Заполненность выборки"
+          aria-label={t("Заполненность выборки")}
         >
-          <h3>Заполненность</h3>
-          <p className="analytics-caption">Ячейки в выборке</p>
+          <h3>{t("Заполненность")}</h3>
+          <p className="analytics-caption">{t("Ячейки в выборке")}</p>
           <div className="completeness-body">
             <div
               className="completeness-ring"
@@ -59,32 +60,32 @@ export function ProfileOverview({
             >
               <div>
                 <strong>{percentText(model.completeness)}</strong>
-                <small>заполнено</small>
+                <small>{t("заполнено")}</small>
               </div>
             </div>
             <dl className="chart-legend">
               <div>
                 <dt>
-                  <i className="legend-dot" />С данными
+                  <i className="legend-dot" />{t("С данными")}
                 </dt>
                 <dd>{numberText(model.filled)}</dd>
               </div>
               <div>
                 <dt>
                   <i className="legend-dot missing" />
-                  Пропуски
+                  {t("Пропуски")}
                 </dt>
                 <dd>{numberText(model.missing)}</dd>
               </div>
             </dl>
           </div>
           <button className="analytics-link" onClick={onQuality}>
-            Изучить качество <Icon name="chevron" size={14} />
+            {t("Изучить качество")} <Icon name="chevron" size={14} />
           </button>
         </section>
-        <section className="insight-card" aria-label="Типы столбцов">
-          <h3>Состав данных</h3>
-          <p className="analytics-caption">Типы определены по выборке</p>
+        <section className="insight-card" aria-label={t("Типы столбцов")}>
+          <h3>{t("Состав данных")}</h3>
+          <p className="analytics-caption">{t("Типы определены по выборке")}</p>
           <div className="type-composition" aria-hidden="true">
             {model.types.map((type, i) => (
               <span
@@ -102,22 +103,22 @@ export function ProfileOverview({
                   {type.label}
                 </dt>
                 <dd>
-                  {numberText(type.count)} <span>столб.</span>
+                  {numberText(type.count)} <span>{t("столб.")}</span>
                 </dd>
               </div>
             ))}
           </dl>
           {!model.fields.length && (
-            <p className="analytics-caption">В источнике нет столбцов.</p>
+            <p className="analytics-caption">{t("В источнике нет столбцов.")}</p>
           )}
         </section>
       </div>
       <section
         className="insight-card attention-card"
-        aria-label="На что обратить внимание"
+        aria-label={t("На что обратить внимание")}
       >
         <div className="analytics-card-heading">
-          <h3>На что обратить внимание</h3>
+          <h3>{t("На что обратить внимание")}</h3>
           <span className="count-badge">{model.missingFields.length}</span>
         </div>
         {model.missingFields.length ? (
@@ -126,7 +127,7 @@ export function ProfileOverview({
               <button
                 key={field.name}
                 onClick={() => onColumn(field.name)}
-                aria-label={`Изучить ${field.name}`}
+                aria-label={`${t("Изучить")} ${field.name}`}
               >
                 <span className="attention-symbol" aria-hidden="true">
                   !
@@ -134,8 +135,7 @@ export function ProfileOverview({
                 <span>
                   <strong>{field.name}</strong>
                   <small>
-                    {numberText(field.stats!.sample_null_count)} пропусков в
-                    выборке
+                    {numberText(field.stats!.sample_null_count)} {t("пропусков в выборке")}
                   </small>
                 </span>
                 <Icon name="chevron" size={15} />
@@ -145,21 +145,21 @@ export function ProfileOverview({
         ) : (
           <p className="analytics-caption">
             {model.completeness === null
-              ? "Для проверки пропусков нужны строки с данными."
-              : "В доступном профиле пропусков нет. Это не проверка дубликатов или корректности значений."}
+              ? t("Для проверки пропусков нужны строки с данными.")
+              : t("В доступном профиле пропусков нет. Это не проверка дубликатов или корректности значений.")}
           </p>
         )}
         {model.missingFields.length > 3 && (
           <button className="analytics-link" onClick={onQuality}>
-            Все столбцы с пропусками <Icon name="chevron" size={14} />
+            {t("Все столбцы с пропусками")} <Icon name="chevron" size={14} />
           </button>
         )}
       </section>
-      <section className="insight-card" aria-label="Краткий обзор столбцов">
+      <section className="insight-card" aria-label={t("Краткий обзор столбцов")}>
         <div className="analytics-card-heading">
-          <h3>Ваши столбцы</h3>
+          <h3>{t("Ваши столбцы")}</h3>
           <button className="analytics-link" onClick={onColumns}>
-            Все {model.fields.length} <Icon name="chevron" size={14} />
+            {t("Все")} {model.fields.length} <Icon name="chevron" size={14} />
           </button>
         </div>
         <div className="column-shortlist">
@@ -173,7 +173,7 @@ export function ProfileOverview({
                 {field.stats
                   ? numberText(field.stats.distinct_sample_values)
                   : "—"}
-                <small>уникальных</small>
+                <small>{t("уникальных")}</small>
               </span>
               <Icon name="chevron" size={14} />
             </button>

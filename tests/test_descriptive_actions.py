@@ -2,7 +2,7 @@
 
 import pytest
 
-from app.descriptive_actions import descriptive_answer, descriptive_route
+from app.agent_additions.descriptive_actions import descriptive_answer, descriptive_route
 from app.models import AgentTiming
 from app.safe_sql import SafeQueryError
 from app.schema_catalog import SchemaCatalog

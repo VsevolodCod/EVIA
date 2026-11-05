@@ -2,9 +2,14 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.evaluation import EvaluationCase
-from app.evaluation import load_corpus
-from app.model_benchmark import BenchmarkReport, BenchmarkRunner, ModelBenchmark, score_response, summarize_runs
+from scripts.benchmarks.tools.evaluation import EvaluationCase
+from scripts.benchmarks.tools.evaluation import load_corpus
+from scripts.benchmarks.tools.model_benchmark import BenchmarkReport, BenchmarkRunner, ModelBenchmark, score_response, summarize_runs
+from scripts.benchmarks.benchmark_local_models import DEFAULT_CORPUS
+
+
+def test_benchmark_default_corpus_is_available():
+    assert (DEFAULT_CORPUS / "cases.json").is_file()
 
 
 COMPUTED = EvaluationCase(
@@ -143,7 +148,7 @@ async def test_cold_mode_marks_run_invalid_when_ollama_does_not_confirm_unload(t
 
 
 def test_cli_writes_versioned_json_and_short_markdown_report(tmp_path):
-    from scripts.benchmark_local_models import write_reports
+    from scripts.benchmarks.benchmark_local_models import write_reports
 
     outcome = score_response(COMPUTED, response(rows=[["450.00"]]), mode="warm")
     report = BenchmarkReport(

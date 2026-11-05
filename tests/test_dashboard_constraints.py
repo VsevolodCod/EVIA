@@ -241,9 +241,14 @@ async def test_agent_builds_requested_chart_type_and_reopens_it(tmp_path, kind, 
         assert built['success']
         assert built['definition']['type'] == kind
         payload = built['result']
-        assert payload["points" if kind != "table" else "rows"] == expected
+        def canonical_rows(data):
+            rows = data["points" if kind != "table" else "rows"]
+            # Scatter uses random sampling; duplicates still matter.
+            return sorted(rows, key=lambda row: (row['x'], row['y'])) if kind == "scatter" else rows
+
+        assert canonical_rows(payload) == expected
         chart_id = built["chart_id"]
         executor = ChartExecutor.build_executor(sources, catalog, ChartRepository(catalog.session_factory))
-        assert executor.execute(chart_id)["points" if kind != "table" else "rows"] == expected
+        assert canonical_rows(executor.execute(chart_id)) == expected
     finally:
         catalog.close()
