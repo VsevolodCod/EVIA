@@ -156,6 +156,23 @@ class DuckDBDataEngine:
             connection.execute(
                 f"DROP TABLE IF EXISTS {self._quote_identifier(self.table_name(source))}"
             )
+            connection.execute("CHECKPOINT")
+
+    def compact(self) -> None:
+        """Rebuild the database beside the original and replace it only after a successful copy."""
+        temporary = self.database_path.parent / f".compact-{uuid4().hex}.duckdb"
+        with DUCKDB_ACCESS_LOCK:
+            try:
+                with duckdb.connect(str(self.database_path)) as connection:
+                    connection.execute("CHECKPOINT")
+                    database = self._quote_identifier(connection.execute("SELECT current_database()").fetchone()[0])
+                    safe_path = str(temporary).replace("'", "''")
+                    connection.execute(f"ATTACH '{safe_path}' AS compacted")
+                    connection.execute(f"COPY FROM DATABASE {database} TO compacted")
+                    connection.execute("DETACH compacted")
+                os.replace(temporary, self.database_path)
+            finally:
+                temporary.unlink(missing_ok=True)
 
     def compact(self) -> None:
         """Rebuild the database beside the original and replace it only after a successful copy."""
