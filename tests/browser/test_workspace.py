@@ -106,7 +106,7 @@ def test_real_workspace_keyboard_mobile_and_safe_markdown(server):
             page.evaluate("localStorage.removeItem('evia.chat-sources.v1')")
             page.reload()
             page.get_by_role('navigation', name='Навигация рабочего пространства').get_by_role('button', name='Главная').click()
-            page.get_by_role('button', name=first_question.strip()).click()
+            page.locator('.home-chat-list button').first.click()
             expect(page.get_by_role('region', name='Ответ EVIA').get_by_text('Тестовый режим показал первые строки выбранного источника.', exact=False)).to_be_visible()
             page.get_by_role('button', name='Открыть результат', exact=True).click()
             page.get_by_text('Таблица и детали расчёта', exact=True).click()
@@ -124,7 +124,7 @@ def test_real_workspace_keyboard_mobile_and_safe_markdown(server):
             expect(page.get_by_role('region', name='Предпросмотр источника').get_by_text('0099')).to_be_visible()
             expect(page.get_by_text('Тестовый режим показал первые строки выбранного источника.', exact=False)).to_have_count(0)
             page.get_by_role('navigation', name='Навигация рабочего пространства').get_by_role('button', name='Главная').click()
-            page.get_by_role('button', name=first_question.strip()).click()
+            page.locator('.home-chat-list button').first.click()
             expect(page.get_by_text('Тестовый режим показал первые строки выбранного источника.', exact=False)).to_be_visible()
 
             # Synthetic hostile response verifies browser rendering, not model quality.
