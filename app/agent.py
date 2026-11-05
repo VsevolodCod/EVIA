@@ -2,6 +2,7 @@ import json
 import re
 from time import perf_counter
 from uuid import uuid4
+from typing import Literal
 
 from app.contracts.v1 import AgentResponse, Error, FullProfile, Profile, QueryResult
 from app.llm.base import LLMProvider
@@ -154,12 +155,15 @@ def _asks_for_source_schema(question: str) -> bool:
     )
 
 
-def _schema_answer(schema: SourceSchema) -> str:
+def _schema_answer(schema: SourceSchema, response_language: Literal["ru", "en"] = "ru") -> str:
     objects = [obj for obj in schema.objects if obj.fields]
     fields = [(obj.name, field) for obj in objects for field in obj.fields]
     if not fields:
-        return "В текущей схеме выбранного источника нет столбцов."
-    lines = [f"Поля текущей схемы источника ({len(fields)}):"]
+        return "No columns in the current source schema." if response_language == "en" else "В текущей схеме выбранного источника нет столбцов."
+    lines = [
+        f"Fields in the current source schema ({len(fields)}):"
+        if response_language == "en" else f"Поля текущей схемы источника ({len(fields)}):"
+    ]
     for object_name, field in fields:
         prefix = f"{object_name}." if len(objects) > 1 else ""
         lines.append(f"- `{prefix}{field.name}` — {field.inferred_type}")
@@ -189,9 +193,34 @@ def _count_text(count: int, one: str, few: str, many: str) -> str:
     return f"{count} {word}"
 
 
-def _overview_answer(schema: SourceSchema, raw_profile: dict) -> str:
+def _overview_answer(schema: SourceSchema, raw_profile: dict, response_language: Literal["ru", "en"] = "ru") -> str:
     profile = Profile.model_validate(raw_profile).root
     fields = [field for obj in schema.objects for field in obj.fields]
+    if response_language == "en":
+        row_count = profile.processed_rows if isinstance(profile, FullProfile) else profile.sample_size
+        if isinstance(profile, FullProfile):
+            lines = [f"The selected source contains {row_count:,} rows and {len(fields)} columns."]
+        else:
+            lines = [f"The available sample contains {row_count:,} rows and {len(fields)} columns. The full source size is unknown."]
+        if fields:
+            lines.append("Fields: " + ", ".join(f"`{field.name}` ({field.inferred_type})" for field in fields) + ".")
+        if isinstance(profile, FullProfile):
+            periods = [
+                (field.name, column.temporal.minimum, column.temporal.maximum)
+                for field in fields
+                if (column := profile.columns.get(field.name)) is not None
+                   and column.temporal is not None and column.temporal.count > 0
+            ]
+            for name, minimum, maximum in periods:
+                lines.append(f"Date range for `{name}`: {minimum} — {maximum}.")
+            if not periods:
+                lines.append("Date range cannot be determined because no populated date field is available.")
+            missing = [(name, column.null_count) for name, column in profile.columns.items() if column.null_count]
+            if missing:
+                lines.append("Missing values: " + ", ".join(f"`{name}` — {count}" for name, count in missing) + ".")
+        else:
+            lines.append("Statistics are based on a sample; conclusions about the full source require a full calculation.")
+        return "\n".join(lines)
     if isinstance(profile, FullProfile):
         lines = [
             "В выбранном источнике "
@@ -253,6 +282,7 @@ class AgentRuntime:
             source_ids: list[str] | None = None,
             dashboard_id: str | None = None,
             history: list[ChatMessage] | None = None,
+            response_language: Literal["ru", "en"] = "ru",
     ) -> AgentResponse:
         # Запоминаем время начала запроса и создаём объект для сбора метрик.
         started = perf_counter()
@@ -299,7 +329,7 @@ class AgentRuntime:
                 if schema_result.ok:
                     result = AgentResponse(
                         request_id=request_id, status="answered", answer_kind="computed",
-                        answer=_schema_answer(SourceSchema.model_validate(schema_result.data)),
+                        answer=_schema_answer(SourceSchema.model_validate(schema_result.data), response_language),
                         steps=0, tool_results=[schema_result], timing=timing,
                     )
                 else:
@@ -342,7 +372,7 @@ class AgentRuntime:
                     else:
                         result = AgentResponse(
                             request_id=request_id, status="answered", answer_kind="computed",
-                            answer=_overview_answer(schema, profile_result.data),
+                            answer=_overview_answer(schema, profile_result.data, response_language),
                             steps=0, tool_results=tool_results, timing=timing,
                         )
                 else:
@@ -356,7 +386,7 @@ class AgentRuntime:
             else:
                 try:
                     legacy = await self._ask(
-                        question, source_ids, history, timing, dashboard_id
+                        question, source_ids, history, timing, dashboard_id, response_language
                     )
 
                 # Отдельно обрабатываем ситуацию, когда модель не успела
@@ -461,7 +491,8 @@ class AgentRuntime:
             source_ids: list[str] | None,
             history: list[ChatMessage] | None,
             timing: AgentTiming,
-            dashboard_id: str | None
+            dashboard_id: str | None,
+            response_language: Literal["ru", "en"] = "ru",
     ) -> AskResponse:
         """
         Это основной метод, который запускает работу агента.
@@ -485,8 +516,15 @@ class AgentRuntime:
                 f"\nДашборд, приложенный пользователем: {dashboard_id}"
             )
 
+        language_instruction = (
+            "\n\nRespond in English. Keep source names, column names, identifiers, "
+            "quoted user content, and data values exactly as provided; do not translate source names."
+            if response_language == "en" else
+            "\n\nОтвечай на русском языке. Сохраняй имена источников, столбцов, "
+            "идентификаторы, цитаты пользователя и значения данных без изменений."
+        )
         messages: list[LLMMessage] = (
-                [LLMMessage(role="system", content=SYSTEM_PROMPT, )] +
+                [LLMMessage(role="system", content=SYSTEM_PROMPT + language_instruction)] +
                 [LLMMessage.model_validate(item.model_dump(include=set(LLMMessage.model_fields)))
                  for item in (history or [])] +
                 [LLMMessage(role="user", content=question + context, )]

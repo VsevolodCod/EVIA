@@ -89,6 +89,28 @@ async def test_history_is_optional_and_not_mutated(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_agent_uses_the_requested_response_language(tmp_path):
+    class RecordingLLM:
+        def __init__(self):
+            self.messages = []
+
+        async def chat(self, messages, tools=None):
+            self.messages = list(messages)
+            return LLMResponse(content="The answer is 42.", finish_reason="stop")
+
+    catalog = SchemaCatalog(tmp_path / "catalog.db")
+    try:
+        llm = RecordingLLM()
+        agent = AgentRuntime(llm, build_tool_registry(catalog, SourceService(tmp_path / "data", catalog)))
+        response = await agent.ask("What is the average?", response_language="en")
+        assert response.answer == "The answer is 42."
+        assert "Respond in English" in llm.messages[0].content
+        assert "do not translate source names" in llm.messages[0].content
+    finally:
+        catalog.close()
+
+
+@pytest.mark.asyncio
 async def test_agent_continues_truncated_answer_before_reporting_success():
     class LLM:
         def __init__(self):

@@ -5,6 +5,7 @@ import { DataTable } from "./DataTable";
 import { PieChart } from "./ResultVisualization";
 import { pieChartData } from "./resultChartModel";
 import { defaultPalette, loadPalette, savePalette, validatePalette, type PalettePreference } from "../analytics/palette";
+import { useLanguage } from "../../i18n";
 import "../analytics/dashboard.css";
 import "../analytics/dashboardPrint.css";
 import "./generatedDashboard.css";
@@ -329,19 +330,20 @@ function ResultTable({ card }: { card: Card }) {
 }
 
 function GeneratedCard({ card, preference, expandPassport = false }: { card: Card; preference: PalettePreference; expandPassport?: boolean }) {
+  const { t } = useLanguage();
   const [view, setView] = useState<"line" | "bar">(card.type === "line" ? "line" : "bar");
   useEffect(() => setView(card.type === "line" ? "line" : "bar"), [card.id, card.type]);
   const grouped = card.status === "success" && (card.type === "line" || card.type === "bar");
   const activeType = grouped ? view : card.type;
   const passport = card.status === "success" ? calculationPassport(card) : null;
   return <section className={`dashboard-card generated-card generated-${activeType}-card`}>
-    <div className="chart-heading"><h3>{card.title}</h3>{card.status === "success" && <small>{({ kpi: "Показатель", line: "Динамика", bar: "Сравнение", pie: "Доли", scatter: "Связь", table: "Таблица" } as const)[activeType]}</small>}</div>
+    <div className="chart-heading"><h3>{card.title}</h3>{card.status === "success" && <small>{t(({ kpi: "Показатель", line: "Динамика", bar: "Сравнение", pie: "Доли", scatter: "Связь", table: "Таблица" } as const)[activeType])}</small>}</div>
     {grouped && <div className="generated-view-switch" role="group" aria-label={`Вид графика «${card.title}»`}
-      title="Линия и столбцы показывают те же вычисленные группы. Точки и таблица требуют нового расчёта исходных строк.">
-      <button type="button" aria-pressed={view === "line"} onClick={() => setView("line")}>Линия</button>
-      <button type="button" aria-pressed={view === "bar"} onClick={() => setView("bar")}>Столбцы</button>
+      title={t("Линия и столбцы показывают те же вычисленные группы. Точки и таблица требуют нового расчёта исходных строк.")}>
+      <button type="button" aria-pressed={view === "line"} onClick={() => setView("line")}>{t("Линия")}</button>
+      <button type="button" aria-pressed={view === "bar"} onClick={() => setView("bar")}>{t("Столбцы")}</button>
     </div>}
-    {card.status === "error" ? <p className="generated-empty">Не удалось рассчитать эту карточку.</p>
+    {card.status === "error" ? <p className="generated-empty">{t("Не удалось рассчитать эту карточку.")}</p>
       : card.type === "kpi" && object(card.data) ? <strong className="generated-value">{formattedNumber(card.data.value,
           card.data.format ?? (object(card.definition) ? card.definition.format : null))}</strong>
         : activeType === "line" ? <ResultLine card={card} colors={preference.colors} gradient={preference.gradient} />
@@ -350,18 +352,19 @@ function GeneratedCard({ card, preference, expandPassport = false }: { card: Car
             : activeType === "scatter" ? <ResultScatter card={card} color={preference.colors[0]} />
               : activeType === "table" ? <ResultTable card={card} /> : null}
     {passport && <details className="generated-passport" open={expandPassport || undefined}>
-      <summary>Паспорт расчёта</summary>
-      <dl><div><dt>Формула</dt><dd>{passport.formula}</dd></div><div><dt>Источник</dt><dd>{passport.source}</dd></div><div><dt>Период</dt><dd>{passport.period}</dd></div>
-        {passport.filters.length > 0 && <div><dt>Фильтры</dt><dd>{passport.filters.join("; ")}</dd></div>}
-        {passport.grouping && <div><dt>Группировка</dt><dd>{passport.grouping}</dd></div>}
-        {passport.snapshot && <div><dt>Снимок данных</dt><dd>{passport.snapshot}</dd></div>}
-        {passport.schemaVersion !== undefined && <div><dt>Версия схемы</dt><dd>{passport.schemaVersion}</dd></div>}
+      <summary>{t("Паспорт расчёта")}</summary>
+      <dl><div><dt>{t("Формула")}</dt><dd>{passport.formula}</dd></div><div><dt>{t("Источник")}</dt><dd>{passport.source}</dd></div><div><dt>{t("Период")}</dt><dd>{passport.period}</dd></div>
+        {passport.filters.length > 0 && <div><dt>{t("Фильтры")}</dt><dd>{passport.filters.join("; ")}</dd></div>}
+        {passport.grouping && <div><dt>{t("Группировка")}</dt><dd>{passport.grouping}</dd></div>}
+        {passport.snapshot && <div><dt>{t("Снимок данных")}</dt><dd>{passport.snapshot}</dd></div>}
+        {passport.schemaVersion !== undefined && <div><dt>{t("Версия схемы")}</dt><dd>{passport.schemaVersion}</dd></div>}
       </dl>
     </details>}
   </section>;
 }
 
 export function GeneratedDashboard({ dashboard, scope, sourceLabel, expandPassports = false }: { dashboard: Dashboard; scope: string; sourceLabel?: string; expandPassports?: boolean }) {
+  const { t } = useLanguage();
   const [showPalette, setShowPalette] = useState(false);
   const supplied = (() => { try { return dashboard.palette ? validatePalette(dashboard.palette) : defaultPalette.colors; } catch { return defaultPalette.colors; } })();
   const [preference, setPreference] = useState<PalettePreference>(() => loadPalette(scope) ?? { colors: supplied, gradient: false });
@@ -379,7 +382,7 @@ export function GeneratedDashboard({ dashboard, scope, sourceLabel, expandPasspo
   };
   return <div className="dashboard generated-dashboard" data-print-report="true" style={{ "--dashboard-primary": preference.colors[0], "--dashboard-secondary": preference.colors[1] } as React.CSSProperties}>
     <div className="dashboard-top"><div><h2>{dashboard.title}</h2>{sourceLabel && <p>{sourceLabel}</p>}</div>
-      <div className="dashboard-actions"><button type="button" aria-expanded={showPalette} onClick={() => setShowPalette(!showPalette)}>Цвета</button><button type="button" onClick={exportPdf}>Печать / PDF</button></div>
+      <div className="dashboard-actions"><button type="button" aria-expanded={showPalette} onClick={() => setShowPalette(!showPalette)}>{t("Цвета")}</button><button type="button" onClick={exportPdf}>{t("Печать / PDF")}</button></div>
     </div>
     {showPalette && <PaletteEditor colors={preference.colors} gradient={preference.gradient} onChange={changePalette} onClose={() => setShowPalette(false)} />}
     <div className="generated-grid">

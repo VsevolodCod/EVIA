@@ -6,7 +6,9 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
+import { beforeEach } from "vitest";
 import App from "./App";
+beforeEach(() => window.history.replaceState({}, "", "/"));
 const source = (id: string) => ({
   source_id: id,
   name: `Источник ${id}`,
@@ -75,6 +77,7 @@ function setup(
   ask?: (init?: RequestInit, url?: string) => Promise<Response>,
   preview?: (url: string) => Promise<Response>,
 ) {
+  window.history.replaceState({}, "", "/");
   let nextChat = 0;
   vi.stubGlobal(
     "fetch",
@@ -111,10 +114,62 @@ function setup(
   );
 }
 async function select(id: string) {
-  fireEvent.click(
-    await screen.findByRole("button", { name: `Источник ${id}` }),
-  );
+  const main = screen.getByRole("main");
+  const button = document.querySelector(".home-page")
+    ? await within(main).findByRole("button", { name: `Источник ${id}` })
+    : await screen.findByRole("button", { name: `Источник ${id}` });
+  fireEvent.click(button);
 }
+function goHome() {
+  const mobileNav = window.matchMedia?.("(max-width: 640px)").matches
+    ? screen.getByRole("navigation", { name: "Мобильная навигация" })
+    : null;
+  fireEvent.click(mobileNav
+    ? within(mobileNav).getByRole("button", { name: "Источники" })
+    : screen.getByRole("button", { name: "Главная" }));
+}
+function goChat() {
+  const mobileNav = window.matchMedia?.("(max-width: 640px)").matches
+    ? screen.getByRole("navigation", { name: "Мобильная навигация" })
+    : screen.getByRole("navigation", { name: "Навигация рабочего пространства" });
+  fireEvent.click(within(mobileNav).getByRole("button", { name: "Чат" }));
+}
+
+test("starts on a combined CSV upload and sources screen", async () => {
+  setup();
+  render(<App />);
+
+  expect(await screen.findByRole("region", { name: "Добавление источника" })).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Источники данных" })).toBeInTheDocument();
+  expect(await within(screen.getByRole("main")).findByRole("button", { name: "Источник A" })).toBeInTheDocument();
+});
+
+test("switches the workspace to English and remembers the choice", async () => {
+  setup();
+  render(<App />);
+  fireEvent.click(await screen.findByRole("button", { name: "Открыть настройки" }));
+  fireEvent.change(screen.getByRole("combobox", { name: "Язык" }), { target: { value: "en" } });
+
+  expect(await screen.findByRole("navigation", { name: "Workspace navigation" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Home" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Analysis" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Chat" })).toBeInTheDocument();
+  expect(localStorage.getItem("evia.language")).toBe("en");
+  expect(document.documentElement.lang).toBe("en");
+});
+
+test("opens the chat from the empty analysis-results page", async () => {
+  setup();
+  render(<App />);
+  await select("A");
+  fireEvent.click(await screen.findByRole("button", { name: "Результат анализа" }));
+  expect(await screen.findByRole("heading", { name: "Пока нет сделанных анализов" })).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole("button", { name: "Перейти в чат с EVIA" }));
+
+  expect(await screen.findByRole("textbox", { name: "Ваш вопрос" })).toBeInTheDocument();
+  expect(screen.getByRole("navigation", { name: "Навигация рабочего пространства" }).querySelector('[aria-pressed="true"]')).toHaveTextContent("Чат");
+});
 
 test("deletes a selected CSV only after confirmation", async () => {
   setup();
@@ -146,11 +201,12 @@ it("greets visitors and highlights PostgreSQL selection without a marker dot", a
   setup();
   render(<App />);
   expect((await screen.findAllByLabelText("Приветствие EVIA")).length).toBeGreaterThan(0);
-  expect(document.querySelector(".mobile-home-greeting .evia-greeting-block")).toBeInTheDocument();
+  expect(document.querySelector(".home-page .evia-greeting-block")).toBeInTheDocument();
   await select("A");
   expect(document.querySelector(".selection-dot")).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: "Подключить PostgreSQL" }));
-  expect(screen.getByRole("button", { name: "Подключить PostgreSQL" })).toHaveAttribute("aria-pressed", "true");
+  goHome();
+  fireEvent.click(within(screen.getByRole("main")).getByRole("button", { name: "Подключить PostgreSQL" }));
+  expect(await screen.findByRole("heading", { name: "Подключите PostgreSQL" })).toBeInTheDocument();
 });
 it("shows an incomplete model response as a retryable error", async () => {
   setup(() => Promise.resolve(Response.json({
@@ -170,7 +226,7 @@ it("shows an incomplete model response as a retryable error", async () => {
 it("opens a real import flow and settings without a fictional analysis wizard or guest profile", async () => {
   setup();
   render(<App />);
-  fireEvent.click(screen.getByRole("button", { name: "Добавить источник" }));
+  expect(screen.getByRole("region", { name: "Добавление источника" })).toBeInTheDocument();
   expect(screen.getByRole("heading", { name: "Добавьте CSV" })).toBeInTheDocument();
   expect(screen.queryByRole("dialog", { name: "Новый анализ" })).not.toBeInTheDocument();
   expect(screen.queryByText("Гостевой доступ")).not.toBeInTheDocument();
@@ -523,8 +579,7 @@ it("continues one conversation, resumes an older one, and isolates sources", asy
   await screen.findByText("Ответ: Уточнение");
   expect(screen.getByText("Ответ: Первый")).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Уточнение" })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Добавить источник" }));
-  await select("A");
+  fireEvent.click(screen.getByRole("button", { name: "Новый диалог" }));
   await ask("Другой диалог");
   await screen.findByText("Ответ: Другой диалог");
   expect(screen.queryByText("Ответ: Первый")).not.toBeInTheDocument();
@@ -544,18 +599,16 @@ it("continues one conversation, resumes an older one, and isolates sources", asy
   expect(sent.map((s) => s.source_ids)).toEqual([["A"], ["A"], ["A"], ["A"], ["B"]]);
 });
 
-it("returns to the CSV start screen without removing connected sources", async () => {
+it("returns to the combined CSV and sources screen without removing connected sources", async () => {
   setup();
   render(<App />);
   await select("A");
 
-  fireEvent.click(screen.getByRole("button", { name: "Добавить источник" }));
+  goHome();
 
-  expect(
-    await screen.findByRole("heading", { name: "Добавьте CSV" }),
-  ).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Источник A" })).toBeInTheDocument();
-  expect(screen.getByRole("textbox", { name: "Ваш вопрос" })).toBeDisabled();
+  expect(await screen.findByRole("region", { name: "Добавление источника" })).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Источники данных" })).toBeInTheDocument();
+  expect(within(screen.getByRole("main")).getByRole("button", { name: "Источник A" })).toBeInTheDocument();
 });
 
 it("provides mobile navigation for sources, analytics, and chat", async () => {
@@ -568,8 +621,8 @@ it("provides mobile navigation for sources, analytics, and chat", async () => {
   fireEvent.click(screen.getByRole("button", { name: "Рабочее пространство" }));
   expect(screen.getByRole("button", { name: "Рабочее пространство" })).toHaveAttribute("aria-pressed", "true");
 
-  fireEvent.click(screen.getByRole("button", { name: "Чат" }));
-  expect(screen.getByRole("button", { name: "Чат" })).toHaveAttribute("aria-pressed", "true");
+  goChat();
+  expect(within(screen.getByRole("navigation", { name: "Мобильная навигация" })).getByRole("button", { name: "Чат" })).toHaveAttribute("aria-pressed", "true");
 
   fireEvent.click(screen.getByRole("button", { name: "Источники" }));
   expect(screen.getByRole("button", { name: "Источники" })).toHaveAttribute("aria-pressed", "true");
@@ -583,15 +636,15 @@ it("opens the analysis from a source and returns to the mobile home", async () =
   expect(screen.getByRole("button", { name: "Рабочее пространство" })).toHaveAttribute("aria-pressed", "true");
   fireEvent.click(within(screen.getByRole("main")).getByRole("button", { name: "Назад к источникам" }));
   expect(screen.getByRole("button", { name: "Источники" })).toHaveAttribute("aria-pressed", "true");
-  expect(screen.getByRole("button", { name: "Источник A" })).toBeInTheDocument();
+  expect(within(screen.getByRole("main")).getByRole("button", { name: "Источник A" })).toBeInTheDocument();
 });
 
-it("opens a separate CSV upload screen from the home action", async () => {
+it("keeps the CSV upload card on the home screen", async () => {
   setup();
   render(<App />);
-  fireEvent.click(screen.getByRole("button", { name: "Добавить источник" }));
 
-  expect(screen.getByRole("button", { name: "Рабочее пространство" })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("region", { name: "Добавление источника" })).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Источники данных" })).toBeInTheDocument();
   expect(screen.getByRole("heading", { name: "Добавьте CSV" })).toBeInTheDocument();
 });
 
@@ -600,8 +653,6 @@ it("previews a selected mobile CSV before uploading it", async () => {
   const uploads = mockCsvUpload(source("C"));
   vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true }));
   render(<App />);
-  fireEvent.click(screen.getByRole("button", { name: "Добавить источник" }));
-
   fireEvent.change(screen.getByLabelText("Загрузить CSV"), {
     target: { files: [new File(["id\n1"], "orders.csv", { type: "text/csv" })] },
   });
@@ -612,38 +663,33 @@ it("previews a selected mobile CSV before uploading it", async () => {
   await waitFor(() => expect(uploads).toHaveLength(1));
 });
 
-it("opens a dismissible CSV sheet without fictitious analysis steps", async () => {
+it("does not hide the home upload card behind a separate mobile sheet", async () => {
   setup();
   vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true }));
   render(<App />);
-  fireEvent.click(screen.getByRole("button", { name: "Добавить источник" }));
   expect(screen.queryByRole("dialog", { name: "Новый анализ" })).not.toBeInTheDocument();
-  expect(screen.getByRole("dialog", { name: "Загрузка CSV" })).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Закрыть загрузку CSV" }));
-  expect(screen.queryByRole("dialog", { name: "Загрузка CSV" })).not.toBeInTheDocument();
+  expect(screen.getByRole("region", { name: "Добавление источника" })).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Источники данных" })).toBeInTheDocument();
 });
 
-it("keeps the current question when a mobile import is cancelled", async () => {
+it("keeps the current question when navigating from chat back to home", async () => {
   setup();
   vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true }));
   render(<App />);
   await select("A");
   fireEvent.change(screen.getByRole("textbox", { name: "Ваш вопрос" }), { target: { value: "Важный черновик" } });
-  fireEvent.click(screen.getByRole("button", { name: "Добавить источник" }));
-  expect(screen.getByRole("dialog", { name: "Загрузка CSV" })).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Закрыть загрузку CSV" }));
+  goHome();
+  expect(screen.getByRole("region", { name: "Добавление источника" })).toBeInTheDocument();
   expect(screen.getByRole("textbox", { name: "Ваш вопрос" })).toHaveValue("Важный черновик");
-  expect(screen.getByRole("button", { name: "Источник A" })).toHaveAttribute("aria-pressed", "true");
+  expect(within(screen.getByRole("main")).getByRole("button", { name: "Источник A" })).toHaveAttribute("aria-pressed", "true");
 });
 
-it("can return from mobile import and open an existing source", async () => {
+it("can open an existing source from the combined mobile home", async () => {
   setup();
   vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true }));
   render(<App />);
-  await screen.findByRole("button", { name: "Источник A" });
-  fireEvent.click(screen.getByRole("button", { name: "Добавить источник" }));
-  fireEvent.click(screen.getByRole("button", { name: "Закрыть загрузку CSV" }));
-  fireEvent.click(screen.getByRole("button", { name: "Источник A" }));
+  const sourceButton = await within(screen.getByRole("main")).findByRole("button", { name: "Источник A" });
+  fireEvent.click(sourceButton);
   expect(screen.queryByRole("dialog", { name: "Новый анализ" })).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Рабочее пространство" })).toHaveAttribute("aria-pressed", "true");
 });
@@ -651,7 +697,7 @@ it("can return from mobile import and open an existing source", async () => {
 it("opens mobile settings and applies a selected theme", async () => {
   setup();
   render(<App />);
-  fireEvent.click(screen.getByRole("button", { name: "Чат" }));
+  goChat();
   fireEvent.click(within(screen.getByRole("navigation", { name: "Мобильная навигация" })).getByRole("button", { name: "Настройки" }));
   expect(screen.getByRole("dialog", { name: "Настройки" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Закрыть настройки" })).toHaveFocus();
@@ -677,7 +723,7 @@ it("shows the attached source in mobile chat and can remove it", async () => {
   setup();
   render(<App />);
   await select("A");
-  fireEvent.click(screen.getByRole("button", { name: "Чат" }));
+  goChat();
   expect(screen.getByLabelText("Прикреплённый источник")).toHaveTextContent("Источник A");
   fireEvent.click(screen.getByRole("button", { name: "Убрать источник из чата" }));
   expect(screen.getByRole("textbox", { name: "Ваш вопрос" })).toBeDisabled();
@@ -686,7 +732,7 @@ it("explains the safe Railway setup instead of asking for a database password", 
   setup();
   render(<App />);
 
-  const postgresButton = await screen.findByRole("button", { name: "Подключить PostgreSQL" });
+  const postgresButton = within(screen.getByRole("main")).getByRole("button", { name: "Подключить PostgreSQL" });
   expect(
     vi.mocked(fetch).mock.calls.filter(([url]) => url === "/sources/postgresql/status"),
   ).toHaveLength(0);
@@ -717,7 +763,7 @@ it("lets the user select an available PostgreSQL table after a successful check"
   vi.stubGlobal("fetch", fetcher);
   render(<App />);
 
-  fireEvent.click(await screen.findByRole("button", { name: "Подключить PostgreSQL" }));
+  fireEvent.click(within(screen.getByRole("main")).getByRole("button", { name: "Подключить PostgreSQL" }));
   expect(await screen.findByRole("heading", { name: "PostgreSQL подключён" })).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Выбрать public.orders" }));
 
@@ -745,7 +791,7 @@ it("rechecks PostgreSQL after a temporary connection failure", async () => {
   vi.stubGlobal("fetch", fetcher);
   render(<App />);
 
-  fireEvent.click(await screen.findByRole("button", { name: "Подключить PostgreSQL" }));
+  fireEvent.click(within(screen.getByRole("main")).getByRole("button", { name: "Подключить PostgreSQL" }));
   expect(await screen.findByRole("heading", { name: "PostgreSQL пока недоступен" })).toBeInTheDocument();
 
   fireEvent.click(screen.getByRole("button", { name: "Повторить проверку" }));
@@ -759,8 +805,7 @@ it("does not switch back to an older conversation when its answer arrives late",
   render(<App />);
   await select("A");
   await ask("Старый");
-  fireEvent.click(screen.getByRole("button", { name: "Добавить источник" }));
-  await select("A");
+  fireEvent.click(screen.getByRole("button", { name: "Новый диалог" }));
   await ask("Новый");
   await act(async () => finish[0](Response.json({ answer: "Старый ответ", steps: 1, tool_results: [] })));
   expect(screen.queryByText("Старый ответ")).not.toBeInTheDocument();
@@ -772,7 +817,7 @@ it("does not switch back to an older conversation when its answer arrives late",
 it("does not show implementation-status controls in the workspace header", async () => {
   setup();
   render(<App />);
-  await screen.findByRole("button", { name: "Источник A" });
+  await within(screen.getByRole("main")).findByRole("button", { name: "Источник A" });
   expect(screen.queryByText(/Тестовая модель/)).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Тихий режим" })).not.toBeInTheDocument();
   expect(localStorage.getItem("linza.quiet")).toBeNull();
@@ -805,15 +850,16 @@ it("uploads a CSV, selects the returned source and loads its real preview", asyn
   expect(uploads).toHaveLength(1);
   fireEvent.click(screen.getByRole("button", { name: /^Данные$/ }));
   expect(await screen.findByText("uploaded-value")).toBeInTheDocument();
+  goHome();
   expect(
-    screen.getByRole("button", { name: "Источник uploaded" }),
+    within(screen.getByRole("main")).getByRole("button", { name: "Источник uploaded" }),
   ).toHaveAttribute("aria-pressed", "true");
   expect(screen.getByRole("textbox", { name: "Ваш вопрос" })).toBeEnabled();
 });
 it("rejects an empty CSV before sending it to the server", async () => {
   setup();
   render(<App />);
-  await screen.findByRole("button", { name: "Источник A" });
+  await within(screen.getByRole("main")).findByRole("button", { name: "Источник A" });
   fireEvent.change(screen.getByLabelText("Загрузить CSV"), {
     target: { files: [new File([], "empty.csv")] },
   });

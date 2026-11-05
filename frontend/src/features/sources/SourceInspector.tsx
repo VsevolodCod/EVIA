@@ -10,6 +10,7 @@ import {
 import { DataTable, ErrorNotice, Icon } from "../../components";
 import type { Entry, View } from "../chat/types";
 import { EviaMascot } from "../../components/EviaMascot";
+import { useLanguage } from "../../i18n";
 import { AnalysisResult } from "../results/AnalysisResult";
 import { Dashboard } from "../analytics/Dashboard";
 import { ProfileColumns } from "./ProfileColumns";
@@ -62,11 +63,12 @@ export function SourceInspector({
   onDelete?: (sourceId: string) => Promise<void>;
   deleteDisabled?: boolean;
 }) {
+  const { t } = useLanguage();
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
   async function deleteCsv() {
     if (!onDelete || deleting || deleteDisabled) return;
-    if (!window.confirm(`Удалить «${source.name}» и все версии CSV? Действие нельзя отменить. Сохранённые отчёты по этому источнику нельзя будет обновить.`)) return;
+    if (!window.confirm(`${t("Удалить «")}${source.name}${t("» и все версии CSV? Действие нельзя отменить. Сохранённые отчёты по этому источнику нельзя будет обновить.")}`)) return;
     setDeleteError("");
     setDeleting(true);
     try {
@@ -154,21 +156,23 @@ export function SourceInspector({
         <div className="source-workspace-identity">
           <h1>{source.name}</h1>
         </div>
-        {source.source_type === "csv" && onDelete && <button className="source-delete" type="button" disabled={deleting || deleteDisabled} onClick={() => void deleteCsv()}>{deleting ? "Удаляем…" : "Удалить CSV"}</button>}
-        <button className="source-refresh" type="button" onClick={() => setRevision((value) => value + 1)}>
-          <Icon name="refresh" size={16} /> Обновить
-        </button>
+        <div className="source-header-actions">
+          {source.source_type === "csv" && onDelete && <button className="source-delete" type="button" disabled={deleting || deleteDisabled} onClick={() => void deleteCsv()}>{deleting ? t("Удаляем…") : t("Удалить CSV")}</button>}
+          <button className="source-refresh" type="button" onClick={() => setRevision((value) => value + 1)}>
+            <Icon name="refresh" size={16} /> {t("Обновить")}
+          </button>
+        </div>
       </div>
-      {deleteError && <p role="alert" className="source-delete-error">Не удалось удалить CSV: {deleteError}</p>}
-      <nav className="analytics-tabs" aria-label="Разделы источника">
+      {deleteError && <p role="alert" className="source-delete-error">{t("Не удалось удалить CSV: ")}{t(deleteError)}</p>}
+      <nav className="analytics-tabs" aria-label={t("Разделы источника")}>
         {views.map(([id, label]) => (
           <button
             key={id}
-            aria-label={label}
+            aria-label={t(label)}
             aria-pressed={view === id}
             onClick={() => (id === "profile" ? openColumn("") : setView(id))}
           >
-            {label}
+            {t(label)}
             {id === "quality" && Boolean(model?.missingFields.length) && (
               <span className="count-badge">
                 {model!.missingFields.length}
@@ -176,9 +180,9 @@ export function SourceInspector({
             )}
           </button>
         ))}
-        {view === "results" && <button aria-pressed="true" onClick={() => setView("results")}>Результат анализа</button>}
+        <button aria-pressed={view === "results"} onClick={() => setView("results")}>{t("Результат анализа")}</button>
       </nav>
-      <section className="analytics-report" aria-label="Исследование данных">
+      <section className="analytics-report" aria-label={t("Исследование данных")}>
         {view === "results" ? (
           <AnalysisResult entry={entry} onOpenChat={onOpenChat} />
         ) : error ? (
@@ -186,13 +190,13 @@ export function SourceInspector({
             <ErrorNotice
               message={error}
               onRetry={() => setRevision((value) => value + 1)}
-              label="Повторить загрузку"
+              label={t("Повторить загрузку")}
             />
           </div>
         ) : !current ? (
           <div className="loading-panel" role="status">
             <EviaMascot state="profiling" size={80} decorative />
-            Изучаем структуру источника…
+            {t("Изучаем структуру источника…")}
           </div>
         ) : (
           <>
@@ -227,13 +231,13 @@ export function SourceInspector({
                   <ErrorNotice
                     message={`Не удалось построить профиль: ${profileError}`}
                     onRetry={() => setRevision((value) => value + 1)}
-                    label="Повторить расчёт"
+                    label={t("Повторить расчёт")}
                   />
                 </div>
               ) : (
                 <div className="loading-panel" role="status">
                   <EviaMascot state="profiling" size={80} decorative />
-                  Рассчитываем профиль источника…
+                  {t("Рассчитываем профиль источника…")}
                 </div>
               )
             ) : view === "quality" ? (
@@ -242,20 +246,20 @@ export function SourceInspector({
                   <ErrorNotice
                     message={`Не удалось построить профиль: ${profileError}`}
                     onRetry={() => setRevision((value) => value + 1)}
-                    label="Повторить расчёт"
+                    label={t("Повторить расчёт")}
                   />
                 </div>
               ) : (
                 <div className="loading-panel" role="status">
                   <EviaMascot state="profiling" size={80} decorative />
-                  Рассчитываем профиль источника…
+                  {t("Рассчитываем профиль источника…")}
                 </div>
               )
             ) : view === "preview" ? (
               <>
                 <div className="pane-heading">
                   <div>
-                    <h2>Предпросмотр данных</h2>
+                    <h2>{t("Предпросмотр данных")}</h2>
                   </div>
                 </div>
                 <DataTable
@@ -263,28 +267,28 @@ export function SourceInspector({
                   columns={current.schema.objects[0]?.fields.map(
                     (field) => field.name,
                   )}
-                  label="Предпросмотр источника"
+                  label={t("Предпросмотр источника")}
                 />
               </>
             ) : (
               <div className="analytics-section">
                 <div className="analytics-title">
                   <div>
-                    <h2>Структура источника</h2>
+                    <h2>{t("Структура источника")}</h2>
                   </div>
                 </div>
                 {source.import_report && <details className="csv-import-details">
-                  <summary>Отчёт об импорте</summary>
-                  <p>Принято {numberText(source.import_report.accepted_rows)} из {numberText(source.import_report.rows_read)} строк · отклонено {numberText(source.import_report.rejected_rows)}</p>
-                  <p>Кодировка: {source.import_report.encoding.toUpperCase()} · разделитель: {source.import_report.delimiter === "\t" ? "табуляция" : source.import_report.delimiter}</p>
+                  <summary>{t("Отчёт об импорте")}</summary>
+                  <p>{t("Принято")} {numberText(source.import_report.accepted_rows)} {t("из")} {numberText(source.import_report.rows_read)} {t("строк · отклонено")} {numberText(source.import_report.rejected_rows)}</p>
+                  <p>{t("Кодировка:")} {source.import_report.encoding.toUpperCase()} · {t("разделитель:")} {source.import_report.delimiter === "\t" ? t("табуляция") : source.import_report.delimiter}</p>
                   {source.import_report.warnings.length > 0 && <ul>{source.import_report.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>}
                   {source.csv_versions?.map((version, index) => <a
                     key={version.snapshot_id}
                     href={`/sources/${encodeURIComponent(source.source_id)}/versions/${encodeURIComponent(version.snapshot_id)}/download`}
-                  >Скачать оригинал {index + 1}</a>)}
+                  >{t("Скачать оригинал")} {index + 1}</a>)}
                   {onReimport && <label className="csv-reimport">
-                    Повторно импортировать CSV
-                    <input type="file" accept=".csv,text/csv" aria-label="Повторно импортировать CSV" onChange={(event) => {
+                    {t("Повторно импортировать CSV")}
+                    <input type="file" accept=".csv,text/csv" aria-label={t("Повторно импортировать CSV")} onChange={(event) => {
                       const file = event.target.files?.[0];
                       if (file) onReimport(file, source.source_id);
                       event.target.value = "";
@@ -292,7 +296,7 @@ export function SourceInspector({
                   </label>}
                 </details>}
                 {!current.schema.objects.length ? (
-                  <p className="muted">В источнике нет объектов схемы.</p>
+                  <p className="muted">{t("В источнике нет объектов схемы.")}</p>
                 ) : (
                   current.schema.objects.map((object) => (
                     <section key={object.object_id}>
@@ -308,17 +312,17 @@ export function SourceInspector({
                               <small>
                                 {typeLabel(field.inferred_type)}
                                 {field.is_identifier_candidate
-                                  ? " · Возможный идентификатор"
+                                  ? ` · ${t("Возможный идентификатор")}`
                                   : ""}
                               </small>
                               {field.description && <p>{field.description}</p>}
                             </div>
                             <span className="nullable">
                               {field.nullable === null
-                                ? "Нет выборки"
+                                ? t("Нет выборки")
                                 : field.nullable
-                                  ? "Есть пропуски"
-                                  : "Без пропусков"}
+                                  ? t("Есть пропуски")
+                                  : t("Без пропусков")}
                             </span>
                           </div>
                         ))}
@@ -330,7 +334,7 @@ export function SourceInspector({
             )}
             {current.profile && model && ["profile", "quality"].includes(view) && (
               <details className="profile-method">
-                <summary>Как рассчитан профиль</summary>
+                <summary>{t("Как рассчитан профиль")}</summary>
                 <p>
                   Источник: {source.name}. Версия схемы:{" "}
                   {current.schema.version}. Число строк датасета берётся из

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "./components/Icon";
 import { authApi, type Account } from "./authApi";
+import { useLanguage } from "./i18n";
 
 export function AccountMenu({ account, onChange, onLogout, theme = "light" }: {
   account: Account;
@@ -9,6 +10,7 @@ export function AccountMenu({ account, onChange, onLogout, theme = "light" }: {
   onLogout: () => Promise<void>;
   theme?: "light" | "dark";
 }) {
+  const { t } = useLanguage();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(account.name);
   const [currentPassword, setCurrentPassword] = useState("");
@@ -90,27 +92,27 @@ export function AccountMenu({ account, onChange, onLogout, theme = "light" }: {
 
   return <>
     <div className="account-menu">
-      <button ref={trigger} type="button" className="account-trigger" aria-label="Открыть профиль" aria-expanded={open} onClick={() => setOpen(true)}>
+      <button ref={trigger} type="button" className="account-trigger" aria-label={t("Открыть профиль")} aria-expanded={open} onClick={() => setOpen(true)}>
         {account.avatar_url ? <img className="account-avatar-image" src={account.avatar_url} alt="" /> : <Icon name="user" size={20} />}
       </button>
     </div>
     {open && createPortal(<>
       <div className="account-backdrop" aria-hidden="true" onClick={() => setOpen(false)} />
-      <section ref={dialog} className="account-popover" data-theme={theme} role="dialog" aria-label="Профиль" aria-modal="true">
-        <div className="account-heading"><h2>Профиль</h2><button type="button" className="account-close" aria-label="Закрыть профиль" onClick={() => setOpen(false)}>×</button></div>
+      <section ref={dialog} className="account-popover" data-theme={theme} role="dialog" aria-label={t("Профиль")} aria-modal="true">
+        <div className="account-heading"><h2>{t("Профиль")}</h2><button type="button" className="account-close" aria-label={t("Закрыть профиль")} onClick={() => setOpen(false)}>×</button></div>
         <div className="account-identity">
           <span className="account-avatar-large">{account.avatar_url ? <img src={account.avatar_url} alt="" /> : <Icon name="user" size={32} />}</span>
           <div><strong>{account.name}</strong><p className="account-email">{account.email}</p></div>
         </div>
         <div className="account-photo-actions">
-          <label className="account-photo-upload">Выбрать фотографию<input type="file" aria-label="Фотография профиля" accept="image/png,image/jpeg,image/webp" disabled={busy} onChange={(event) => { void uploadPhoto(event.target.files?.[0]); event.target.value = ""; }} /></label>
-          {account.avatar_url && <button type="button" disabled={busy} onClick={() => void removePhoto()}>Удалить фото</button>}
+          <label className="account-photo-upload">{t("Выбрать фотографию")}<input type="file" aria-label={t("Фотография профиля")} accept="image/png,image/jpeg,image/webp" disabled={busy} onChange={(event) => { void uploadPhoto(event.target.files?.[0]); event.target.value = ""; }} /></label>
+          {account.avatar_url && <button type="button" disabled={busy} onClick={() => void removePhoto()}>{t("Удалить фото")}</button>}
         </div>
-        <form onSubmit={(event) => void saveName(event)}><label>Имя<input value={name} onChange={(event) => setName(event.target.value)} maxLength={80} required /></label><button disabled={busy || name.trim() === account.name}>Сохранить имя</button></form>
-        <form onSubmit={(event) => void savePassword(event)}><label>Текущий пароль<input type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} required /></label><label>Новый пароль<input type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} minLength={12} required /></label><button disabled={busy}>Сменить пароль</button></form>
-        {error && <p className="auth-error" role="alert">{error}</p>}
-        {notice && <p className="auth-notice" role="status">{notice}</p>}
-        <button className="account-logout" onClick={() => void onLogout()}>Выйти</button>
+        <form onSubmit={(event) => void saveName(event)}><label>{t("Имя")}<input value={name} onChange={(event) => setName(event.target.value)} maxLength={80} required /></label><button disabled={busy || name.trim() === account.name}>{t("Сохранить имя")}</button></form>
+        <form onSubmit={(event) => void savePassword(event)}><label>{t("Текущий пароль")}<input type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} required /></label><label>{t("Новый пароль")}<input type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} minLength={12} required /></label><button disabled={busy}>{t("Сменить пароль")}</button></form>
+        {error && <p className="auth-error" role="alert">{t(error)}</p>}
+        {notice && <p className="auth-notice" role="status">{t(notice)}</p>}
+        <button className="account-logout" onClick={() => void onLogout()}>{t("Выйти")}</button>
       </section>
     </>, document.body)}
   </>;

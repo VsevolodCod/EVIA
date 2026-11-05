@@ -6,6 +6,7 @@ import { hasExactStats, numberText, typeLabel } from "../sources/profileModel";
 import { PieChart } from "../results/ResultVisualization";
 import { generatedChartFrom, generatedDashboardFrom, GeneratedDashboard } from "../results/GeneratedDashboard";
 import { pieChartData } from "../results/resultChartModel";
+import { useLanguage } from "../../i18n";
 import "./reportBuilder.css";
 
 type Props = {
@@ -102,6 +103,7 @@ function counted(noun: [string, string, string], value: number) {
 }
 
 export function ReportBuilder({ source, schema, rows, profile, entries, onClose }: Props) {
+  const { t, locale } = useLanguage();
   const available = entries.filter((entry) => entry.state === "success" && entry.answer &&
     entry.answer.status !== "error" && entry.answer.status !== "clarification" &&
     entry.answer.answer_kind !== "demo");
@@ -124,7 +126,7 @@ export function ReportBuilder({ source, schema, rows, profile, entries, onClose 
       ...(empty ? [`${name}: ${counted(["пустое значение", "пустых значения", "пустых значений"], empty)}`] : []),
     ];
   }) : [];
-  const reportDate = new Date().toLocaleDateString("ru-RU");
+  const reportDate = new Date().toLocaleDateString(locale === "en" ? "en-US" : "ru-RU");
 
   function printReport() {
     const previousTitle = document.title;
@@ -133,53 +135,53 @@ export function ReportBuilder({ source, schema, rows, profile, entries, onClose 
     window.print();
   }
 
-  return <div className="report-builder" role="dialog" aria-modal="true" aria-label="Составить PDF-отчёт">
+  return <div className="report-builder" role="dialog" aria-modal="true" aria-label={t("Составить PDF-отчёт")}>
     <div className="report-builder-panel">
-      <header className="report-builder-head"><h2>PDF-отчёт</h2>
-        <button type="button" aria-label="Закрыть отчёт" onClick={onClose}>✕</button></header>
+      <header className="report-builder-head"><h2>{t("PDF-отчёт")}</h2>
+        <button type="button" aria-label={t("Закрыть отчёт")} onClick={onClose}>✕</button></header>
       <div className="report-builder-controls">
-        {available.length > 0 && <div className="report-builder-selection"><h3>Добавить ответы EVIA</h3>
+        {available.length > 0 && <div className="report-builder-selection"><h3>{t("Добавить ответы EVIA")}</h3>
           <div className="report-builder-selection-actions">
-            <button type="button" onClick={() => setSelectedIds(available.map((entry) => entry.id))}>Выбрать все</button>
-            <button type="button" onClick={() => setSelectedIds([])}>Снять выбор</button>
+            <button type="button" onClick={() => setSelectedIds(available.map((entry) => entry.id))}>{t("Выбрать все")}</button>
+            <button type="button" onClick={() => setSelectedIds([])}>{t("Снять выбор")}</button>
           </div>{available.map((entry) => <label key={entry.id} className="report-builder-choice">
             <input type="checkbox" checked={selectedIds.includes(entry.id)} onChange={(event) =>
               setSelectedIds((ids) => event.target.checked ? [...ids, entry.id] : ids.filter((id) => id !== entry.id))} />
             <span>{entry.question}</span></label>)}
         </div>}
-        <button type="button" className="report-builder-print" onClick={printReport}>Сохранить в PDF</button>
+        <button type="button" className="report-builder-print" onClick={printReport}>{t("Сохранить в PDF")}</button>
       </div>
     </div>
-    <article className="report-document" aria-label="PDF-отчёт">
-      <header className="report-document-header"><div className="report-document-brand"><strong>EVIA</strong><span>Отчёт по данным</span></div>
+    <article className="report-document" aria-label={t("PDF-отчёт")}>
+      <header className="report-document-header"><div className="report-document-brand"><strong>EVIA</strong><span>{t("Отчёт по данным")}</span></div>
         <h1>{source.name}</h1><p>{source.source_type === "csv" ? "CSV" : "PostgreSQL"} · {reportDate}</p></header>
-      <section className="report-section"><h2>Краткая сводка</h2>
+      <section className="report-section"><h2>{t("Краткая сводка")}</h2>
         <div className="report-facts">
-          <div><span>Строк</span><strong className="report-fact-value">{rowCount === null ? "—" : numberText(rowCount)}</strong></div>
-          <div><span>Столбцов</span><strong className="report-fact-value">{numberText(fields.length)}</strong></div>
-          <div><span>Поля с пропусками</span><strong className="report-fact-value">{affectedFields === null ? "—" : numberText(affectedFields)}</strong></div>
+          <div><span>{t("Строк")}</span><strong className="report-fact-value">{rowCount === null ? "—" : numberText(rowCount)}</strong></div>
+          <div><span>{t("Столбцов")}</span><strong className="report-fact-value">{numberText(fields.length)}</strong></div>
+          <div><span>{t("Поля с пропусками")}</span><strong className="report-fact-value">{affectedFields === null ? "—" : numberText(affectedFields)}</strong></div>
         </div>
-        {selected.length > 0 && <div className="report-key-findings"><h3>Ключевые выводы</h3><ul>
+        {selected.length > 0 && <div className="report-key-findings"><h3>{t("Ключевые выводы")}</h3><ul>
           {selected.map((entry) => <li key={entry.id}><strong>{entry.question}</strong> — {shortConclusion(entry.answer?.answer ?? "")}</li>)}
         </ul></div>}
       </section>
-      <section className="report-section"><h2>Состав данных</h2>
-        {fields.length ? <table><thead><tr><th>Поле</th><th>Тип</th><th>Пропуски</th></tr></thead><tbody>
+      <section className="report-section"><h2>{t("Состав данных")}</h2>
+        {fields.length ? <table><thead><tr><th>{t("Поле")}</th><th>{t("Тип")}</th><th>{t("Пропуски")}</th></tr></thead><tbody>
           {fields.map((field) => <tr key={field.name}><td>{field.name}</td><td>{typeLabel(field.inferred_type)}</td>
             <td>{profile?.columns[field.name] ? numberText(profile.coverage === "full" && hasExactStats(profile.columns[field.name])
               ? profile.columns[field.name].null_count : profile.columns[field.name].sample_null_count) : "—"}</td></tr>)}
-        </tbody></table> : <p>Схема источника пуста.</p>}
+        </tbody></table> : <p>{t("Схема источника пуста.")}</p>}
       </section>
-      <section className="report-section"><h2>Первые строки</h2>
+      <section className="report-section"><h2>{t("Первые строки")}</h2>
         {rows.length ? <ReportTable columns={previewColumns}
           rows={rows.slice(0, 5).map((row) => previewColumns.map((name) => row[name]))}
-          caption={`Первые ${Math.min(rows.length, 5)} из ${rowCount === null ? "доступных" : numberText(rowCount)} строк`} /> : <p>Строк для просмотра нет.</p>}
+          caption={`${t("Первые")} ${Math.min(rows.length, 5)} ${t("из")} ${rowCount === null ? t("доступных") : numberText(rowCount)} ${t("строк")}`} /> : <p>{t("Строк для просмотра нет.")}</p>}
       </section>
-      <section className="report-section"><h2>Качество данных</h2>
+      <section className="report-section"><h2>{t("Качество данных")}</h2>
         {profile ? <>{profile.coverage === "sample" && <p className="report-scope-note">По выборке из {numberText(profile.sample_size)} строк.</p>}
           {problems.length ? <ul className="report-quality-issues">{problems.map((problem) => <li key={problem}>{problem}</li>)}</ul>
             : <p>Пропусков и пустых значений не найдено{profile.coverage === "sample" ? " в выборке" : ""}.</p>}</>
-          : <p>Данные о пропусках пока недоступны.</p>}
+          : <p>{t("Данные о пропусках пока недоступны.")}</p>}
         {source.import_report && (source.import_report.rejected_rows > 0 || source.import_report.warnings.length > 0) && <div className="report-import"><h3>Импорт CSV</h3>
           {source.import_report.rejected_rows > 0 && <p>Отклонено строк при импорте: {numberText(source.import_report.rejected_rows)}.</p>}
           {source.import_report.warnings.length > 0 && <ul>{source.import_report.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>}
@@ -188,7 +190,7 @@ export function ReportBuilder({ source, schema, rows, profile, entries, onClose 
       {pie && <section className="report-section"><h2>Распределение: {pie.field}</h2>
         <PieChart slices={pie.slices} label={`Круговая диаграмма по полю ${pie.field}`} />
         <p className="report-note">По первым {numberText(rows.length)} строкам, без пустых значений.</p></section>}
-      {selected.length > 0 && <section className="report-section report-ai"><h2>Расчёты и выводы EVIA</h2>
+      {selected.length > 0 && <section className="report-section report-ai"><h2>{t("Расчёты и выводы EVIA")}</h2>
         {selected.map((entry, index) => <div className="report-calculation" key={entry.id}>
           <h3>{index + 1}. {entry.question}</h3>
           <SafeMarkdown>{entry.answer?.answer ?? ""}</SafeMarkdown>

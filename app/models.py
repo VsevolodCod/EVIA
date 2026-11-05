@@ -139,6 +139,7 @@ class AskRequest(BaseModel):
     question: str = Field(min_length=1, max_length=4000)
     source_ids: list[str] = Field(default_factory=list)
     dashboard_id: str | None = None
+    response_language: Literal["ru", "en"] = "ru"
 
 
 class AskResponse(BaseModel):

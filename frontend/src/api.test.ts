@@ -30,6 +30,24 @@ it("sends a dashboard id only when the user attached a saved report", async () =
   }));
 });
 
+it("sends the selected English response language to EVIA", async () => {
+  const fetcher = vi.fn().mockResolvedValue(Response.json({ answer: "Hello", chat_id: "chat-A", steps: 1, tool_results: [] }));
+  vi.stubGlobal("fetch", fetcher);
+  await api.chat("Hello", "source-A", "chat-A", undefined, undefined, "en");
+  expect(fetcher).toHaveBeenCalledWith("/agent/chat?chat_id=chat-A", expect.objectContaining({
+    body: JSON.stringify({ question: "Hello", source_ids: ["source-A"], response_language: "en" }),
+  }));
+});
+
+it("omits the response language for the backward-compatible Russian default", async () => {
+  const fetcher = vi.fn().mockResolvedValue(Response.json({ answer: "Привет", chat_id: "chat-A", steps: 1, tool_results: [] }));
+  vi.stubGlobal("fetch", fetcher);
+  await api.chat("Привет", "source-A", "chat-A");
+  expect(fetcher).toHaveBeenCalledWith("/agent/chat?chat_id=chat-A", expect.objectContaining({
+    body: JSON.stringify({ question: "Привет", source_ids: ["source-A"] }),
+  }));
+});
+
 it("requests the next page of saved report ids", async () => {
   const fetcher = vi.fn().mockResolvedValue(Response.json({ dashboard_ids: [] }));
   vi.stubGlobal("fetch", fetcher);

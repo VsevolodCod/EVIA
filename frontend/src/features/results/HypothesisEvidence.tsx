@@ -1,3 +1,5 @@
+import { useLanguage } from "../../i18n";
+
 type Value = Record<string, unknown>;
 
 function object(value: unknown): value is Value {
@@ -12,9 +14,9 @@ function label(value: unknown, fallback: string): string {
   return typeof value === "string" && value.trim() ? value : fallback;
 }
 
-function number(value: unknown): string {
+function number(value: unknown, locale: "ru" | "en" = "ru"): string {
   if (typeof value !== "number" || !Number.isFinite(value)) return "—";
-  return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 3 }).format(value);
+  return new Intl.NumberFormat(locale === "en" ? "en-US" : "ru-RU", { maximumFractionDigits: 3 }).format(value);
 }
 
 function signed(value: unknown): string {
@@ -22,14 +24,15 @@ function signed(value: unknown): string {
   return `${value > 0 ? "+" : ""}${number(value)}`;
 }
 
-function probability(value: unknown): string {
+function probability(value: unknown, locale: "ru" | "en" = "ru"): string {
   if (typeof value !== "number" || !Number.isFinite(value)) return "—";
-  return value > 0 && value < 0.001 ? "<0,001" : number(value);
+  return value > 0 && value < 0.001 ? (locale === "en" ? "<0.001" : "<0,001") : number(value, locale);
 }
 
 export function HypothesisEvidence({ evidence }: { evidence: Value & { results: unknown[] } }) {
-  return <div className="hypothesis-evidence" aria-label="Проверка гипотезы">
-    <h4>{label(evidence.statement, "Проверка гипотезы")}</h4>
+  const { t, locale } = useLanguage();
+  return <div className="hypothesis-evidence" aria-label={t("Проверка гипотезы")}>
+    <h4>{label(evidence.statement, t("Проверка гипотезы"))}</h4>
     {evidence.results.map((item, index) => {
       if (!object(item)) return null;
       const data = object(item.data) ? item.data : {};
@@ -59,9 +62,9 @@ export function HypothesisEvidence({ evidence }: { evidence: Value & { results: 
         const interval = object(data.confidence_interval) ? data.confidence_interval : null;
         return <div className="hypothesis-check" key={index}>
           <div className="hypothesis-values">
-            <div><span>Коэффициент Пирсона</span><strong>{number(data.correlation)}</strong></div>
-            <div><span>Групп в расчёте</span><strong>{number(data.sample_size)}</strong></div>
-            <div><span>{Array.isArray(data.lag_results) ? "p-value без поправки" : "p-value"}</span><strong>{probability(data.p_value)}</strong></div>
+            <div><span>{t("Коэффициент Пирсона")}</span><strong>{number(data.correlation, locale)}</strong></div>
+            <div><span>{t("Групп в расчёте")}</span><strong>{number(data.sample_size, locale)}</strong></div>
+            <div><span>{t(Array.isArray(data.lag_results) ? "p-value без поправки" : "p-value")}</span><strong>{probability(data.p_value, locale)}</strong></div>
           </div>
           {interval && <p>Доверительный интервал: {number(interval.low)} — {number(interval.high)}</p>}
           {Array.isArray(data.lag_results) && <div className="hypothesis-lags" aria-label="Проверенные лаги">
@@ -72,10 +75,10 @@ export function HypothesisEvidence({ evidence }: { evidence: Value & { results: 
           <p>{label(data.interpretation, "Недостаточно данных для статистического вывода.")}</p>
           {Array.isArray(data.warnings) && data.warnings.map((warning, i) =>
             typeof warning === "string" ? <p key={i}>{warning}</p> : null)}
-          <p>Корреляция не доказывает причинность.</p>
+          <p>{t("Корреляция не доказывает причинность.")}</p>
         </div>;
       }
-      return <p key={index}>Неизвестный тип проверки.</p>;
+      return <p key={index}>{t("Неизвестный тип проверки.")}</p>;
     })}
   </div>;
 }

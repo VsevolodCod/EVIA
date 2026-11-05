@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import type { Row } from "../../api";
 import { DataTable } from "./DataTable";
+import { useLanguage } from "../../i18n";
 import { chartDomain, chartFields, pieChartData, resultChartData, type ChartColumn, type ResultChartData, type PieSlice } from "./resultChartModel";
 import "./resultVisualization.css";
 
@@ -32,6 +33,7 @@ export function PieChart({ slices, label }: { slices: PieSlice[]; label: string 
 }
 
 function ResultChart({ data, type }: { data: ResultChartData; type: "bar" | "line" }) {
+  const { t } = useLanguage();
   const [position, setPosition] = useState({ data, page: 0 });
   const lastPage = Math.max(0, Math.ceil(data.points.length / PAGE_SIZE) - 1);
   const page = position.data === data ? Math.min(position.page, lastPage) : 0;
@@ -83,11 +85,11 @@ function ResultChart({ data, type }: { data: ResultChartData; type: "bar" | "lin
         {point.label.length > 14 ? `${point.label.slice(0, 12)}…` : point.label}
       </text>)}
     </svg>
-    <p className="result-chart-meta" aria-live="polite">Точки {start + 1}–{start + visible.length} из {data.points.length}. Порядок строк сохранён.</p>
-    {missingCount > 0 && <p className="result-visualization-note">Пропущено значений: {missingCount} (пустые или нечисловые). Линия в этих местах прерывается.</p>}
-    {lastPage > 0 && <nav className="result-chart-pages" aria-label="Страницы графика">
-      <button type="button" disabled={page === 0} onClick={() => setPosition({ data, page: page - 1 })}>Предыдущие точки</button>
-      <button type="button" disabled={page === lastPage} onClick={() => setPosition({ data, page: page + 1 })}>Следующие точки</button>
+    <p className="result-chart-meta" aria-live="polite">{t("Точки")} {start + 1}–{start + visible.length} {t("из")} {data.points.length}. {t("Порядок строк сохранён.")}</p>
+    {missingCount > 0 && <p className="result-visualization-note">{t("Пропущено значений:")} {missingCount} ({t("пустые или нечисловые")}). {t("Линия в этих местах прерывается.")}</p>}
+    {lastPage > 0 && <nav className="result-chart-pages" aria-label={t("Страницы графика")}>
+      <button type="button" disabled={page === 0} onClick={() => setPosition({ data, page: page - 1 })}>{t("Предыдущие точки")}</button>
+      <button type="button" disabled={page === lastPage} onClick={() => setPosition({ data, page: page + 1 })}>{t("Следующие точки")}</button>
     </nav>}
   </div>;
 }
@@ -99,6 +101,7 @@ export function ResultVisualization({ rows, label, copyableIdentifierColumns, co
   columns?: readonly ChartColumn[];
   truncated?: boolean;
 }) {
+  const { t } = useLanguage();
   const { fields, measures } = useMemo(() => chartFields(rows, columns, copyableIdentifierColumns), [rows, columns, copyableIdentifierColumns]);
   const [selectedMeasure, setMeasure] = useState("");
   const [selectedLabel, setLabel] = useState("");
@@ -111,25 +114,25 @@ export function ResultVisualization({ rows, label, copyableIdentifierColumns, co
   const selectedView = view === "pie" && !pie ? "table" : view;
   return <div className="result-visualization">
     {measures.length > 0 && fields.length > 1 && <div className="result-chart-fields">
-      <label>Показатель<select value={valueField} onChange={event => setMeasure(event.target.value)}>
-        <option value="" disabled>Выберите показатель</option>
+      <label>{t("Показатель")}<select value={valueField} onChange={event => setMeasure(event.target.value)}>
+        <option value="" disabled>{t("Выберите показатель")}</option>
         {measures.map(field => <option key={field} value={field}>{field}</option>)}
       </select></label>
-      <label>Подписи<select value={labelField} onChange={event => setLabel(event.target.value)}>
+      <label>{t("Подписи")}<select value={labelField} onChange={event => setLabel(event.target.value)}>
         {labelFields.map(field => <option key={field} value={field}>{field}</option>)}
       </select></label>
     </div>}
-    {data ? <nav className="result-view-toggle" aria-label="Представление результата">
-      <button type="button" aria-pressed={selectedView === "table"} onClick={() => setView("table")}>Таблица</button>
-      <button type="button" aria-pressed={selectedView === "bar"} onClick={() => setView("bar")}>Столбцы</button>
-      <button type="button" aria-pressed={selectedView === "line"} onClick={() => setView("line")}>Линия</button>
-      {pie && <button type="button" aria-pressed={selectedView === "pie"} onClick={() => setView("pie")}>Круговая</button>}
-    </nav> : <p className="result-visualization-note">{measures.length > 1 ? "Выберите показатель для графика. Идентификаторы используются только для подписей." : "Для графика нужен числовой показатель и поле для подписей."}</p>}
+    {data ? <nav className="result-view-toggle" aria-label={t("Представление результата")}>
+      <button type="button" aria-pressed={selectedView === "table"} onClick={() => setView("table")}>{t("Таблица")}</button>
+      <button type="button" aria-pressed={selectedView === "bar"} onClick={() => setView("bar")}>{t("Столбцы")}</button>
+      <button type="button" aria-pressed={selectedView === "line"} onClick={() => setView("line")}>{t("Линия")}</button>
+      {pie && <button type="button" aria-pressed={selectedView === "pie"} onClick={() => setView("pie")}>{t("Круговая")}</button>}
+    </nav> : <p className="result-visualization-note">{t(measures.length > 1 ? "Выберите показатель для графика. Идентификаторы используются только для подписей." : "Для графика нужен числовой показатель и поле для подписей.")}</p>}
     {selectedView === "table" || !data ? <DataTable rows={rows} label={label} copyableIdentifierColumns={copyableIdentifierColumns} />
       : selectedView === "pie" && pie ? <><PieChart slices={pie} label={`Круговая диаграмма: ${valueField} по ${labelField}`} />
-        {truncated && <p className="result-visualization-note">Доли рассчитаны только по возвращённым строкам. Результат усечён сервером.</p>}
-        {data.points.some((point) => point.value === 0) && <p className="result-visualization-note">Нулевые категории не образуют сектор и не показаны на круговой диаграмме.</p>}
-        {data.points.some((point) => point.value === null) && <p className="result-visualization-note">Пустые и нечисловые значения не включены в доли.</p>}</>
+        {truncated && <p className="result-visualization-note">{t("Доли рассчитаны только по возвращённым строкам. Результат усечён сервером.")}</p>}
+        {data.points.some((point) => point.value === 0) && <p className="result-visualization-note">{t("Нулевые категории не образуют сектор и не показаны на круговой диаграмме.")}</p>}
+        {data.points.some((point) => point.value === null) && <p className="result-visualization-note">{t("Пустые и нечисловые значения не включены в доли.")}</p>}</>
       : <ResultChart key={`${valueField}\u0000${labelField}`} data={data} type={selectedView === "line" ? "line" : "bar"} />}
   </div>;
 }

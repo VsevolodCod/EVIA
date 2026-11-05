@@ -367,6 +367,7 @@ async def ask_agent(body: AskRequest):
         return await agent.ask(
             question=body.question,
             source_ids=body.source_ids,
+            response_language=body.response_language,
             **({"dashboard_id": body.dashboard_id} if body.dashboard_id is not None else {}),
         )
 
@@ -431,6 +432,7 @@ async def chat_agent(
         answer = await agent.ask(
             question=body.question,
             source_ids=[chat.source_id],
+            response_language=body.response_language,
             **({"dashboard_id": body.dashboard_id} if body.dashboard_id is not None else {}),
             history=chat.messages[:-1],
         )

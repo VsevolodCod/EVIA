@@ -26,6 +26,8 @@ import {
 } from "./features/mascot/resolveEviaState";
 import type { EviaState } from "./features/mascot/states";
 import { WelcomeGreeting, welcomeGreetings } from "./features/mascot/WelcomeGreeting";
+import { HomePage } from "./features/home/HomePage";
+import { LanguageProvider, useLanguage } from "./i18n";
 
 const CHAT_SOURCE_STORAGE_KEY = "evia.chat-sources.v1";
 
@@ -35,6 +37,37 @@ type ChatPage = {
   loading: boolean;
   error: string;
 };
+
+type WorkspaceScreen = "home" | "analysis" | "chat" | "reports" | "postgres";
+type AnalysisView = View;
+
+function readWorkspaceRoute(): { screen: WorkspaceScreen; sourceId: string | null; view: AnalysisView; chatId: string | null } {
+  const url = new URL(window.location.href);
+  const rawScreen = url.searchParams.get("page");
+  const allowed: WorkspaceScreen[] = ["home", "analysis", "chat", "reports", "postgres"];
+  const screen = allowed.includes(rawScreen as WorkspaceScreen)
+    ? rawScreen as WorkspaceScreen
+    : url.searchParams.has("dashboard") ? "reports"
+      : url.searchParams.has("source") ? "analysis" : "home";
+  const rawView = url.searchParams.get("view");
+  const views: AnalysisView[] = ["overview", "profile", "quality", "preview", "schema", "results"];
+  return {
+    screen,
+    sourceId: url.searchParams.get("source"),
+    chatId: url.searchParams.get("chat"),
+    view: views.includes(rawView as AnalysisView) ? rawView as AnalysisView : "overview",
+  };
+}
+
+function workspaceUrl(screen: WorkspaceScreen, sourceId: string | null, view: AnalysisView, chatId?: string | null): string {
+  const url = new URL(window.location.href);
+  url.search = "";
+  if (screen !== "home") url.searchParams.set("page", screen);
+  if (sourceId && screen !== "home") url.searchParams.set("source", sourceId);
+  if (screen === "analysis") url.searchParams.set("view", view);
+  if (screen === "chat" && chatId) url.searchParams.set("chat", chatId);
+  return `${url.pathname}${url.search}${url.hash}`;
+}
 
 function savedChatSources(): Record<string, string> {
   try {
@@ -103,11 +136,12 @@ function mergeEntries(existing: Entry[], loaded: Entry[]): Entry[] {
   return [...loaded.filter((entry) => !known.has(entry.id)), ...existing];
 }
 
-export default function App({ account, onAccountChange, onLogout }: {
+function AppContent({ account, onAccountChange, onLogout }: {
   account?: Account;
   onAccountChange?: (account: Account) => void;
   onLogout?: () => Promise<void>;
 } = {}) {
+  const { locale, setLocale, t } = useLanguage();
   const [sources, setSources] = useState<Source[]>([]);
   const [sourcesLoading, setSourcesLoading] = useState(true);
   const [sourcesError, setSourcesError] = useState("");
@@ -116,14 +150,16 @@ export default function App({ account, onAccountChange, onLogout }: {
   const [postgresError, setPostgresError] = useState("");
   const [sourceSetup, setSourceSetup] = useState<"csv" | "postgres">("csv");
   const [welcomeGreeting] = useState(() => welcomeGreetings[Math.floor(Math.random() * welcomeGreetings.length)]);
-  const [mobilePanel, setMobilePanel] = useState<"home" | "analytics" | "chat">("home");
-  const [mobileOverlay, setMobileOverlay] = useState<"upload" | "settings" | null>(null);
+  const [screen, setScreen] = useState<WorkspaceScreen>(() => readWorkspaceRoute().screen);
+  const initialChatId = useRef<string | null>(readWorkspaceRoute().chatId);
+  const mobilePanel = screen === "home" ? "home" : screen === "chat" ? "chat" : "analytics";
+  const [mobileOverlay, setMobileOverlay] = useState<"settings" | null>(null);
   const [theme, setTheme] = useState<"light" | "dark" | "system">(() => {
     const saved = localStorage.getItem("evia.theme");
     return saved === "dark" || saved === "system" ? saved : "light";
   });
   const [systemDark, setSystemDark] = useState(() => window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(() => readWorkspaceRoute().sourceId);
   const [histories, setHistories] = useState<Record<string, Entry[]>>({});
   const [chatSummaries, setChatSummaries] = useState<ChatSummary[]>([]);
   const [chatSources, setChatSources] = useState<Record<string, string>>(savedChatSources);
@@ -135,9 +171,9 @@ export default function App({ account, onAccountChange, onLogout }: {
     Record<string, string | undefined>
   >({});
   const [drafts, setDrafts] = useState<Record<string, string>>({});
-  const [view, setView] = useState<View>("overview");
+  const [view, setViewState] = useState<View>(() => readWorkspaceRoute().view);
   const [showDashboardGallery, setShowDashboardGallery] = useState(() =>
-    new URLSearchParams(window.location.search).has("dashboard"));
+    readWorkspaceRoute().screen === "reports");
   const [attachedDashboard, setAttachedDashboard] = useState<{ id: string; title: string } | null>(null);
   const [uploadedId, setUploadedId] = useState<string | null>(null);
   const [uploadFailure, setUploadFailure] = useState<EviaState | null>(null);
@@ -202,6 +238,45 @@ export default function App({ account, onAccountChange, onLogout }: {
     draft,
     entry: activeEntry,
   });
+  function navigateScreen(next: WorkspaceScreen, sourceId = selectedId, nextView = view, replace = false, chatId: string | null | undefined = activeConversationId) {
+    setScreen(next);
+    initialChatId.current = chatId ?? null;
+    setShowDashboardGallery(next === "reports");
+    if (next === "analysis" && sourceId) setSelectedId(sourceId);
+    if (nextView) setViewState(nextView);
+    setMobileOverlay(null);
+    const url = workspaceUrl(next, sourceId, nextView, chatId);
+    if (replace) window.history.replaceState({}, "", url);
+    else if (`${window.location.pathname}${window.location.search}${window.location.hash}` !== url)
+      window.history.pushState({}, "", url);
+  }
+  function changeSourceView(nextView: View) {
+    setViewState(nextView);
+    navigateScreen("analysis", selectedId, nextView);
+  }
+  useEffect(() => {
+    const onPopState = () => {
+      const route = readWorkspaceRoute();
+      setScreen(route.screen);
+      initialChatId.current = route.chatId;
+      setSelectedId(route.sourceId);
+      setViewState(route.view);
+      setShowDashboardGallery(route.screen === "reports");
+      setMobileOverlay(null);
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+  useEffect(() => {
+    if (sourcesLoading || !selectedId) return;
+    if (!sources.some((item) => item.source_id === selectedId)) {
+      setSelectedId(null);
+      setScreen("home");
+      setShowDashboardGallery(false);
+      const url = workspaceUrl("home", null, "overview");
+      window.history.replaceState({}, "", url);
+    }
+  }, [sources, sourcesLoading, selectedId]);
   async function loadSources() {
     sourceController.current?.abort();
     const controller = new AbortController();
@@ -415,6 +490,33 @@ export default function App({ account, onAccountChange, onLogout }: {
           void loadChatHistory(selectedId, chat.chat_id);
       });
   }, [selectedId, chatSummaries, chatSources, historyListLoading]);
+  useEffect(() => {
+    const chatId = initialChatId.current;
+    if (screen !== "chat" || !chatId || historyListLoading) return;
+    const chat = chatSummaries.find((item) => item.chat_id === chatId);
+    const sourceId = chat?.source_id ?? chatSources[chatId] ?? selectedId;
+    if (!sourceId) {
+      const archived = chatSummaries.find((item) => item.chat_id === chatId);
+      if (archived) openArchivedChat(archived);
+      else initialChatId.current = null;
+      return;
+    }
+    if (selectedId !== sourceId) setSelectedId(sourceId);
+    const entries = histories[sourceId] ?? [];
+    if (entries.some((entry) => entry.conversationId === chatId)) {
+      activeConversations.current.set(sourceId, chatId);
+      setActiveIds((previous) => ({
+        ...previous,
+        [sourceId]: entries.filter((entry) => entry.conversationId === chatId).at(-1)?.id,
+      }));
+      initialChatId.current = null;
+    } else {
+      const activeConversation = entries.find((entry) => entry.id === activeIds[sourceId])?.conversationId;
+      if (!activeConversation) activeConversations.current.set(sourceId, chatId);
+      if (sources.some((item) => item.source_id === sourceId) && !loadedChats.current.has(chatId))
+        void loadChatHistory(sourceId, chatId);
+    }
+  }, [screen, selectedId, sources, chatSummaries, chatSources, histories, activeIds, historyListLoading]);
 
   function selectSource(id: string) {
     setShowDashboardGallery(false);
@@ -435,36 +537,14 @@ export default function App({ account, onAccountChange, onLogout }: {
     setSelectedId(id);
     setArchivedChatId(null);
     setSourceSetup("csv");
-    setMobilePanel("analytics");
-    setMobileOverlay(null);
+    navigateScreen("analysis", id, "overview");
     setUploadFailure(null);
     setUploadError("");
-    setView("overview");
+    setViewState("overview");
   }
   function changeDraft(value: string) {
     if (selectedId)
       setDrafts((previous) => ({ ...previous, [selectedId]: value }));
-  }
-  function resetAnalysis() {
-    setShowDashboardGallery(false);
-    setAttachedDashboard(null);
-    if (selectedId) {
-      setActiveIds((previous) => ({ ...previous, [selectedId]: undefined }));
-      activeConversations.current.delete(selectedId);
-      setDrafts((previous) => ({ ...previous, [selectedId]: "" }));
-    }
-
-    setSelectedId(null);
-    setArchivedChatId(null);
-    setUploadedId(null);
-    setUploadFailure(null);
-    setUploadError("");
-    setFailedFile(null);
-    setSelectedUploadFile(null);
-    setDragOver(false);
-    setSourceSetup("csv");
-    setMobilePanel("analytics");
-    setView("overview");
   }
   function openArchivedChat(chat: ChatSummary) {
     setShowDashboardGallery(false);
@@ -476,9 +556,45 @@ export default function App({ account, onAccountChange, onLogout }: {
       ...previous,
       [key]: (histories[key] ?? []).filter((entry) => entry.conversationId === chat.chat_id).at(-1)?.id,
     }));
-    setView("results");
-    setMobilePanel("analytics");
+    setViewState("results");
+    navigateScreen("chat", null, "results", false, chat.chat_id);
+    initialChatId.current = null;
     if (!loadedChats.current.has(chat.chat_id)) void loadChatHistory(key, chat.chat_id);
+  }
+  function openChatSummary(chat: ChatSummary) {
+    const sourceId = chat.source_id ?? chatSources[chat.chat_id];
+    if (!sourceId || !sources.some((item) => item.source_id === sourceId)) {
+      openArchivedChat(chat);
+      return;
+    }
+    setArchivedChatId(null);
+    setSelectedId(sourceId);
+    activeConversations.current.set(sourceId, chat.chat_id);
+    setActiveIds((previous) => ({
+      ...previous,
+      [sourceId]: (histories[sourceId] ?? []).filter((entry) => entry.conversationId === chat.chat_id).at(-1)?.id,
+    }));
+    navigateScreen("chat", sourceId, view, false, chat.chat_id);
+    if (!loadedChats.current.has(chat.chat_id)) void loadChatHistory(sourceId, chat.chat_id);
+  }
+  function switchChatSource(sourceId: string) {
+    setArchivedChatId(null);
+    if (!sourceId) {
+      setSelectedId(null);
+      navigateScreen("chat", null, view, false, null);
+      return;
+    }
+    setSelectedId(sourceId);
+    const conversationId = activeConversations.current.get(sourceId)
+      ?? histories[sourceId]?.at(-1)?.conversationId;
+    if (conversationId) {
+      activeConversations.current.set(sourceId, conversationId);
+      setActiveIds((previous) => ({
+        ...previous,
+        [sourceId]: histories[sourceId]?.filter((entry) => entry.conversationId === conversationId).at(-1)?.id,
+      }));
+    }
+    navigateScreen("chat", sourceId, view, false, conversationId ?? null);
   }
   function openDashboardOrigin(chatId: string): boolean {
     const chat = chatSummaries.find((item) => item.chat_id === chatId);
@@ -494,32 +610,32 @@ export default function App({ account, onAccountChange, onLogout }: {
       ...previous,
       [sourceId]: (histories[sourceId] ?? []).filter((entry) => entry.conversationId === chatId).at(-1)?.id,
     }));
-    setView("results");
+    setViewState("results");
+    navigateScreen("analysis", sourceId, "results");
     if (!loadedChats.current.has(chatId)) void loadChatHistory(sourceId, chatId);
     return true;
   }
   function newAnalysis() {
-    if (window.matchMedia?.("(max-width: 640px)").matches) {
-      openMobileUpload();
-      return;
-    }
-    resetAnalysis();
+    setSelectedUploadFile(null);
+    setUploadError("");
+    setFailedFile(null);
+    setSourceSetup("csv");
+    navigateScreen("home", selectedId, view);
   }
   function newDialog() {
     if (!selectedId) return;
     setActiveIds((previous) => ({ ...previous, [selectedId]: undefined }));
     activeConversations.current.delete(selectedId);
     setDrafts((previous) => ({ ...previous, [selectedId]: "" }));
-    setView("overview");
+    setViewState("overview");
     setShowDashboardGallery(false);
-    setMobilePanel("chat");
+    navigateScreen("chat", selectedId, "overview", false, null);
   }
   function openMobileUpload() {
     setSelectedUploadFile(null);
     setUploadError("");
     setFailedFile(null);
-    setMobilePanel("analytics");
-    setMobileOverlay("upload");
+    navigateScreen("home", selectedId, view);
   }
   function openSettings() {
     settingsReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -530,9 +646,8 @@ export default function App({ account, onAccountChange, onLogout }: {
     localStorage.setItem("evia.theme", value);
   }
   function openPostgresSetup() {
-    setSelectedId(null);
     setSourceSetup("postgres");
-    setMobilePanel("analytics");
+    navigateScreen("postgres", selectedId, view);
     void loadPostgresStatus();
   }
   async function upload(file: File, sourceId?: string) {
@@ -588,7 +703,7 @@ export default function App({ account, onAccountChange, onLogout }: {
     setUploadedId((current) => current === id ? null : current);
     setAttachedDashboard(null);
     setSourceSetup("csv");
-    setMobilePanel("analytics");
+    navigateScreen("home", null, "overview");
   }
   async function send(question: string, retryId?: string) {
     if (
@@ -658,8 +773,9 @@ export default function App({ account, onAccountChange, onLogout }: {
         chat.catch(() => pendingChats.current.delete(conversationId));
       }
       const chatId = await waitForChat(chat, controller.signal);
+      navigateScreen("chat", sourceId, view, true, chatId);
       controller.signal.throwIfAborted();
-      const answer = await api.chat(entry.question, sourceId, chatId, controller.signal, dashboardId);
+      const answer = await api.chat(entry.question, sourceId, chatId, controller.signal, dashboardId, locale);
       if (controller.signal.aborted)
         finish({
           state: "error",
@@ -694,40 +810,97 @@ export default function App({ account, onAccountChange, onLogout }: {
   function chooseFile() {
     fileInput.current?.click();
   }
+  function renderUploadCard() {
+    return <>
+      <section
+        className={`upload-card ${dragOver ? "drag-over" : ""}`}
+        onDragOver={(event) => {
+          event.preventDefault();
+          setDragOver(true);
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(event) => {
+          event.preventDefault();
+          setDragOver(false);
+          const file = event.dataTransfer.files[0];
+          if (file) {
+            if (window.matchMedia?.("(max-width: 640px)").matches) setSelectedUploadFile(file);
+            else void upload(file);
+          }
+        }}
+        aria-label={t("Добавление источника")}
+      >
+        {!sourcesLoading && <WelcomeGreeting greeting={welcomeGreeting} activeState={mascotState} />}
+        <h1>{uploading ? uploadProgress === 100 ? t("Обрабатываем CSV…") : `${t("Загрузка CSV")} · ${uploadProgress ?? 0}%` : t("Добавьте CSV")}</h1>
+        <p>{t("Перетащите файл сюда или выберите его с устройства")}</p>
+        {selectedUploadFile && <div className="upload-selected-file">
+          <Icon name="file" size={18} />
+          <span>{selectedUploadFile.name}<small>{(selectedUploadFile.size / 1024).toFixed(1)} КБ</small></span>
+          <Icon name="check" size={16} />
+        </div>}
+        {uploadError && <div className="upload-card-error"><ErrorNotice
+          message={uploadError}
+          onRetry={failedFile ? () => void upload(failedFile) : chooseFile}
+          label={failedFile ? t("Повторить загрузку CSV") : t("Выбрать файл")}
+        /></div>}
+        <button
+          className="primary"
+          onClick={() => selectedUploadFile ? void upload(selectedUploadFile) : chooseFile()}
+          disabled={uploading}
+        >
+          <Icon name="upload" />
+          {uploading ? uploadProgress === 100 ? t("Обрабатываем…") : `${t("Загружаем")} · ${uploadProgress ?? 0}%` : selectedUploadFile ? t("Загрузить файл") : t("Выбрать CSV")}
+        </button>
+        <small>{t("Поддерживаются кодировки UTF-8, UTF-16 и Windows-1251")} · {t("до 512 МиБ")}</small>
+      </section>
+      <details className="upload-advanced"><summary>{t("Дополнительно")}</summary><p>{t("Поддерживаются UTF-8, UTF-16 и Windows-1251; разделители — запятая, точка с запятой, табуляция и вертикальная черта. Первая строка содержит уникальные названия столбцов. Для замены данных откройте «Схема» у нужного источника.")}</p></details>
+    </>;
+  }
 
   return (
-    <div className={`app mobile-panel-${mobilePanel} ${mobileOverlay === "upload" ? "mobile-upload-overlay" : ""}`} data-testid="app-shell" data-theme={theme === "system" ? systemDark ? "dark" : "light" : theme}>
-      <a className="skip-link" href="#analysis">
-        Перейти к данным
+    <div className={`app mobile-panel-${mobilePanel} desktop-screen-${screen}`} data-testid="app-shell" data-theme={theme === "system" ? systemDark ? "dark" : "light" : theme}>
+      <a className="skip-link" href={screen === "chat" ? "#chat-workspace" : "#analysis"}>
+        {t("Перейти к содержимому")}
       </a>
       <header className="topbar">
         <a
           className="brand"
           href="#analysis"
-          aria-label="EVIA, рабочее пространство"
+          aria-label={`EVIA, ${t("Рабочее пространство")}`}
           onClick={(event) => {
-            if (window.matchMedia?.("(max-width: 640px)").matches) event.preventDefault();
-            setMobilePanel("home");
+            event.preventDefault();
+            navigateScreen("home", null, "overview");
           }}
         >
           EVIA
         </a>
-        {account && onAccountChange && onLogout && <AccountMenu account={account} onChange={onAccountChange} onLogout={onLogout} theme={theme === "system" ? systemDark ? "dark" : "light" : theme} />}
-        <button className="mobile-settings-entry" aria-label="Открыть настройки" onClick={openSettings}><Icon name="settings" size={18} /></button>
+        <nav className="workspace-nav" aria-label={t("Навигация рабочего пространства")}>
+          <button aria-pressed={screen === "home"} onClick={() => navigateScreen("home", null, "overview")}><Icon name="home" size={17} />{t("Главная")}</button>
+          <button aria-pressed={screen === "analysis"} disabled={!source} onClick={() => source && navigateScreen("analysis", source.source_id, view)}><Icon name="file" size={17} />{t("Анализ")}</button>
+          <button aria-pressed={screen === "chat"} onClick={() => navigateScreen("chat", selectedId, view)}><Icon name="chat" size={17} />{t("Чат")}</button>
+          <button aria-pressed={screen === "reports"} onClick={() => navigateScreen("reports", selectedId, view)}><Icon name="grid" size={17} />{t("Отчёты")}</button>
+        </nav>
+        <div className="topbar-actions">
+          <button className="primary new-analysis topbar-new-analysis" onClick={newAnalysis} disabled={uploading}>
+            <Icon name="plus" size={16} /> {t("Новый анализ")}
+          </button>
+          {account && onAccountChange && onLogout && <AccountMenu account={account} onChange={onAccountChange} onLogout={onLogout} theme={theme === "system" ? systemDark ? "dark" : "light" : theme} />}
+          <button className="mobile-settings-entry" aria-label={t("Открыть настройки")} onClick={openSettings}><Icon name="settings" size={17} /><span>{t("Настройки")}</span></button>
+        </div>
       </header>
       <div className="workspace">
-        <aside className="sidebar" aria-label="Навигация рабочего пространства">
+        <aside className="sidebar">
           <button className="primary new-analysis" onClick={newAnalysis}>
             <Icon name="plus" />
-            Добавить источник
+            {t("Новый анализ")}
           </button>
           {!sourcesLoading && <div className="mobile-home-greeting"><WelcomeGreeting greeting={welcomeGreeting} activeState={mascotState} /></div>}
           <section className="nav-section">
             <div className="nav-heading">
-              <h2>Источники</h2>
+              <h2>{t("Источники")}</h2>
               <button
                 className="icon-button"
-                aria-label="Обновить источники"
+                aria-label={t("Обновить источники")}
                 onClick={() => void loadSources()}
                 disabled={sourcesLoading}
               >
@@ -736,7 +909,7 @@ export default function App({ account, onAccountChange, onLogout }: {
             </div>
             {sourcesLoading && (
               <p className="sidebar-note" role="status">
-                Загружаем источники…
+                {t("Загружаем источники…")}
               </p>
             )}
             {sourcesError && (
@@ -746,7 +919,7 @@ export default function App({ account, onAccountChange, onLogout }: {
               />
             )}
             {!sourcesLoading && !sourcesError && !sources.length && (
-              <p className="sidebar-note">Нет источников</p>
+              <p className="sidebar-note">{t("Нет источников")}</p>
             )}
             <div className="source-list">
               {sources.map((item) => (
@@ -774,11 +947,11 @@ export default function App({ account, onAccountChange, onLogout }: {
                 if (window.matchMedia?.("(max-width: 640px)").matches) openMobileUpload();
                 else chooseFile();
               }}
-              title="CSV · UTF-8, UTF-16 или Windows-1251"
+              title={t("CSV · UTF-8, UTF-16 или Windows-1251")}
               disabled={uploading}
             >
               <Icon name="plus" size={16} />
-              {uploading ? uploadProgress === 100 ? "Обрабатываем CSV…" : `Загружаем CSV · ${uploadProgress ?? 0}%` : "Добавить CSV"}
+              {uploading ? uploadProgress === 100 ? t("Обрабатываем CSV…") : `${t("Загружаем CSV")} · ${uploadProgress ?? 0}%` : t("Добавить CSV")}
             </button>
             <button
               className={`postgres-nav ${!source && sourceSetup === "postgres" ? "selected" : ""}`}
@@ -786,53 +959,26 @@ export default function App({ account, onAccountChange, onLogout }: {
               aria-pressed={!source && sourceSetup === "postgres"}
               title={postgresStatus?.connected ? "PostgreSQL доступен" : undefined}
             >
-              Подключить PostgreSQL
+              {t("Подключить PostgreSQL")}
             </button>
-            <input
-              className="visually-hidden"
-              type="file"
-              accept=".csv,text/csv"
-              aria-label="Загрузить CSV"
-              ref={fileInput}
-              tabIndex={-1}
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (file) {
-                  if (window.matchMedia?.("(max-width: 640px)").matches) {
-                    setSelectedUploadFile(file);
-                    setMobilePanel("analytics");
-                  } else void upload(file);
-                }
-                event.target.value = "";
-              }}
-            />
-            {uploadError && (
-              <ErrorNotice
-                message={uploadError}
-                onRetry={
-                  failedFile ? () => void upload(failedFile) : chooseFile
-                }
-                label={failedFile ? "Повторить загрузку CSV" : "Выбрать файл"}
-              />
-            )}
           </section>
-          <button className={`reports-nav ${showDashboardGallery ? "selected" : ""}`} type="button" aria-pressed={showDashboardGallery} onClick={() => { setShowDashboardGallery(true); setMobilePanel("analytics"); }}>
-            Сохранённые отчёты <Icon name="chevron" size={15} />
+          <button className={`reports-nav ${showDashboardGallery ? "selected" : ""}`} type="button" aria-pressed={showDashboardGallery} onClick={() => navigateScreen("reports", selectedId, view)}>
+            {t("Сохранённые отчёты")} <Icon name="chevron" size={15} />
           </button>
           <section className="nav-section history-section">
             <div className="nav-heading">
-              <h2>История диалогов</h2>
+              <h2>{t("История диалогов")}</h2>
               {historyCount > 0 && (
                 <span className="nav-count">{historyCount}</span>
               )}
             </div>
             {historyListLoading ? (
-              <p className="sidebar-note" role="status">Загружаем диалоги…</p>
+              <p className="sidebar-note" role="status">{t("Загружаем диалоги…")}</p>
             ) : historyListError ? (
               <ErrorNotice
                 message={historyListError}
                 onRetry={() => void loadChatList()}
-                label="Повторить загрузку диалогов"
+                label={t("Повторить загрузку диалогов")}
               />
             ) : (
               <>
@@ -860,9 +1006,8 @@ export default function App({ account, onAccountChange, onLogout }: {
                           [historyKey]: history.filter((item) => item.conversationId === entry.conversationId).at(-1)?.id,
                         }));
                       }
-                      setView("results");
-                      setShowDashboardGallery(false);
-                      setMobilePanel("analytics");
+                      setViewState("results");
+                      navigateScreen("analysis", selectedId, "results");
                     }}
                   >
                     <Icon name="chat" size={16} />
@@ -877,7 +1022,7 @@ export default function App({ account, onAccountChange, onLogout }: {
                     key={chat.chat_id}
                     className={`history-item ${archivedChatId === chat.chat_id ? "active" : ""}`}
                     aria-label={`Архив: ${chat.title}`}
-                    title={`Источник недоступен · ${chat.title}`}
+                    title={`${t("Источник недоступен")} · ${chat.title}`}
                     onClick={() => openArchivedChat(chat)}
                   >
                     <Icon name="chat" size={16} />
@@ -889,7 +1034,7 @@ export default function App({ account, onAccountChange, onLogout }: {
                     key={chat.chat_id}
                     className={`history-item ${archivedChatId === chat.chat_id ? "active" : ""}`}
                     aria-label={`Без источника: ${chat.title}`}
-                    title={`Без источника · ${chat.title}`}
+                    title={`${t("Без источника")} · ${chat.title}`}
                     onClick={() => openArchivedChat(chat)}
                   >
                     <Icon name="chat" size={16} />
@@ -898,7 +1043,7 @@ export default function App({ account, onAccountChange, onLogout }: {
                 ))}
               </div>
                 ) : !failedServerChat && (
-                  <p className="sidebar-note">Нет диалогов</p>
+                  <p className="sidebar-note">{t("Нет диалогов")}</p>
                 )}
               </>
             )}
@@ -909,32 +1054,69 @@ export default function App({ account, onAccountChange, onLogout }: {
           id="analysis"
           tabIndex={-1}
         >
+          <input
+            className="visually-hidden"
+            type="file"
+            accept=".csv,text/csv"
+            aria-label={t("Загрузить CSV")}
+            ref={fileInput}
+            tabIndex={-1}
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) {
+                if (window.matchMedia?.("(max-width: 640px)").matches) setSelectedUploadFile(file);
+                else void upload(file);
+              }
+              event.target.value = "";
+            }}
+          />
           <div className="mobile-page-header">
-            <button aria-label={mobileOverlay === "upload" ? "Закрыть загрузку CSV" : "Назад к источникам"} onClick={() => { setMobileOverlay(null); setMobilePanel("home"); }}>
+            <button aria-label={t("Назад к источникам")} onClick={() => navigateScreen("home", null, "overview")}>
               <Icon name="back" size={22} />
             </button>
-            <strong>{mobileOverlay === "upload" ? "Загрузка CSV" : showDashboardGallery ? "Отчёты" : source ? "Данные источника" : sourceSetup === "postgres" ? "PostgreSQL" : "Загрузка CSV"}</strong>
+            <strong>{showDashboardGallery ? t("Отчёты") : source ? t("Данные источника") : sourceSetup === "postgres" ? "PostgreSQL" : t("Данные")}</strong>
             <span aria-hidden="true" />
           </div>
-          {showDashboardGallery && mobileOverlay !== "upload" ? (
-            <DashboardGallery onClose={() => setShowDashboardGallery(false)} onOpenOrigin={openDashboardOrigin} onAttach={source ? (id, title) => {
+          {screen === "home" ? (
+            <HomePage
+              sources={sources}
+              selectedSourceId={selectedId}
+              chats={chatSummaries}
+              loading={sourcesLoading}
+              error={sourcesError}
+              uploadCard={renderUploadCard()}
+              onRefresh={() => void loadSources()}
+              onSelectSource={selectSource}
+              onPostgres={openPostgresSetup}
+              onReports={() => navigateScreen("reports", selectedId, view)}
+              onOpenChat={openChatSummary}
+              chatLoading={historyListLoading}
+              chatError={historyListError}
+              onRefreshChats={() => void loadChatList()}
+            />
+          ) : screen === "reports" ? (
+            <DashboardGallery onClose={() => navigateScreen(source ? "analysis" : "home", source?.source_id ?? null, view)} onOpenOrigin={openDashboardOrigin} onAttach={source ? (id, title) => {
               setAttachedDashboard({ id, title });
-              setShowDashboardGallery(false);
-              setMobilePanel("chat");
+              navigateScreen("chat", selectedId, view);
             } : undefined} />
-          ) : source && mobileOverlay !== "upload" ? (
+          ) : screen === "analysis" && source ? (
             <SourceInspector
               source={source}
               entry={activeEntry}
               reportEntries={history}
               view={view}
-              setView={setView}
-              onOpenChat={() => setMobilePanel("chat")}
+              setView={changeSourceView}
+              onOpenChat={() => navigateScreen("chat", selectedId, view)}
               onReimport={(file, id) => void upload(file, id)}
               onDelete={deleteSource}
               deleteDisabled={uploading || Boolean(pending)}
             />
-          ) : sourceSetup === "postgres" && mobileOverlay !== "upload" ? (
+          ) : screen === "analysis" && !source ? (
+            <div className="home-empty" role={sourcesLoading ? "status" : undefined}>
+              <strong>{sourcesLoading ? t("Загружаем источник…") : t("Источник недоступен")}</strong>
+              {!sourcesLoading && <button className="text-button" onClick={() => navigateScreen("home", null, "overview")}>{t("Вернуться к источникам")}</button>}
+            </div>
+          ) : screen === "postgres" ? (
             <PostgresSetup
               status={postgresStatus}
               loading={postgresLoading}
@@ -943,58 +1125,20 @@ export default function App({ account, onAccountChange, onLogout }: {
               onRetry={() => void refreshPostgres()}
               onSelect={selectSource}
             />
-          ) : (
-            <>
-              <section
-                role={mobileOverlay === "upload" ? "dialog" : undefined}
-                className={`upload-card ${dragOver ? "drag-over" : ""}`}
-                onDragOver={(event) => {
-                  event.preventDefault();
-                  setDragOver(true);
-                }}
-                onDragLeave={() => setDragOver(false)}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  setDragOver(false);
-                  const file = event.dataTransfer.files[0];
-                  if (file) {
-                    if (window.matchMedia?.("(max-width: 640px)").matches) setSelectedUploadFile(file);
-                    else void upload(file);
-                  }
-                }}
-                aria-label={mobileOverlay === "upload" ? "Загрузка CSV" : "Добавление источника"}
-              >
-                {!sourcesLoading && <WelcomeGreeting greeting={welcomeGreeting} activeState={mascotState} />}
-                <h1>{uploading ? uploadProgress === 100 ? "Обрабатываем CSV…" : `Загрузка CSV · ${uploadProgress ?? 0}%` : "Добавьте CSV"}</h1>
-                <p>Перетащите файл сюда или выберите его с устройства</p>
-                {selectedUploadFile && <div className="upload-selected-file">
-                  <Icon name="file" size={18} />
-                  <span>{selectedUploadFile.name}<small>{(selectedUploadFile.size / 1024).toFixed(1)} КБ</small></span>
-                  <Icon name="check" size={16} />
-                </div>}
-                {uploadError && window.matchMedia?.("(max-width: 640px)").matches && <div className="mobile-upload-error"><ErrorNotice
-                  message={uploadError}
-                  onRetry={failedFile ? () => void upload(failedFile) : chooseFile}
-                  label={failedFile ? "Повторить загрузку CSV" : "Выбрать файл"}
-                /></div>}
-                <button
-                  className="primary"
-                  onClick={() => selectedUploadFile ? void upload(selectedUploadFile) : chooseFile()}
-                  disabled={uploading}
-                >
-                  <Icon name="upload" />
-                  {uploading ? uploadProgress === 100 ? "Обрабатываем…" : `Загружаем · ${uploadProgress ?? 0}%` : selectedUploadFile ? "Загрузить файл" : "Выбрать CSV"}
-                </button>
-                <small>UTF-8, UTF-16 или Windows-1251 · до 512 МиБ</small>
-              </section>
-              <details className="upload-advanced"><summary>Дополнительно</summary><p>Поддерживаются UTF-8, UTF-16 и Windows-1251; разделители — запятая, точка с запятой, табуляция и вертикальная черта. Первая строка содержит уникальные названия столбцов. Для замены данных откройте «Схема» у нужного источника.</p></details>
-            </>
-          )}
+          ) : null}
         </main>
-        <aside className="chat-panel" aria-label="Чат с EVIA">
+        <aside id="chat-workspace" className="chat-panel" aria-label={t("Чат с EVIA")}>
           <header className="chat-header">
-            <h2>AI-помощник</h2><strong className="mobile-chat-brand">EVIA</strong>
-            {source && <button className="new-dialog" type="button" onClick={newDialog}><Icon name="plus" size={15} /> Новый диалог</button>}
+            <div className="chat-title"><h2>{t("AI-помощник")}</h2><strong className="mobile-chat-brand">EVIA</strong></div>
+            <label className="chat-source-picker">
+              <Icon name="file" size={15} />
+              <span className="visually-hidden">{t("Источник данных для чата")}</span>
+              <select aria-label={t("Источник данных для чата")} value={selectedId ?? ""} onChange={(event) => switchChatSource(event.target.value)}>
+                <option value="">{t("Без источника")}</option>
+                {sources.map((item) => <option key={item.source_id} value={item.source_id}>{item.name}</option>)}
+              </select>
+            </label>
+            {source && <button className="new-dialog" type="button" onClick={newDialog}><Icon name="plus" size={15} /> {t("Новый диалог")}</button>}
           </header>
           <div className="chat-content">
             {activeEntry ? (
@@ -1002,52 +1146,51 @@ export default function App({ account, onAccountChange, onLogout }: {
               {activePage?.hasMore && (
                 <div className="history-pagination">
                   {activePage.loading ? (
-                    <p role="status">Загружаем предыдущие сообщения…</p>
+                    <p role="status">{t("Загружаем предыдущие сообщения…")}</p>
                   ) : activePage.error ? (
                     <ErrorNotice
                       message={activePage.error}
                       onRetry={() => historyKey && activePage.nextBefore !== null && void loadChatHistory(historyKey, activeConversationId!, activePage.nextBefore)}
-                      label="Повторить загрузку истории"
+                    label={t("Повторить загрузку истории")}
                     />
                   ) : (
                     <button
                       className="text-button"
                       onClick={() => historyKey && activePage.nextBefore !== null && void loadChatHistory(historyKey, activeConversationId!, activePage.nextBefore)}
                     >
-                      Показать предыдущие сообщения
+                      {t("Показать предыдущие сообщения")}
                     </button>
                   )}
                 </div>
               )}
               {conversationEntries.map((message) => <article key={message.id} className="chat-turn">
                 <div className="user-message">{message.question}</div>
-                <section className="assistant-message" aria-label="Ответ EVIA">
+                <section className="assistant-message" aria-label={t("Ответ EVIA")}>
                   <div className="reply-label">EVIA</div>
                   {message.state === "pending" ? (
                     <div className="thinking" role="status">
                       <span />
                       <span />
                       <span />
-                      <p>Изучаю ваш вопрос…</p>
+                      <p>{t("Изучаю ваш вопрос…")}</p>
                     </div>
                   ) : message.state === "error" ? (
                     <ErrorNotice
                       message={
-                        message.error ?? "Не удалось получить ответ."
+                        t(message.error ?? "Не удалось получить ответ.")
                       }
                       onRetry={() =>
                         void send(message.question, message.id)
                       }
-                      label="Повторить вопрос"
+                      label={t("Повторить вопрос")}
                     />
                   ) : (
                     <>
                       <SafeMarkdown>
-                        {message.answer?.answer ||
-                          "Модель вернула пустой ответ."}
+                        {message.answer?.answer || t("Модель вернула пустой ответ.")}
                       </SafeMarkdown>
                       {message.answer?.clarification?.options && (
-                        <div className="clarification-options" aria-label="Варианты уточнения">
+                        <div className="clarification-options" aria-label={t("Варианты уточнения")}>
                           {message.answer.clarification.options.map((option, index) => (
                             <button
                               className="text-button"
@@ -1062,22 +1205,21 @@ export default function App({ account, onAccountChange, onLogout }: {
                       {message.historyDetail && (
                         <p className="history-details-notice" role="status">
                           {message.historyDetail === "legacy"
-                            ? "Это старый текстовый ответ: SQL, таблица и время тогда не сохранялись."
+                            ? t("Это старый текстовый ответ: SQL, таблица и время тогда не сохранялись.")
                             : message.historyDetail === "unsupported"
-                              ? "Сохранённые детали созданы более новой версией EVIA и пока показаны только текстом."
-                              : "Сохранённые детали этого ответа повреждены, поэтому показан только текст."}
+                              ? t("Сохранённые детали созданы более новой версией EVIA и пока показаны только текстом.")
+                              : t("Сохранённые детали этого ответа повреждены, поэтому показан только текст.")}
                         </p>
                       )}
                       {!message.historyDetail && Boolean(message.answer?.tool_results.length || message.answer?.analysis?.sql) && <button
                         className="result-link"
                         onClick={() => {
                           if (historyKey) setActiveIds((previous) => ({ ...previous, [historyKey]: message.id }));
-                          setView("results");
-                          setShowDashboardGallery(false);
-                          setMobilePanel("analytics");
+                          setViewState("results");
+                          navigateScreen("analysis", selectedId, "results");
                         }}
                       >
-                        Открыть результат
+                        {t("Открыть результат")}
                         <Icon name="chevron" size={15} />
                       </button>
                       }
@@ -1090,21 +1232,21 @@ export default function App({ account, onAccountChange, onLogout }: {
             ) : (
               <div className="chat-welcome">
                 {source && !sourcesLoading && <WelcomeGreeting greeting={welcomeGreeting} activeState={mascotState} />}
-                <h3>{source ? "Спросите о своих данных" : "Добавьте источник данных"}</h3>
-                <p className="mobile-chat-intro">{source ? "EVIA поможет найти ответ, построить график или разобраться в таблице." : "Загрузите CSV или подключите PostgreSQL, чтобы начать анализ."}</p>
+                <h3>{t(source ? "Спросите о своих данных" : "Добавьте источник данных")}</h3>
+                <p className="mobile-chat-intro">{t(source ? "EVIA поможет найти ответ, построить график или разобраться в таблице." : "Загрузите CSV или подключите PostgreSQL, чтобы начать анализ.")}</p>
                 <p
                   className={`evia-live-status ${["welcome", "waiting", "listening", "explaining"].includes(mascotState) ? "visually-hidden" : ""}`}
                   role="status"
                 >
-                  {eviaStatus(mascotState)}
+                  {t(eviaStatus(mascotState))}
                 </p>
                 {source && (
                   <div className="suggestions">
                     {[
-                      "Какие есть столбцы?",
-                      "Покажи первые строки",
-                      "Есть ли пропуски?",
-                      "Построй график распределения",
+                      t("Какие есть столбцы?"),
+                      t("Покажи первые строки"),
+                      t("Есть ли пропуски?"),
+                      t("Построй график распределения"),
                     ].map((question) => (
                       <button
                         key={question}
@@ -1123,24 +1265,24 @@ export default function App({ account, onAccountChange, onLogout }: {
             )}
           </div>
           <div className="chat-bottom">
-            {attachedDashboard && source && <div className="attached-report" aria-label="Прикреплённый отчёт"><span>Отчёт: <strong>{attachedDashboard.title}</strong></span><button type="button" aria-label="Открепить отчёт" onClick={() => setAttachedDashboard(null)}><Icon name="close" size={14} /></button></div>}
-            {activeEntry && <div className="helper" role="status"><Evia state={mascotState} />{activeEntry.state === "pending" && <strong>{eviaStatus(mascotState)}</strong>}</div>}
+            {attachedDashboard && source && <div className="attached-report" aria-label={t("Прикреплённый отчёт")}><span>{t("Отчёт:")} <strong>{attachedDashboard.title}</strong></span><button type="button" aria-label={t("Открепить отчёт")} onClick={() => setAttachedDashboard(null)}><Icon name="close" size={14} /></button></div>}
+            {activeEntry && <div className="helper" role="status"><Evia state={mascotState} />{activeEntry.state === "pending" && <strong>{t(eviaStatus(mascotState))}</strong>}</div>}
             {archivedChat && !archivedChat.source_id && (
               <p className="history-details-notice">
-                Для продолжения этого старого диалога выберите источник в левой панели.
+                {t("Для продолжения этого старого диалога выберите источник в левой панели.")}
               </p>
             )}
             <form className="composer" onSubmit={submit}>
               <label className="visually-hidden" htmlFor="question">
-                Ваш вопрос
+                {t("Ваш вопрос")}
               </label>
               <textarea
                 id="question"
                 ref={composer}
                 placeholder={
                   source
-                    ? "Что хотите узнать о данных?"
-                    : "Сначала добавьте источник…"
+                    ? t("Что хотите узнать о данных?")
+                    : t("Сначала добавьте источник…")
                 }
                 rows={3}
                 value={draft}
@@ -1165,14 +1307,14 @@ export default function App({ account, onAccountChange, onLogout }: {
                       {source.name}
                     </>
                   ) : (
-                    "Источник не выбран"
+                    t("Источник не выбран")
                   )}
                 </span>
                 {pending ? (
                   <button
                     type="button"
                     className="stop-button"
-                    aria-label="Прекратить ожидание"
+                    aria-label={t("Прекратить ожидание")}
                     onClick={() => {
                       if (pending?.conversationId)
                         askControllers.current.get(pending.conversationId)?.abort();
@@ -1184,7 +1326,7 @@ export default function App({ account, onAccountChange, onLogout }: {
                   <button
                     className="send-button"
                     type="submit"
-                    aria-label="Отправить вопрос"
+                    aria-label={t("Отправить вопрос")}
                     disabled={
                       !source || !draft.trim() || draft.trim().length > 4000
                     }
@@ -1194,57 +1336,65 @@ export default function App({ account, onAccountChange, onLogout }: {
                 )}
               </div>
             </form>
-            {source && <div className="mobile-chat-source" aria-label="Прикреплённый источник"><Icon name="file" size={14} /><span>{source.name}{source.source_type === "csv" && !source.name.toLowerCase().endsWith(".csv") ? ".csv" : ""}</span><button type="button" aria-label="Убрать источник из чата" onClick={() => setSelectedId(null)}><Icon name="close" size={14} /></button></div>}
+            {source && <div className="mobile-chat-source" aria-label={t("Прикреплённый источник")}><Icon name="file" size={14} /><span>{source.name}{source.source_type === "csv" && !source.name.toLowerCase().endsWith(".csv") ? ".csv" : ""}</span><button type="button" aria-label={t("Убрать источник из чата")} onClick={() => setSelectedId(null)}><Icon name="close" size={14} /></button></div>}
             <div className="composer-hint">
-              <span>Ctrl / ⌘ + Enter — отправить</span>
+              <span>{t("Ctrl / ⌘ + Enter — отправить")}</span>
               {draft.length > 3500 && <span>{draft.length}/4000</span>}
             </div>
           </div>
         </aside>
       </div>
       {mobileOverlay === "settings" && <div className="settings-backdrop" data-testid="settings-backdrop" aria-hidden="true" onClick={() => setMobileOverlay(null)} />}
-      {mobileOverlay === "settings" && <section className="mobile-fullscreen mobile-settings" role="dialog" aria-label="Настройки" aria-modal="true" ref={settingsDialog}>
-        <header><h2>Настройки</h2><button aria-label="Закрыть настройки" onClick={() => setMobileOverlay(null)}><Icon name="close" size={19} /></button></header>
-        <h3>Тема</h3>
+      {mobileOverlay === "settings" && <section className="mobile-fullscreen mobile-settings" role="dialog" aria-label={t("Настройки")} aria-modal="true" ref={settingsDialog}>
+        <header><h2>{t("Настройки")}</h2><button aria-label={t("Закрыть настройки")} onClick={() => setMobileOverlay(null)}><Icon name="close" size={19} /></button></header>
+        <h3>{t("Тема")}</h3>
         <div className="settings-options">
-          {([ ["light", "Светлая"], ["dark", "Тёмная"], ["system", "Системная"] ] as const).map(([value, label]) => <button key={value} aria-label={`${label} тема`} aria-pressed={theme === value} onClick={() => chooseTheme(value)}><span>{label}</span>{theme === value && <Icon name="check" size={16} />}</button>)}
+          {([ ["light", "Светлая"], ["dark", "Тёмная"], ["system", "Системная"] ] as const).map(([value, label]) => <button key={value} aria-label={locale === "en" ? `${t(label)} theme` : `${label} тема`} aria-pressed={theme === value} onClick={() => chooseTheme(value)}><span>{t(label)}</span>{theme === value && <Icon name="check" size={16} />}</button>)}
         </div>
-        <div className="settings-info"><span>Язык</span><strong>Русский</strong></div>
+        <label className="settings-info language-setting"><span>{t("Язык")}</span><select aria-label={t("Язык")} value={locale} onChange={(event) => setLocale(event.target.value as "ru" | "en")}><option value="ru">{t("Русский")}</option><option value="en">{t("Английский")}</option></select></label>
       </section>}
-      <nav className="mobile-nav" aria-label="Мобильная навигация">
+      <nav className="mobile-nav" aria-label={t("Мобильная навигация")}>
         <button
-          aria-label="Источники"
+          aria-label={t("Источники")}
           aria-pressed={mobilePanel === "home"}
-          onClick={() => setMobilePanel("home")}
+          onClick={() => navigateScreen("home", null, "overview")}
         >
           <Icon name="home" size={18} />
-          <span>Источники</span>
+          <span>{t("Источники")}</span>
         </button>
         <button
-          aria-label="Рабочее пространство"
+          aria-label={t("Рабочее пространство")}
           aria-pressed={mobilePanel === "analytics"}
-          onClick={() => setMobilePanel("analytics")}
+          onClick={() => source ? navigateScreen("analysis", source.source_id, view) : navigateScreen("reports", null, view)}
         >
           <Icon name="file" size={18} />
-          <span>Данные</span>
+          <span>{t("Данные")}</span>
         </button>
         <button
-          aria-label="Чат"
+          aria-label={t("Чат")}
           aria-pressed={mobilePanel === "chat"}
-          onClick={() => setMobilePanel("chat")}
+          onClick={() => navigateScreen("chat", selectedId, view)}
         >
           <Icon name="chat" size={18} />
-          <span>Чат</span>
+          <span>{t("Чат")}</span>
         </button>
         <button
-          aria-label="Настройки"
+          aria-label={t("Настройки")}
           aria-pressed={mobileOverlay === "settings"}
           onClick={openSettings}
         >
           <Icon name="settings" size={18} />
-          <span>Настройки</span>
+          <span>{t("Настройки")}</span>
         </button>
       </nav>
     </div>
   );
+}
+
+export default function App(props: {
+  account?: Account;
+  onAccountChange?: (account: Account) => void;
+  onLogout?: () => Promise<void>;
+} = {}) {
+  return <LanguageProvider><AppContent {...props} /></LanguageProvider>;
 }
