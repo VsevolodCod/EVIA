@@ -50,17 +50,17 @@ flowchart TB
 
 ## API
 
-| Route | Purpose |
-| --- | --- |
-| `GET /health` | Application status and configured provider type. |
-| `POST /auth/register`, `/auth/login`, `/auth/logout` | Registration, login and logout when authentication is enabled. |
-| `GET /auth/me`, `PATCH /auth/profile`, `/auth/avatar` | Account, profile and photo. |
-| `POST /auth/reset/request`, `/auth/reset/confirm` | Request and apply a recovery code when delivery is configured. |
-| `POST /sources/csv`, `GET /sources` | Upload CSV and list accessible sources. |
-| `GET /sources/{id}/schema`, `/preview`, `/profile` | Schema, bounded preview and profile. |
-| `POST /agent/ask`, `POST /agent/chat` | Standalone question or a question in a conversation. |
-| `GET /chats`, `POST /chats`, `GET /chats/{id}` | Create and restore conversation history. |
-| `GET /dashboards/ids`, `GET /dashboards/{id}/build`, `POST /dashboards/{id}/refresh` | List, saved result and explicit dashboard refresh. |
+| Route                                                                                | Purpose                                                        |
+|--------------------------------------------------------------------------------------|----------------------------------------------------------------|
+| `GET /health`                                                                        | Application status and configured provider type.               |
+| `POST /auth/register`, `/auth/login`, `/auth/logout`                                 | Registration, login and logout when authentication is enabled. |
+| `GET /auth/me`, `PATCH /auth/profile`, `/auth/avatar`                                | Account, profile and photo.                                    |
+| `POST /auth/reset/request`, `/auth/reset/confirm`                                    | Request and apply a recovery code when delivery is configured. |
+| `POST /sources/csv`, `GET /sources`                                                  | Upload CSV and list accessible sources.                        |
+| `GET /sources/{id}/schema`, `/preview`, `/profile`                                   | Schema, bounded preview and profile.                           |
+| `POST /agent/ask`, `POST /agent/chat`                                                | Standalone question or a question in a conversation.           |
+| `GET /chats`, `POST /chats`, `GET /chats/{id}`                                       | Create and restore conversation history.                       |
+| `GET /dashboards/ids`, `GET /dashboards/{id}/build`, `POST /dashboards/{id}/refresh` | List, saved result and explicit dashboard refresh.             |
 
 See [contracts](../../contracts/README.md); a running FastAPI server exposes interactive documentation at `/docs`. The `/auth/avatar` path supports multiple HTTP methods.
 

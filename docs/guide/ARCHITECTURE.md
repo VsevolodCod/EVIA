@@ -50,17 +50,17 @@ flowchart TB
 
 ## API
 
-| Маршрут | Назначение |
-| --- | --- |
-| `GET /health` | Состояние приложения и имя настроенного типа провайдера. |
-| `POST /auth/register`, `/auth/login`, `/auth/logout` | Регистрация, вход и выход при включённой авторизации. |
-| `GET /auth/me`, `PATCH /auth/profile`, `/auth/avatar` | Учётная запись, профиль и фото. |
-| `POST /auth/reset/request`, `/auth/reset/confirm` | Запрос и применение кода восстановления при настроенной доставке. |
-| `POST /sources/csv`, `GET /sources` | Загрузка CSV и список доступных источников. |
-| `GET /sources/{id}/schema`, `/preview`, `/profile` | Схема, ограниченный предпросмотр и профиль. |
-| `POST /agent/ask`, `POST /agent/chat` | Отдельный вопрос или вопрос в чате. |
-| `GET /chats`, `POST /chats`, `GET /chats/{id}` | Создание и восстановление истории. |
-| `GET /dashboards/ids`, `GET /dashboards/{id}/build`, `POST /dashboards/{id}/refresh` | Список, сохранённый результат и явный перерасчёт дашборда. |
+| Маршрут                                                                              | Назначение                                                        |
+|--------------------------------------------------------------------------------------|-------------------------------------------------------------------|
+| `GET /health`                                                                        | Состояние приложения и имя настроенного типа провайдера.          |
+| `POST /auth/register`, `/auth/login`, `/auth/logout`                                 | Регистрация, вход и выход при включённой авторизации.             |
+| `GET /auth/me`, `PATCH /auth/profile`, `/auth/avatar`                                | Учётная запись, профиль и фото.                                   |
+| `POST /auth/reset/request`, `/auth/reset/confirm`                                    | Запрос и применение кода восстановления при настроенной доставке. |
+| `POST /sources/csv`, `GET /sources`                                                  | Загрузка CSV и список доступных источников.                       |
+| `GET /sources/{id}/schema`, `/preview`, `/profile`                                   | Схема, ограниченный предпросмотр и профиль.                       |
+| `POST /agent/ask`, `POST /agent/chat`                                                | Отдельный вопрос или вопрос в чате.                               |
+| `GET /chats`, `POST /chats`, `GET /chats/{id}`                                       | Создание и восстановление истории.                                |
+| `GET /dashboards/ids`, `GET /dashboards/{id}/build`, `POST /dashboards/{id}/refresh` | Список, сохранённый результат и явный перерасчёт дашборда.        |
 
 Схемы и примеры: [контракты](../../contracts/README.md); интерактивная спецификация FastAPI доступна на `/docs` работающего сервера. Разные пути `/auth/avatar` используют разные HTTP-методы.
 
