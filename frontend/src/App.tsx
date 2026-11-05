@@ -17,6 +17,7 @@ import { PostgresSetup } from "./features/sources/PostgresSetup";
 import type { Entry, View } from "./features/chat/types";
 import { ResponseTiming } from "./features/chat/ResponseTiming";
 import { AccountMenu } from "./AccountMenu";
+import { LanguageSwitch, useLanguage } from "./language";
 import type { Account } from "./authApi";
 import "./styles.css";
 import {
@@ -108,6 +109,7 @@ export default function App({ account, onAccountChange, onLogout }: {
   onAccountChange?: (account: Account) => void;
   onLogout?: () => Promise<void>;
 } = {}) {
+  const { t } = useLanguage();
   const [sources, setSources] = useState<Source[]>([]);
   const [sourcesLoading, setSourcesLoading] = useState(true);
   const [sourcesError, setSourcesError] = useState("");
@@ -1209,7 +1211,7 @@ export default function App({ account, onAccountChange, onLogout }: {
         <div className="settings-options">
           {([ ["light", "Светлая"], ["dark", "Тёмная"], ["system", "Системная"] ] as const).map(([value, label]) => <button key={value} aria-label={`${label} тема`} aria-pressed={theme === value} onClick={() => chooseTheme(value)}><span>{label}</span>{theme === value && <Icon name="check" size={16} />}</button>)}
         </div>
-        <div className="settings-info"><span>Язык</span><strong>Русский</strong></div>
+        <h3>{t("Язык", "Language")}</h3><LanguageSwitch />
       </section>}
       <nav className="mobile-nav" aria-label="Мобильная навигация">
         <button
