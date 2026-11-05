@@ -81,7 +81,6 @@ def test_real_workspace_keyboard_mobile_and_safe_markdown(server):
             with page.expect_file_chooser() as chooser:
                 upload.click()
             chooser.value.set_files(ROOT / 'sample-data' / 'sales.csv')
-            page.get_by_role('button', name='Загрузить файл').click()
             expect(page.get_by_role('heading', name='sales')).to_be_visible()
             page.get_by_role('button', name='Данные', exact=True).click()
             expect(page.get_by_role('region', name='Предпросмотр источника').get_by_text('0001', exact=True)).to_be_visible()
@@ -120,7 +119,6 @@ def test_real_workspace_keyboard_mobile_and_safe_markdown(server):
             page.get_by_role('navigation', name='Навигация рабочего пространства').get_by_role('button', name='Главная').click()
             page.get_by_label('Загрузить CSV').set_input_files({
                 'name': 'second.csv', 'mimeType': 'text/csv', 'buffer': b'id,value\n0099,5\n'})
-            page.get_by_role('button', name='Загрузить файл').click()
             expect(page.get_by_role('heading', name='second')).to_be_visible()
             page.get_by_role('button', name='Данные', exact=True).click()
             expect(page.get_by_role('region', name='Предпросмотр источника').get_by_text('0099')).to_be_visible()
@@ -176,7 +174,6 @@ def test_profile_overview_drilldown_search_and_responsive_layout(server):
                 'buffer': ('region,revenue,channel\nСевер,1200,Сайт\nЮг,800,Магазин\n'
                            'Север,1500,Сайт\n,600,Магазин\nЗапад,900,Сайт\nВосток,1100,\n').encode(),
             })
-            page.get_by_role('button', name='Загрузить файл').click()
             expect(page.get_by_role('heading', name='retail-demo')).to_be_visible()
             expect(page.locator('.kpi-grid .dashboard-card').first).to_contain_text('6')
             expect(page.get_by_text('Заполненность источника', exact=True)).to_be_visible()
@@ -263,7 +260,6 @@ def test_profile_overview_drilldown_search_and_responsive_layout(server):
             page.get_by_label('Загрузить CSV').set_input_files({
                 'name': 'second.csv', 'mimeType': 'text/csv', 'buffer': b'id\n1\n2\n',
             })
-            page.get_by_role('button', name='Загрузить файл').click()
             expect(page.locator('.kpi-grid .dashboard-card').first).to_contain_text('2')
             page.get_by_role('button', name='Столбцы', exact=True).click()
             expect(page.get_by_role('searchbox', name='Поиск столбца')).to_have_value('')
