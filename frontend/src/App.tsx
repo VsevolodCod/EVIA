@@ -715,7 +715,7 @@ export default function App({ account, onAccountChange, onLogout }: {
           EVIA
         </a>
         {account && onAccountChange && onLogout && <AccountMenu account={account} onChange={onAccountChange} onLogout={onLogout} theme={theme === "system" ? systemDark ? "dark" : "light" : theme} />}
-        <button className="mobile-settings-entry" aria-label="Открыть настройки" onClick={openSettings}><Icon name="settings" size={18} /></button>
+        <button className="mobile-settings-entry" aria-label={t("Открыть настройки", "Open settings")} onClick={openSettings}><Icon name="settings" size={18} /></button>
       </header>
       <div className="workspace">
         <aside className="sidebar" aria-label="Навигация рабочего пространства">
@@ -780,7 +780,7 @@ export default function App({ account, onAccountChange, onLogout }: {
               disabled={uploading}
             >
               <Icon name="plus" size={16} />
-              {uploading ? uploadProgress === 100 ? "Обрабатываем CSV…" : `Загружаем CSV · ${uploadProgress ?? 0}%` : "Добавить CSV"}
+              {uploading ? uploadProgress === 100 ? t("Обрабатываем CSV…", "Processing CSV…") : t(`Загружаем CSV · ${uploadProgress ?? 0}%`, `Uploading CSV · ${uploadProgress ?? 0}%`) : t("Добавить CSV", "Add CSV")}
             </button>
             <button
               className={`postgres-nav ${!source && sourceSetup === "postgres" ? "selected" : ""}`}
@@ -794,7 +794,7 @@ export default function App({ account, onAccountChange, onLogout }: {
               className="visually-hidden"
               type="file"
               accept=".csv,text/csv"
-              aria-label="Загрузить CSV"
+              aria-label={t("Загрузить CSV", "Upload CSV")}
               ref={fileInput}
               tabIndex={-1}
               onChange={(event) => {
@@ -967,7 +967,7 @@ export default function App({ account, onAccountChange, onLogout }: {
                 aria-label={mobileOverlay === "upload" ? "Загрузка CSV" : "Добавление источника"}
               >
                 {!sourcesLoading && <WelcomeGreeting greeting={welcomeGreeting} activeState={mascotState} />}
-                <h1>{uploading ? uploadProgress === 100 ? "Обрабатываем CSV…" : `Загрузка CSV · ${uploadProgress ?? 0}%` : "Добавьте CSV"}</h1>
+              <h1>{uploading ? uploadProgress === 100 ? t("Обрабатываем CSV…", "Processing CSV…") : t(`Загрузка CSV · ${uploadProgress ?? 0}%`, `Uploading CSV · ${uploadProgress ?? 0}%`) : t("Добавьте CSV", "Add CSV")}</h1>
                 <p>{t("Перетащите файл сюда или выберите его с устройства", "Drag a file here or choose one from your device")}</p>
                 {selectedUploadFile && <div className="upload-selected-file">
                   <Icon name="file" size={18} />
@@ -985,7 +985,7 @@ export default function App({ account, onAccountChange, onLogout }: {
                   disabled={uploading}
                 >
                   <Icon name="upload" />
-                  {uploading ? uploadProgress === 100 ? "Обрабатываем…" : `Загружаем · ${uploadProgress ?? 0}%` : selectedUploadFile ? "Загрузить файл" : "Выбрать CSV"}
+                  {uploading ? uploadProgress === 100 ? t("Обрабатываем…", "Processing…") : t(`Загружаем · ${uploadProgress ?? 0}%`, `Uploading · ${uploadProgress ?? 0}%`) : selectedUploadFile ? t("Загрузить файл", "Upload file") : t("Выбрать CSV", "Choose CSV")}
                 </button>
                 <small>UTF-8, UTF-16 или Windows-1251 · до 512 МиБ</small>
               </section>
@@ -996,7 +996,7 @@ export default function App({ account, onAccountChange, onLogout }: {
         <aside className="chat-panel" aria-label="Чат с EVIA">
           <header className="chat-header">
             <h2>{t("AI-помощник", "AI assistant")}</h2><strong className="mobile-chat-brand">EVIA</strong>
-            {source && <button className="new-dialog" type="button" onClick={newDialog}><Icon name="plus" size={15} /> Новый диалог</button>}
+            {source && <button className="new-dialog" type="button" onClick={newDialog}><Icon name="plus" size={15} /> {t("Новый диалог", "New chat")}</button>}
           </header>
           <div className="chat-content">
             {activeEntry ? (
@@ -1103,10 +1103,10 @@ export default function App({ account, onAccountChange, onLogout }: {
                 {source && (
                   <div className="suggestions">
                     {[
-                      "Какие есть столбцы?",
-                      "Покажи первые строки",
-                      "Есть ли пропуски?",
-                      "Построй график распределения",
+                      t("Какие есть столбцы?", "What columns are available?"),
+                      t("Покажи первые строки", "Show the first rows"),
+                      t("Есть ли пропуски?", "Are there missing values?"),
+                      t("Построй график распределения", "Plot the distribution"),
                     ].map((question) => (
                       <button
                         key={question}
@@ -1209,13 +1209,13 @@ export default function App({ account, onAccountChange, onLogout }: {
         <header><h2>{t("Настройки", "Settings")}</h2><button aria-label={t("Закрыть настройки", "Close settings")} onClick={() => setMobileOverlay(null)}><Icon name="close" size={19} /></button></header>
         <h3>{t("Тема", "Theme")}</h3>
         <div className="settings-options">
-          {([ ["light", "Светлая"], ["dark", "Тёмная"], ["system", "Системная"] ] as const).map(([value, label]) => <button key={value} aria-label={`${label} тема`} aria-pressed={theme === value} onClick={() => chooseTheme(value)}><span>{label}</span>{theme === value && <Icon name="check" size={16} />}</button>)}
+          {([ ["light", t("Светлая", "Light")], ["dark", t("Тёмная", "Dark")], ["system", t("Системная", "System")] ] as const).map(([value, label]) => <button key={value} aria-label={t(`${label} тема`, `${label} theme`)} aria-pressed={theme === value} onClick={() => chooseTheme(value)}><span>{label}</span>{theme === value && <Icon name="check" size={16} />}</button>)}
         </div>
         <h3>{t("Язык", "Language")}</h3><LanguageSwitch />
       </section>}
       <nav className="mobile-nav" aria-label="Мобильная навигация">
         <button
-          aria-label="Источники"
+          aria-label={t("Источники", "Sources")}
           aria-pressed={mobilePanel === "home"}
           onClick={() => setMobilePanel("home")}
         >
@@ -1223,7 +1223,7 @@ export default function App({ account, onAccountChange, onLogout }: {
           <span>{t("Источники", "Sources")}</span>
         </button>
         <button
-          aria-label="Рабочее пространство"
+          aria-label={t("Рабочее пространство", "Workspace")}
           aria-pressed={mobilePanel === "analytics"}
           onClick={() => setMobilePanel("analytics")}
         >
@@ -1231,7 +1231,7 @@ export default function App({ account, onAccountChange, onLogout }: {
           <span>{t("Данные", "Data")}</span>
         </button>
         <button
-          aria-label="Чат"
+          aria-label={t("Чат", "Chat")}
           aria-pressed={mobilePanel === "chat"}
           onClick={() => setMobilePanel("chat")}
         >
@@ -1239,7 +1239,7 @@ export default function App({ account, onAccountChange, onLogout }: {
           <span>{t("Чат", "Chat")}</span>
         </button>
         <button
-          aria-label="Настройки"
+          aria-label={t("Настройки", "Settings")}
           aria-pressed={mobileOverlay === "settings"}
           onClick={openSettings}
         >
