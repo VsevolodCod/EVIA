@@ -257,7 +257,7 @@ export function SourceInspector({
               <>
                 <div className="pane-heading">
                   <div>
-                    <h2>Предпросмотр данных</h2>
+                    <h2>{t("Предпросмотр данных", "Data preview")}</h2>
                   </div>
                 </div>
                 <DataTable
@@ -265,19 +265,19 @@ export function SourceInspector({
                   columns={current.schema.objects[0]?.fields.map(
                     (field) => field.name,
                   )}
-                  label="Предпросмотр источника"
+                  label={t("Предпросмотр источника", "Source preview")}
                 />
               </>
             ) : (
               <div className="analytics-section">
                 <div className="analytics-title">
                   <div>
-                    <h2>Структура источника</h2>
+                    <h2>{t("Структура источника", "Source structure")}</h2>
                   </div>
                 </div>
                 {source.import_report && <details className="csv-import-details">
-                  <summary>Отчёт об импорте</summary>
-                  <p>Принято {numberText(source.import_report.accepted_rows)} из {numberText(source.import_report.rows_read)} строк · отклонено {numberText(source.import_report.rejected_rows)}</p>
+                  <summary>{t("Отчёт об импорте", "Import report")}</summary>
+                  <p>{t(`Принято ${numberText(source.import_report.accepted_rows)} из ${numberText(source.import_report.rows_read)} строк · отклонено ${numberText(source.import_report.rejected_rows)}`, `Accepted ${numberText(source.import_report.accepted_rows)} of ${numberText(source.import_report.rows_read)} rows · rejected ${numberText(source.import_report.rejected_rows)}`)}</p>
                   <p>Кодировка: {source.import_report.encoding.toUpperCase()} · разделитель: {source.import_report.delimiter === "\t" ? "табуляция" : source.import_report.delimiter}</p>
                   {source.import_report.warnings.length > 0 && <ul>{source.import_report.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>}
                   {source.csv_versions?.map((version, index) => <a
@@ -294,7 +294,7 @@ export function SourceInspector({
                   </label>}
                 </details>}
                 {!current.schema.objects.length ? (
-                  <p className="muted">В источнике нет объектов схемы.</p>
+                  <p className="muted">{t("В источнике нет объектов схемы.", "The source contains no schema objects.")}</p>
                 ) : (
                   current.schema.objects.map((object) => (
                     <section key={object.object_id}>
