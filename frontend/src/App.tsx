@@ -544,12 +544,12 @@ export default function App({ account, onAccountChange, onLogout }: {
     setFailedFile(null);
     if (!file.name.toLowerCase().endsWith(".csv")) {
       setUploadFailure("invalid_csv");
-      setUploadError("Поддерживаются только файлы .csv.");
+      setUploadError(t("Поддерживаются только файлы .csv.", "Only .csv files are supported."));
       return;
     }
     if (file.size === 0) {
       setUploadFailure("invalid_csv");
-      setUploadError("Файл пуст. Выберите CSV с заголовком и данными.");
+      setUploadError(t("Файл пуст. Выберите CSV с заголовком и данными.", "The file is empty. Choose a CSV with a header and data."));
       return;
     }
     setUploading(true);
@@ -666,7 +666,7 @@ export default function App({ account, onAccountChange, onLogout }: {
         finish({
           state: "error",
           mascotState: "cancelled",
-          error: "Ожидание остановлено. Сервер может продолжать обработку.",
+          error: t("Ожидание остановлено. Сервер может продолжать обработку.", "Waiting stopped. The server may continue processing."),
         });
       else if (answer.status === "error")
         finish({ state: "error", mascotState: "error", answer, error: answer.answer });
@@ -682,7 +682,7 @@ export default function App({ account, onAccountChange, onLogout }: {
           ? "cancelled"
           : errorEviaState(error),
         error: controller.signal.aborted
-          ? "Ожидание остановлено. Сервер может продолжать обработку."
+          ? t("Ожидание остановлено. Сервер может продолжать обработку.", "Waiting stopped. The server may continue processing.")
           : errorMessage(error),
       });
     } finally {
@@ -718,7 +718,7 @@ export default function App({ account, onAccountChange, onLogout }: {
         <button className="mobile-settings-entry" aria-label={t("Открыть настройки", "Open settings")} onClick={openSettings}><Icon name="settings" size={18} /></button>
       </header>
       <div className="workspace">
-        <aside className="sidebar" aria-label="Навигация рабочего пространства">
+        <aside className="sidebar" aria-label={t("Навигация рабочего пространства", "Workspace navigation")}>
           <button className="primary new-analysis" onClick={newAnalysis}>
             <Icon name="plus" />
             {t("Добавить источник", "Add source")}
@@ -776,7 +776,7 @@ export default function App({ account, onAccountChange, onLogout }: {
                 if (window.matchMedia?.("(max-width: 640px)").matches) openMobileUpload();
                 else chooseFile();
               }}
-              title="CSV · UTF-8, UTF-16 или Windows-1251"
+              title={t("CSV · UTF-8, UTF-16 или Windows-1251", "CSV · UTF-8, UTF-16 or Windows-1251")}
               disabled={uploading}
             >
               <Icon name="plus" size={16} />
@@ -786,7 +786,7 @@ export default function App({ account, onAccountChange, onLogout }: {
               className={`postgres-nav ${!source && sourceSetup === "postgres" ? "selected" : ""}`}
               onClick={openPostgresSetup}
               aria-pressed={!source && sourceSetup === "postgres"}
-              title={postgresStatus?.connected ? "PostgreSQL доступен" : undefined}
+              title={postgresStatus?.connected ? t("PostgreSQL доступен", "PostgreSQL available") : undefined}
             >
               {t("Подключить PostgreSQL", "Connect PostgreSQL")}
             </button>
@@ -814,7 +814,7 @@ export default function App({ account, onAccountChange, onLogout }: {
                 onRetry={
                   failedFile ? () => void upload(failedFile) : chooseFile
                 }
-                label={failedFile ? "Повторить загрузку CSV" : "Выбрать файл"}
+                label={failedFile ? t("Повторить загрузку CSV", "Retry CSV upload") : t("Выбрать файл", "Choose file")}
               />
             )}
           </section>
@@ -1125,7 +1125,7 @@ export default function App({ account, onAccountChange, onLogout }: {
             )}
           </div>
           <div className="chat-bottom">
-            {attachedDashboard && source && <div className="attached-report" aria-label="Прикреплённый отчёт"><span>Отчёт: <strong>{attachedDashboard.title}</strong></span><button type="button" aria-label="Открепить отчёт" onClick={() => setAttachedDashboard(null)}><Icon name="close" size={14} /></button></div>}
+            {attachedDashboard && source && <div className="attached-report" aria-label={t("Прикреплённый отчёт", "Attached report")}><span>{t("Отчёт", "Report")}: <strong>{attachedDashboard.title}</strong></span><button type="button" aria-label={t("Открепить отчёт", "Detach report")} onClick={() => setAttachedDashboard(null)}><Icon name="close" size={14} /></button></div>}
             {activeEntry && <div className="helper" role="status"><Evia state={mascotState} />{activeEntry.state === "pending" && <strong>{eviaStatus(mascotState, language)}</strong>}</div>}
             {archivedChat && !archivedChat.source_id && (
               <p className="history-details-notice">
@@ -1196,7 +1196,7 @@ export default function App({ account, onAccountChange, onLogout }: {
                 )}
               </div>
             </form>
-            {source && <div className="mobile-chat-source" aria-label="Прикреплённый источник"><Icon name="file" size={14} /><span>{source.name}{source.source_type === "csv" && !source.name.toLowerCase().endsWith(".csv") ? ".csv" : ""}</span><button type="button" aria-label="Убрать источник из чата" onClick={() => setSelectedId(null)}><Icon name="close" size={14} /></button></div>}
+            {source && <div className="mobile-chat-source" aria-label={t("Прикреплённый источник", "Attached source")}><Icon name="file" size={14} /><span>{source.name}{source.source_type === "csv" && !source.name.toLowerCase().endsWith(".csv") ? ".csv" : ""}</span><button type="button" aria-label={t("Убрать источник из чата", "Remove source from chat")} onClick={() => setSelectedId(null)}><Icon name="close" size={14} /></button></div>}
             <div className="composer-hint">
               <span>{t("Ctrl / ⌘ + Enter — отправить", "Ctrl / ⌘ + Enter to send")}</span>
               {draft.length > 3500 && <span>{draft.length}/4000</span>}
@@ -1205,7 +1205,7 @@ export default function App({ account, onAccountChange, onLogout }: {
         </aside>
       </div>
       {mobileOverlay === "settings" && <div className="settings-backdrop" data-testid="settings-backdrop" aria-hidden="true" onClick={() => setMobileOverlay(null)} />}
-      {mobileOverlay === "settings" && <section className="mobile-fullscreen mobile-settings" role="dialog" aria-label="Настройки" aria-modal="true" ref={settingsDialog}>
+      {mobileOverlay === "settings" && <section className="mobile-fullscreen mobile-settings" role="dialog" aria-label={t("Настройки", "Settings")} aria-modal="true" ref={settingsDialog}>
         <header><h2>{t("Настройки", "Settings")}</h2><button aria-label={t("Закрыть настройки", "Close settings")} onClick={() => setMobileOverlay(null)}><Icon name="close" size={19} /></button></header>
         <h3>{t("Тема", "Theme")}</h3>
         <div className="settings-options">
@@ -1213,7 +1213,7 @@ export default function App({ account, onAccountChange, onLogout }: {
         </div>
         <h3>{t("Язык", "Language")}</h3><LanguageSwitch />
       </section>}
-      <nav className="mobile-nav" aria-label="Мобильная навигация">
+      <nav className="mobile-nav" aria-label={t("Мобильная навигация", "Mobile navigation")}>
         <button
           aria-label={t("Источники", "Sources")}
           aria-pressed={mobilePanel === "home"}
