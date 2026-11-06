@@ -298,3 +298,46 @@ def test_touch_mobile_upload_and_navigation(server):
             assert errors == []
         finally:
             browser.close()
+
+
+def test_language_report_and_csv_deletion_survive_reload(server):
+    """A user can switch language, inspect a PDF and safely remove a source."""
+    from playwright.sync_api import sync_playwright, expect
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(channel=os.getenv('BI_BROWSER_CHANNEL') or None)
+        try:
+            page = browser.new_page(viewport={'width': 1440, 'height': 900})
+            page.set_default_timeout(10000)
+            page.goto(server)
+            page.get_by_label('Загрузить CSV').set_input_files({
+                'name': 'localization-demo.csv', 'mimeType': 'text/csv',
+                'buffer': b'month,revenue\nJanuary,100\nFebruary,200\n',
+            })
+            expect(page.get_by_role('heading', name='localization-demo')).to_be_visible()
+            source_id = page.request.get(server + '/sources').json()[0]['source_id']
+
+            page.get_by_role('button', name='Открыть настройки').click()
+            page.get_by_label('Язык').select_option('en')
+            expect(page.get_by_label('Language')).to_have_value('en')
+            page.get_by_role('button', name='Close settings').click()
+            page.reload()
+            expect(page.get_by_role('navigation', name='Workspace navigation')).to_be_visible()
+            page.get_by_role('button', name='localization-demo', exact=True).click()
+            page.get_by_role('button', name='Create PDF report').click()
+            report = page.get_by_role('article', name='PDF report')
+            expect(report.get_by_text('Integer', exact=True)).to_be_visible()
+            expect(report.get_by_text('Text', exact=True)).to_be_visible()
+            page.get_by_role('button', name='Close report').click()
+
+            page.once('dialog', lambda dialog: dialog.dismiss())
+            page.get_by_role('button', name='Delete CSV').click()
+            expect(page.get_by_role('heading', name='localization-demo')).to_be_visible()
+            assert page.request.get(server + '/sources/' + source_id + '/schema').status == 200
+
+            page.once('dialog', lambda dialog: dialog.accept())
+            page.get_by_role('button', name='Delete CSV').click()
+            expect(page.get_by_text('No connected sources yet')).to_be_visible()
+            assert page.request.get(server + '/sources/' + source_id + '/schema').status == 404
+        finally:
+            browser.close()
