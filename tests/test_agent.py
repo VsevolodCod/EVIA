@@ -246,3 +246,30 @@ async def test_attached_dashboard_id_reaches_general_agent_context(tmp_path):
         assert source.source_id in llm.messages[-1].content
     finally:
         catalog.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('response_language', ['ru', 'en'])
+async def test_agent_prompt_avoids_unnecessary_technical_ids_but_keeps_tool_context(tmp_path, response_language):
+    class RecordingLLM:
+        def __init__(self):
+            self.messages = []
+
+        async def chat(self, messages, tools=None):
+            self.messages = list(messages)
+            return LLMResponse(content='Готово.', finish_reason='stop')
+
+    catalog = SchemaCatalog(tmp_path / 'catalog.sqlite3')
+    try:
+        llm = RecordingLLM()
+        agent = AgentRuntime(llm, build_tool_registry(catalog, SourceService(tmp_path / 'data', catalog)))
+        await agent.ask('Покажи результат', ['source-example'], dashboard_id='dashboard-example',
+                        response_language=response_language)
+        instruction = llm.messages[0].content
+        assert 'служебные идентификаторы' in instruction
+        assert 'пользователь явно' in instruction
+        assert 'являются значениями данных' in instruction
+        assert 'source-example' in llm.messages[-1].content
+        assert 'dashboard-example' in llm.messages[-1].content
+    finally:
+        catalog.close()
