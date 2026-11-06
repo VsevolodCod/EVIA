@@ -125,3 +125,37 @@ it("prints all rows of a selected generated table and opens chart formulas", () 
   expect(within(report).getByText("row-30")).toBeInTheDocument();
   expect(within(report).getByText("SUM(revenue)")).toBeInTheDocument();
 });
+
+it("localizes report field types and quality details when English is selected", () => {
+  localStorage.setItem("evia.language", "en");
+  try {
+    render(<ReportBuilder source={{ ...source, import_report: undefined }} schema={schema}
+      rows={[{ month: "January", revenue: 120 }, { month: "February", revenue: null }]}
+      profile={profile} entries={[]} onClose={() => undefined} />);
+    const report = screen.getByRole("article", { name: "PDF report" });
+    expect(within(report).getByText("Text")).toBeInTheDocument();
+    expect(within(report).getByText("Number")).toBeInTheDocument();
+    expect(report).toHaveTextContent("revenue: 1 missing value");
+    expect(report).toHaveTextContent("Distribution: month");
+    expect(report).not.toHaveTextContent("Текст");
+  } finally {
+    localStorage.removeItem("evia.language");
+  }
+});
+
+it("labels sample coverage and clean data in English without changing source values", () => {
+  const sampled: Profile = { coverage: "sample", sample_size: 2, sample_limit: 500, note: "", columns: {
+    month: { sample_non_null_count: 2, sample_null_count: 0, distinct_sample_values: 2, top_values: [] },
+  } };
+  localStorage.setItem("evia.language", "en");
+  try {
+    render(<ReportBuilder source={{ ...source, import_report: undefined }} schema={schema}
+      rows={[]} profile={sampled} entries={[]} onClose={() => undefined} />);
+    const report = screen.getByRole("article", { name: "PDF report" });
+    expect(report).toHaveTextContent("Based on a sample of 2 rows.");
+    expect(report).toHaveTextContent("No missing or empty values found in the sample.");
+    expect(report).toHaveTextContent("Продажи");
+  } finally {
+    localStorage.removeItem("evia.language");
+  }
+});

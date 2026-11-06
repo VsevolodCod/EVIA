@@ -310,7 +310,7 @@ export function SourceInspector({
                             <div>
                               <strong>{field.name}</strong>
                               <small>
-                                {typeLabel(field.inferred_type)}
+                                {t(typeLabel(field.inferred_type))}
                                 {field.is_identifier_candidate
                                   ? ` · ${t("Возможный идентификатор")}`
                                   : ""}

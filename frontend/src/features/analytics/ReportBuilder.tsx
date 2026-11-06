@@ -55,11 +55,12 @@ function generatedTable(data: unknown): { columns: string[]; rows: unknown[][]; 
 }
 
 function ReportTable({ columns, rows, caption }: { columns: string[]; rows: unknown[][]; caption: string }) {
+  const { locale } = useLanguage();
   const groups = Array.from({ length: Math.ceil(columns.length / 8) }, (_, index) =>
     columns.slice(index * 8, (index + 1) * 8));
   return <div className="report-table-wrap">
     {groups.map((group, groupIndex) => <table key={groupIndex}>
-      <caption>{caption}{groups.length > 1 ? ` · поля ${groupIndex * 8 + 1}–${groupIndex * 8 + group.length} из ${columns.length}` : ""}</caption>
+      <caption>{caption}{groups.length > 1 ? locale === "en" ? ` · fields ${groupIndex * 8 + 1}–${groupIndex * 8 + group.length} of ${columns.length}` : ` · поля ${groupIndex * 8 + 1}–${groupIndex * 8 + group.length} из ${columns.length}` : ""}</caption>
       <thead><tr>{group.map((name, index) => <th key={`${name}-${index}`}>{name}</th>)}</tr></thead>
       <tbody>{rows.map((row, index) => <tr key={index}>{group.map((_, column) =>
         <td key={column}>{readable(row[groupIndex * 8 + column])}</td>)}</tr>)}</tbody>
@@ -122,15 +123,15 @@ export function ReportBuilder({ source, schema, rows, profile, entries, onClose 
     const missing = exact ? column.null_count : column.sample_null_count;
     const empty = exact ? column.empty_count : 0;
     return [
-      ...(missing ? [`${name}: ${counted(["пропуск", "пропуска", "пропусков"], missing)}`] : []),
-      ...(empty ? [`${name}: ${counted(["пустое значение", "пустых значения", "пустых значений"], empty)}`] : []),
+      ...(missing ? [`${name}: ${locale === "en" ? `${numberText(missing)} missing ${missing === 1 ? "value" : "values"}` : counted(["пропуск", "пропуска", "пропусков"], missing)}`] : []),
+      ...(empty ? [`${name}: ${locale === "en" ? `${numberText(empty)} empty ${empty === 1 ? "value" : "values"}` : counted(["пустое значение", "пустых значения", "пустых значений"], empty)}`] : []),
     ];
   }) : [];
   const reportDate = new Date().toLocaleDateString(locale === "en" ? "en-US" : "ru-RU");
 
   function printReport() {
     const previousTitle = document.title;
-    document.title = `EVIA — отчёт — ${source.name}`;
+    document.title = `EVIA — ${locale === "en" ? "report" : "отчёт"} — ${source.name}`;
     window.addEventListener("afterprint", () => { document.title = previousTitle; }, { once: true });
     window.print();
   }
@@ -167,7 +168,7 @@ export function ReportBuilder({ source, schema, rows, profile, entries, onClose 
       </section>
       <section className="report-section"><h2>{t("Состав данных")}</h2>
         {fields.length ? <table><thead><tr><th>{t("Поле")}</th><th>{t("Тип")}</th><th>{t("Пропуски")}</th></tr></thead><tbody>
-          {fields.map((field) => <tr key={field.name}><td>{field.name}</td><td>{typeLabel(field.inferred_type)}</td>
+          {fields.map((field) => <tr key={field.name}><td>{field.name}</td><td>{t(typeLabel(field.inferred_type))}</td>
             <td>{profile?.columns[field.name] ? numberText(profile.coverage === "full" && hasExactStats(profile.columns[field.name])
               ? profile.columns[field.name].null_count : profile.columns[field.name].sample_null_count) : "—"}</td></tr>)}
         </tbody></table> : <p>{t("Схема источника пуста.")}</p>}
@@ -178,29 +179,29 @@ export function ReportBuilder({ source, schema, rows, profile, entries, onClose 
           caption={`${t("Первые")} ${Math.min(rows.length, 5)} ${t("из")} ${rowCount === null ? t("доступных") : numberText(rowCount)} ${t("строк")}`} /> : <p>{t("Строк для просмотра нет.")}</p>}
       </section>
       <section className="report-section"><h2>{t("Качество данных")}</h2>
-        {profile ? <>{profile.coverage === "sample" && <p className="report-scope-note">По выборке из {numberText(profile.sample_size)} строк.</p>}
+        {profile ? <>{profile.coverage === "sample" && <p className="report-scope-note">{locale === "en" ? `Based on a sample of ${numberText(profile.sample_size)} rows.` : `По выборке из ${numberText(profile.sample_size)} строк.`}</p>}
           {problems.length ? <ul className="report-quality-issues">{problems.map((problem) => <li key={problem}>{problem}</li>)}</ul>
-            : <p>Пропусков и пустых значений не найдено{profile.coverage === "sample" ? " в выборке" : ""}.</p>}</>
+            : <p>{locale === "en" ? `No missing or empty values found${profile.coverage === "sample" ? " in the sample" : ""}.` : `Пропусков и пустых значений не найдено${profile.coverage === "sample" ? " в выборке" : ""}.`}</p>}</>
           : <p>{t("Данные о пропусках пока недоступны.")}</p>}
-        {source.import_report && (source.import_report.rejected_rows > 0 || source.import_report.warnings.length > 0) && <div className="report-import"><h3>Импорт CSV</h3>
-          {source.import_report.rejected_rows > 0 && <p>Отклонено строк при импорте: {numberText(source.import_report.rejected_rows)}.</p>}
+        {source.import_report && (source.import_report.rejected_rows > 0 || source.import_report.warnings.length > 0) && <div className="report-import"><h3>{locale === "en" ? "CSV import" : "Импорт CSV"}</h3>
+          {source.import_report.rejected_rows > 0 && <p>{locale === "en" ? `Rows rejected during import: ${numberText(source.import_report.rejected_rows)}.` : `Отклонено строк при импорте: ${numberText(source.import_report.rejected_rows)}.`}</p>}
           {source.import_report.warnings.length > 0 && <ul>{source.import_report.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>}
         </div>}
       </section>
-      {pie && <section className="report-section"><h2>Распределение: {pie.field}</h2>
-        <PieChart slices={pie.slices} label={`Круговая диаграмма по полю ${pie.field}`} />
-        <p className="report-note">По первым {numberText(rows.length)} строкам, без пустых значений.</p></section>}
+      {pie && <section className="report-section"><h2>{locale === "en" ? "Distribution" : "Распределение"}: {pie.field}</h2>
+        <PieChart slices={pie.slices} label={locale === "en" ? `Pie chart for ${pie.field}` : `Круговая диаграмма по полю ${pie.field}`} />
+        <p className="report-note">{locale === "en" ? `Based on the first ${numberText(rows.length)} rows, excluding empty values.` : `По первым ${numberText(rows.length)} строкам, без пустых значений.`}</p></section>}
       {selected.length > 0 && <section className="report-section report-ai"><h2>{t("Расчёты и выводы EVIA")}</h2>
         {selected.map((entry, index) => <div className="report-calculation" key={entry.id}>
           <h3>{index + 1}. {entry.question}</h3>
           <SafeMarkdown>{entry.answer?.answer ?? ""}</SafeMarkdown>
-          {entry.answer?.analysis?.sql && <div className="report-sql"><strong>SQL расчёта</strong><pre>{entry.answer.analysis.sql}</pre></div>}
+          {entry.answer?.analysis?.sql && <div className="report-sql"><strong>{locale === "en" ? "Calculation SQL" : "SQL расчёта"}</strong><pre>{entry.answer.analysis.sql}</pre></div>}
           {entry.answer?.tool_results.map((result, resultIndex) => {
             const table = tableFrom(result);
             const chart = generatedDashboardFrom(result) ?? generatedChartFrom(result);
             return <div key={resultIndex}>
-              {table && <><ReportTable columns={table.columns} rows={table.rows} caption={`Результат расчёта ${resultIndex + 1}`} />
-                {table.truncated && <p className="report-note">Сервер вернул усечённый результат; полный объём не входит в отчёт.</p>}</>}
+              {table && <><ReportTable columns={table.columns} rows={table.rows} caption={`${locale === "en" ? "Calculation result" : "Результат расчёта"} ${resultIndex + 1}`} />
+                {table.truncated && <p className="report-note">{locale === "en" ? "The server returned a truncated result; the report does not include the full dataset." : "Сервер вернул усечённый результат; полный объём не входит в отчёт."}</p>}</>}
               {chart && <>{chart.cards.some((card) => card.type !== "table") &&
                 <GeneratedDashboard dashboard={{ ...chart, cards: chart.cards.filter((card) => card.type !== "table") }}
                   scope={`report-${entry.id}-${resultIndex}`} expandPassports />}
@@ -208,7 +209,7 @@ export function ReportBuilder({ source, schema, rows, profile, entries, onClose 
                   const savedTable = generatedTable(card.data);
                   return savedTable && <div key={card.id}><ReportTable columns={savedTable.columns} rows={savedTable.rows}
                     caption={card.title} />{savedTable.truncated &&
-                    <p className="report-note">Таблица ограничена сервером; в отчёте все возвращённые строки.</p>}</div>;
+                    <p className="report-note">{locale === "en" ? "The server limited this table; all returned rows are included in the report." : "Таблица ограничена сервером; в отчёте все возвращённые строки."}</p>}</div>;
                 })}</>}
             </div>;
           })}
