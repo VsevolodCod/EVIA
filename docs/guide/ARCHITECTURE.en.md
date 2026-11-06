@@ -68,7 +68,7 @@ See [contracts](../../contracts/README.md); a running FastAPI server exposes int
 
 `LLM_PROVIDER` selects `mock`, `ollama` or `openai`; `LLM_MODEL`, the API address and provider secret are environment settings. An OpenAI-compatible Cloud.ru setup needs the appropriate server-side `OPENAI_BASE_URL` and key. Do not hard-code a current model, DSN or secret: deployment configuration can change.
 
-CSV and history need persistent disk storage; the account PostgreSQL service also needs persistent storage and backups. On Railway, EVIA can use a volume and a PostgreSQL service. [Account setup](../ACCOUNT_SETUP.md) and [PostgreSQL source setup](../postgresql-source.md) describe their different roles (Russian).
+CSV and history need persistent disk storage; the account PostgreSQL service also needs persistent storage and backups. The public instance runs on Cloud.ru at [evia.87-242-100-141.sslip.io](https://evia.87-242-100-141.sslip.io/): Caddy terminates HTTPS and forwards requests to FastAPI/Uvicorn, which serves the built interface and API. The model uses an OpenAI-compatible API, configured through environment variables. The app, Caddy and PostgreSQL run in separate Docker Compose containers; `/opt/evia/data` is mounted as `/data` in the app, and PostgreSQL uses a separate persistent volume. Server configuration and secrets are kept outside the repository; both stores must be preserved during updates. [Account setup](../ACCOUNT_SETUP.md) and [PostgreSQL source setup](../postgresql-source.md) describe their different roles (Russian).
 
 ## Reliability boundaries
 

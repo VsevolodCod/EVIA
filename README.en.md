@@ -10,11 +10,11 @@
   <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=111" alt="React 19">
   <img src="https://img.shields.io/badge/DuckDB-analytics-FFF000?logo=duckdb&logoColor=111" alt="DuckDB">
 </p>
-<p align="center"><a href="https://evia-production.up.railway.app/"><strong>Open EVIA</strong></a> · <a href="docs/guide/EXPERT_GUIDE.en.md">Expert guide</a> · <a href="docs/guide/ARCHITECTURE.en.md">Architecture</a></p>
+<p align="center"><a href="https://evia.87-242-100-141.sslip.io/"><strong>Open EVIA</strong></a> · <a href="docs/guide/EXPERT_GUIDE.en.md">Expert guide</a> · <a href="docs/guide/ARCHITECTURE.en.md">Architecture</a></p>
 
-![EVIA workspace with a synthetic data source](docs/guide/screenshots/analytics-overview-desktop.png)
+![EVIA workspace with a synthetic data source](docs/guide/screenshots/en-overview.png)
 
-> Screenshots show the Russian-language interface in an isolated browser test with synthetic data and the `mock` provider. They do not establish real-model quality or imply that an English UI is available.
+> Screenshots show the English interface with a synthetic CSV. Model answers should be verified separately.
 
 ## Contents
 
@@ -51,31 +51,33 @@ EVIA helps people explore tabular data without writing every SQL query themselve
 
 ## Working with data
 
-1. Sign in and select **«Добавить CSV»** (Add CSV). The synthetic [`sample-data/sales.csv`](sample-data/sales.csv) is suitable for a demonstration; do not upload confidential data without authorization.
-2. Select a source in the sidebar. **«Обзор»** (Overview), **«Столбцы»** (Columns), **«Качество»** (Quality), **«Данные»** (Data) and **«Схема»** (Schema) expose different views of the dataset.
+Choose the interface language on the sign-in page or under **Settings → Language**.
+
+1. Sign in and select **Choose CSV** on the home page. The synthetic [`sample-data/sales.csv`](sample-data/sales.csv) is suitable for a demonstration; do not upload confidential data without authorization.
+2. Select a source under **Data sources** on the home page. **Overview**, **Columns**, **Quality**, **Data** and **Schema** expose different views of the dataset.
 3. Compare inferred types and missing values with the original. Preview rows are limited and do not necessarily represent the whole dataset. A profile can cover the full source or a sample.
 
 <table><tr>
-<td width="50%"><img src="docs/guide/screenshots/analytics-column-desktop.png" alt="Fields of a synthetic dataset"></td>
-<td width="50%"><img src="docs/guide/screenshots/analytics-quality-desktop.png" alt="Data quality for a synthetic dataset"></td>
+<td width="50%"><img src="docs/guide/screenshots/en-column.png" alt="Fields of a synthetic dataset"></td>
+<td width="50%"><img src="docs/guide/screenshots/en-quality.png" alt="Data quality for a synthetic dataset"></td>
 </tr><tr><td>Columns and types</td><td>Data quality</td></tr></table>
 
-![First rows of a synthetic source](docs/guide/screenshots/analytics-data-desktop.png)
+![First rows of a synthetic source](docs/guide/screenshots/en-data.png)
 
 The first CSV row must contain unique column names. Supported delimiters are comma, semicolon, tab and vertical bar. PostgreSQL requires server-side `POSTGRES_DSN` and `POSTGRES_ALLOWED_TABLES`; the UI does not provide arbitrary database connection setup in the browser. [PostgreSQL setup](docs/postgresql-source.md) (Russian).
 
 ## Chat, results and visualizations
 
-Select a source and ask a question in the right-hand panel. For example:
+Select a source, open **Chat** in the top navigation and ask a question. For example:
 
-- «Какие столбцы есть в источнике?» — Which columns are available?
-- «Покажи первые строки» — Show the first rows.
-- «Какая сумма revenue?» — What is the sum of `revenue`, if that numeric field exists?
-- «Построй график выручки по месяцам» — Chart revenue by month, if suitable fields exist.
+- Which columns are available?
+- Show the first rows.
+- What is the sum of `revenue`, if that numeric field exists?
+- Chart revenue by month, if suitable fields exist.
 
 Open the answer's result to inspect a table, chart, SQL and calculation details when available. Check the fields and data scope. A plausible model response alone does not prove that a calculation was executed. History is associated with a source and user; saved results can be reopened.
 
-![Analysis result in the workspace](docs/guide/screenshots/analytics-result-desktop.png)
+![EVIA chat for the selected source](docs/guide/screenshots/en-chat.png)
 
 The model may propose query parameters or call tools. The server validates inputs and restrictions; DuckDB executes CSV calculations, while PostgreSQL has a separate read-only path. Hypothesis tools support group comparison and relationship analysis with suitable inputs. Correlation does not establish causation.
 
@@ -83,9 +85,9 @@ The model may propose query parameters or call tools. The server validates input
 
 EVIA can display generated charts and save dashboards. A saved result opens without rerunning the calculation; refresh explicitly requests new results. A CSV result can be marked stale after a source change. Changes to PostgreSQL rows without a schema change are not always detected automatically. [Saved dashboard behavior](docs/saved-dashboard-snapshots.md) (Russian).
 
-From the source overview choose **«Собрать PDF-отчёт»** (Build PDF report). Select successful EVIA answers if available, then choose **«Сохранить в PDF»** to open the browser's print dialog. The report includes source information, fields, first rows, available quality information and selected answers with returned details. A source-overview pie chart, when available, is calculated from preview rows; truncated results are identified.
+From the source overview choose **Create PDF report**. Select successful EVIA answers if available, then choose **Save as PDF** to open the browser's print dialog. The report includes source information, fields, first rows, available quality information and selected answers with returned details. A source-overview pie chart, when available, is calculated from preview rows; truncated results are identified.
 
-![Preparing a PDF report](docs/guide/screenshots/analytics-report-builder.png)
+![Preparing a PDF report](docs/guide/screenshots/en-report.png)
 
 ## Architecture
 
@@ -144,7 +146,7 @@ Open `http://127.0.0.1:8000`; API documentation is at `/docs`. This is a local d
 | Accounts | `AUTH_ENABLED`, `AUTH_DATABASE_URL`, `AUTH_SECRET`, optional bootstrap settings |
 | Recovery | `BREVO_API_KEY` and `BREVO_SENDER_EMAIL`, or `RESEND_API_KEY` and `MAIL_FROM` |
 
-See [`.env.example`](.env.example). Store server keys and passwords only in environment secrets. On Railway configure persistent storage and the account database; see [account setup](docs/ACCOUNT_SETUP.md) and the [Dockerfile](Dockerfile).
+See [`.env.example`](.env.example). Store server keys and passwords only in environment secrets. On Cloud.ru configure persistent storage and the account database; see [account setup](docs/ACCOUNT_SETUP.md) and the [Dockerfile](Dockerfile).
 
 For example, when a volume is mounted at `/data`, configure persistent server paths:
 
@@ -167,8 +169,8 @@ python -m pytest -q
 Browser tests require `requirements-browser.txt` and Chromium: `BI_BROWSER_TESTS=1 python -m pytest tests/browser -q`. They start an isolated server and use synthetic data. Check [GitHub Actions](https://github.com/VsevolodCod/EVIA/actions) for the current status: the existence of tests does not mean that every check passes on the current commit.
 
 <table><tr>
-<td width="50%"><img src="docs/guide/screenshots/analytics-overview-mobile.png" alt="EVIA overview on a phone"></td>
-<td width="50%"><img src="docs/guide/screenshots/analytics-mobile-scrolled.png" alt="EVIA charts after scrolling on a phone"></td>
+<td width="50%"><img src="docs/guide/screenshots/en-mobile.png" alt="EVIA overview on a phone"></td>
+<td width="50%"><img src="docs/guide/screenshots/en-mobile-charts.png" alt="EVIA charts after scrolling on a phone"></td>
 </tr><tr><td>Phone overview</td><td>Charts after scrolling</td></tr></table>
 
 ## Repository structure

@@ -128,7 +128,7 @@ function ColumnCard({
           <span className="column-card-title">
             <strong>{field.name}</strong>
             <small>
-              {typeLabel(field.type)}
+              {t(typeLabel(field.type))}
             {field.identifier ? ` · ${t("Гипотеза: кандидат в идентификаторы")}` : ""}
             </small>
           </span>

@@ -90,7 +90,7 @@ export function ProfileOverview({
             {model.types.map((type, i) => (
               <span
                 className={`type-color-${i % 5}`}
-                key={type.label}
+                key={t(type.label)}
                 style={{ flex: type.count }}
               />
             ))}
@@ -100,7 +100,7 @@ export function ProfileOverview({
               <div key={type.label}>
                 <dt>
                   <i className={`legend-dot type-color-${i % 5}`} />
-                  {type.label}
+                  {t(type.label)}
                 </dt>
                 <dd>
                   {numberText(type.count)} <span>{t("столб.")}</span>
@@ -167,7 +167,7 @@ export function ProfileOverview({
             <button key={field.name} onClick={() => onColumn(field.name)}>
               <span>
                 <strong>{field.name}</strong>
-                <small>{typeLabel(field.type)}</small>
+                <small>{t(typeLabel(field.type))}</small>
               </span>
               <span className="column-unique">
                 {field.stats
