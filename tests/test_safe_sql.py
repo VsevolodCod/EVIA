@@ -293,3 +293,19 @@ def test_truncation_sentinel_does_not_consume_the_returned_result_budget(monkeyp
 
     assert result.rows == [["ok"]]
     assert result.truncated is True
+
+
+@pytest.mark.parametrize('sql', [
+    "SELECT * FROM read_json_auto('/etc/passwd')",
+    "SELECT * FROM glob('/etc/*')",
+    "SELECT * FROM sqlite_scan('/tmp/private.db', 'secrets')",
+    "PRAGMA database_list",
+])
+def test_readonly_query_blocks_external_file_access_and_database_introspection(service_and_source, sql):
+    from app.safe_sql import SafeQueryError
+
+    service, source = service_and_source
+    with pytest.raises(SafeQueryError) as caught:
+        service.query(source.source_id, sql)
+    assert caught.value.code == 'QUERY_REJECTED'
+    assert sql not in str(caught.value)

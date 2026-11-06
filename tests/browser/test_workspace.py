@@ -343,3 +343,36 @@ def test_language_report_and_csv_deletion_survive_reload(server):
             assert page.request.get(server + '/sources/' + source_id + '/schema').status == 404
         finally:
             browser.close()
+
+
+def test_invalid_csv_recovery_and_preview_download(server, tmp_path):
+    """An invalid upload does not prevent a later valid export."""
+    from playwright.sync_api import sync_playwright, expect
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(channel=os.getenv('BI_BROWSER_CHANNEL') or None)
+        try:
+            page = browser.new_page(viewport={'width': 1440, 'height': 900})
+            page.goto(server)
+            upload = page.get_by_label('Загрузить CSV')
+            upload.set_input_files({'name': 'empty.csv', 'mimeType': 'text/csv', 'buffer': b''})
+            expect(page.get_by_text('Файл пуст. Выберите CSV с заголовком и данными.')).to_be_visible()
+            assert page.request.get(server + '/sources').json() == []
+
+            upload.set_input_files({
+                'name': 'recovery.csv', 'mimeType': 'text/csv',
+                'buffer': 'city,value\nТомск,42\nОмск,55\n'.encode('utf-8'),
+            })
+            expect(page.get_by_role('heading', name='recovery')).to_be_visible()
+            with page.expect_download() as pending_download:
+                page.get_by_role('button', name='Скачать предпросмотр').click()
+            download = pending_download.value
+            assert download.suggested_filename.endswith('.csv')
+            destination = tmp_path / 'preview.csv'
+            download.save_as(destination)
+            content = destination.read_text(encoding='utf-8-sig')
+            assert 'city' in content and 'value' in content
+            assert 'Томск' in content and '42' in content
+            assert 'Омск' in content and '55' in content
+        finally:
+            browser.close()
