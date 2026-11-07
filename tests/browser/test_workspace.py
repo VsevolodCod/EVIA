@@ -376,3 +376,56 @@ def test_invalid_csv_recovery_and_preview_download(server, tmp_path):
             assert 'Омск' in content and '55' in content
         finally:
             browser.close()
+
+
+def test_saved_dashboard_cards_do_not_overlap_and_print_across_pages(server):
+    """Multiple KPI and line cards remain distinct on screen and in a real PDF."""
+    import io
+    from pypdf import PdfReader
+    from playwright.sync_api import sync_playwright, expect
+
+    refs = [{'chart_id': f'c{i}', 'position': i} for i in range(10)]
+    dashboard = {'id': 'print-demo', 'title': 'Dashboard print test', 'version': 1, 'charts': refs}
+    charts = [{'chart_id': f'c{i}', 'position': i, 'success': True, 'chart_type': 'kpi',
+               'definition': {'type': 'kpi', 'title': f'Metric {i:02d}'},
+               'result': {'value': '4791120488.13'}} for i in range(8)]
+    charts += [{'chart_id': f'c{i}', 'position': i, 'success': True, 'chart_type': 'line',
+                'definition': {'type': 'line', 'title': f'Trend {i:02d}'},
+                'result': {'x': {'field': 'month'}, 'y': {'field': 'amount'},
+                           'points': [{'x': 'January', 'y': 1}, {'x': 'February', 'y': 3}]}}
+               for i in (8, 9)]
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(channel=os.getenv('BI_BROWSER_CHANNEL') or None)
+        try:
+            page = browser.new_page(viewport={'width': 1440, 'height': 900})
+            def dashboard_route(route):
+                path = route.request.url.split('?')[0]
+                if path.endswith('/dashboards/ids'):
+                    route.fulfill(json={'dashboard_ids': ['print-demo']})
+                elif path.endswith('/dashboards/print-demo/build'):
+                    route.fulfill(json={'success': True, 'dashboard': dashboard, 'charts': charts})
+                elif path.endswith('/dashboards/print-demo'):
+                    route.fulfill(json={'success': True, 'dashboard': dashboard, 'origin_chat_id': 'chat-demo'})
+                else:
+                    route.continue_()
+            page.route('**/dashboards/**', dashboard_route)
+            page.goto(server + '/?page=reports&dashboard=print-demo')
+            cards = page.locator('.generated-grid > .generated-card')
+            expect(cards).to_have_count(10)
+            boxes = [cards.nth(index).bounding_box() for index in range(10)]
+            assert all(box is not None for box in boxes)
+            for i, a in enumerate(boxes):
+                for b in boxes[i + 1:]:
+                    overlap_x = min(a['x'] + a['width'], b['x'] + b['width']) - max(a['x'], b['x'])
+                    overlap_y = min(a['y'] + a['height'], b['y'] + b['height']) - max(a['y'], b['y'])
+                    assert overlap_x <= 1 or overlap_y <= 1, f'Cards overlap: {a} / {b}'
+            page.emulate_media(media='print')
+            expect(page.locator('.saved-dashboard-order')).to_be_hidden()
+            expect(page.locator('.dashboard-gallery-open-actions')).to_be_hidden()
+            pdf = PdfReader(io.BytesIO(page.pdf(print_background=True, prefer_css_page_size=True)))
+            assert len(pdf.pages) > 1
+            text = '\n'.join(item.extract_text() or '' for item in pdf.pages)
+            for title in [f'Metric {i:02d}' for i in range(8)] + ['Trend 08', 'Trend 09']:
+                assert title in text, f'Print PDF is missing {title}'
+        finally:
+            browser.close()
