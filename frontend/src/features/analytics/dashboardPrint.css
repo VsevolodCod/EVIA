@@ -50,12 +50,17 @@
   .dashboard-gallery-heading,
   .dashboard-gallery-list,
   .dashboard-gallery-attach,
+  .dashboard-gallery-open-actions,
+  .saved-dashboard-order,
+  .generated-view-switch,
   .dashboard-gallery-status,
   .dashboard-gallery-empty,
   .saved-dashboard-toolbar {
     display: none !important;
   }
 
+  #root,
+  .app,
   .workspace,
   .analysis,
   .analytics-workspace,
@@ -67,6 +72,8 @@
     width: auto !important;
     min-width: 0 !important;
     min-height: 0 !important;
+    height: auto !important;
+    max-height: none !important;
     margin: 0 !important;
     padding: 0 !important;
     overflow: visible !important;
@@ -78,6 +85,31 @@
     gap: 8px !important;
     padding: 0 !important;
     color: #292e36 !important;
+  }
+
+  /* A flow layout lets Chromium paginate the complete saved dashboard. */
+  .generated-dashboard,
+  .generated-dashboard .generated-grid {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  .generated-dashboard .generated-card {
+    width: auto !important;
+    margin: 0 0 10px !important;
+    min-height: 0 !important;
+  }
+
+  .generated-dashboard .generated-chart-scroll,
+  .generated-dashboard .data-table,
+  .generated-dashboard .table-scroll {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  body:has(.generated-dashboard):not(:has(.report-builder)) .source-workspace-heading {
+    display: none !important;
   }
 
   .dashboard-top {
