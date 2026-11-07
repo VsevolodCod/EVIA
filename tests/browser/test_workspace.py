@@ -419,10 +419,17 @@ def test_saved_dashboard_cards_do_not_overlap_and_print_across_pages(server):
                     overlap_x = min(a['x'] + a['width'], b['x'] + b['width']) - max(a['x'], b['x'])
                     overlap_y = min(a['y'] + a['height'], b['y'] + b['height']) - max(a['y'], b['y'])
                     assert overlap_x <= 1 or overlap_y <= 1, f'Cards overlap: {a} / {b}'
+            expect(page.locator('.generated-line-card svg')).to_have_count(2)
+            page.evaluate('window.__printRequested = false; window.print = () => { window.__printRequested = true; }')
+            page.get_by_role('button', name='Печать / PDF').click()
+            assert page.evaluate('window.__printRequested')
+            page.locator('.app').evaluate("element => element.setAttribute('data-theme', 'dark')")
             page.emulate_media(media='print')
             expect(page.locator('.saved-dashboard-order')).to_be_hidden()
             expect(page.locator('.dashboard-gallery-open-actions')).to_be_hidden()
-            pdf = PdfReader(io.BytesIO(page.pdf(print_background=True, prefer_css_page_size=True)))
+            expect(cards.first).to_have_css('background-color', 'rgb(255, 255, 255)')
+            expect(page.locator('.generated-value').first).to_have_css('color', 'rgb(41, 46, 54)')
+            pdf = PdfReader(io.BytesIO(page.pdf(print_background=False, prefer_css_page_size=True)))
             assert len(pdf.pages) > 1
             text = '\n'.join(item.extract_text() or '' for item in pdf.pages)
             for title in [f'Metric {i:02d}' for i in range(8)] + ['Trend 08', 'Trend 09']:

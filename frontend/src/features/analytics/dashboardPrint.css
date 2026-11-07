@@ -101,6 +101,16 @@
     min-height: 0 !important;
   }
 
+  /* Printed dashboards must remain legible when the app uses dark mode. */
+  .app[data-theme="dark"] .generated-dashboard .generated-card {
+    background: #fff !important;
+    color: #292e36 !important;
+  }
+
+  .app[data-theme="dark"] .generated-dashboard :is(.dashboard-top h2, .dashboard-top p, .chart-heading h3, .chart-heading small, .generated-value, .generated-passport, .generated-axis-label, .generated-legend span) {
+    color: #292e36 !important;
+  }
+
   .generated-dashboard .generated-chart-scroll,
   .generated-dashboard .data-table,
   .generated-dashboard .table-scroll {
