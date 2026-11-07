@@ -436,3 +436,43 @@ def test_saved_dashboard_cards_do_not_overlap_and_print_across_pages(server):
                 assert title in text, f'Print PDF is missing {title}'
         finally:
             browser.close()
+
+
+def test_saved_dashboard_mixed_cards_fit_available_space(server):
+    from playwright.sync_api import sync_playwright, expect
+
+    dashboard = {'id': 'layout-demo', 'title': 'Layout test', 'version': 1,
+                 'charts': [{'chart_id': f'c{i}', 'position': i} for i in range(2)]}
+    charts = [
+        {'chart_id': 'c0', 'position': 0, 'success': True, 'chart_type': 'kpi',
+         'definition': {'type': 'kpi', 'title': 'Orders'}, 'result': {'value': 1163442}},
+        {'chart_id': 'c1', 'position': 1, 'success': True, 'chart_type': 'bar',
+         'definition': {'type': 'bar', 'title': 'Platforms'},
+         'result': {'x': {'field': 'platform'}, 'y': {'field': 'cost'}, 'points': [
+             {'x': name, 'y': value} for name, value in [('VK', 10), ('Partners', 5), ('Ads', 7), ('Search', 8)]]}},
+    ]
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(channel=os.getenv('BI_BROWSER_CHANNEL') or None)
+        try:
+            page = browser.new_page(viewport={'width': 1440, 'height': 900})
+            def dashboard_route(route):
+                path = route.request.url.split('?')[0]
+                if path.endswith('/dashboards/ids'):
+                    route.fulfill(json={'dashboard_ids': ['layout-demo']})
+                elif path.endswith('/dashboards/layout-demo/build'):
+                    route.fulfill(json={'success': True, 'dashboard': dashboard, 'charts': charts})
+                elif path.endswith('/dashboards/layout-demo'):
+                    route.fulfill(json={'success': True, 'dashboard': dashboard})
+                else:
+                    route.continue_()
+            page.route('**/dashboards/**', dashboard_route)
+            page.goto(server + '/?page=reports&dashboard=layout-demo')
+            kpi = page.locator('.generated-kpi-card')
+            chart = page.locator('.generated-bar-card')
+            expect(kpi).to_be_visible()
+            expect(chart).to_be_visible()
+            scroll = chart.locator('.generated-chart-scroll')
+            assert scroll.evaluate('(el) => el.scrollWidth <= el.clientWidth + 1'), 'A four-category chart should fit without horizontal scrolling'
+            assert kpi.bounding_box()['height'] < chart.bounding_box()['height'] - 30, 'KPI card should not stretch to match the chart'
+        finally:
+            browser.close()
