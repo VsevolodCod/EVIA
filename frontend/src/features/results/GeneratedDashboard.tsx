@@ -249,7 +249,7 @@ function ResultBar({ card, colors }: { card: Card; colors: string[] }) {
   return <>
     <LimitNote data={card.data} count={chart.points.length} />
     <div className="generated-chart-scroll" role="region" aria-label={`Прокрутка графика ${card.title}`} tabIndex={0}>
-      <svg className="generated-bar-chart" width={width} viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${card.title}: ${chart.yLabel} по ${chart.xLabel}`}>
+      <svg className="generated-bar-chart" style={{ minWidth: `${chart.points.length * 80}px` }} viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${card.title}: ${chart.yLabel} по ${chart.xLabel}`}>
         <line x1={left} x2={width - right} y1={baseline} y2={baseline} stroke="#82968b" />
         {chart.points.map((point, index) => {
           const value = numeric(point.y);

@@ -8,12 +8,12 @@
 .generated-view-switch button { border: 0; border-radius: 8px; padding: 6px 12px; background: transparent; color: #3f6353; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
 .generated-view-switch button[aria-pressed="true"] { background: #087448; color: #fff; box-shadow: 0 2px 0 #075638; }
 .generated-view-switch button:focus-visible { outline: 2px solid #087448; outline-offset: 2px; }
-.generated-kpi-card { display: flex; flex-direction: column; justify-content: space-between; min-height: 170px; }
+.generated-kpi-card { display: flex; flex-direction: column; justify-content: space-between; min-height: 170px; align-self: start; }
 .generated-kpi-card .chart-heading { margin-bottom: 20px; }
 .generated-value { color: #292e36; font-size: clamp(28px, 3vw, 48px); font-weight: 700; line-height: 1.1; letter-spacing: -.05em; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .generated-line-chart { width: 100%; min-height: 220px; overflow: visible; }
 .generated-chart-scroll { overflow-x: auto; max-width: 100%; }
-.generated-bar-chart { display: block; height: 240px; }
+.generated-bar-chart { display: block; width: 100%; height: auto; }
 .generated-bar-chart text { fill: #7a838e; font: 11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
 .generated-scatter-chart { display: block; width: 100%; min-height: 220px; }
 .generated-bar-chart rect:focus, .generated-scatter-chart circle:focus { outline: 2px solid #104b35; outline-offset: 2px; }
@@ -37,4 +37,4 @@
 .generated-line-chart:has(+ .generated-axis-label) { max-height: 290px; }
 @media (max-width: 900px) { .generated-grid { grid-template-columns: 1fr; } }
 @media (max-width: 640px) { .generated-dashboard .dashboard-top { display: flex; flex-direction: column; align-items: stretch; } .generated-dashboard .dashboard-top > div:first-child { display: block; } .generated-dashboard .dashboard-actions { justify-content: flex-start; } .generated-card { min-height: 160px; } .generated-line-chart { min-height: 180px; } }
-@media print { .generated-dashboard .dashboard-top > div:first-child { display: block !important; } .generated-dashboard .generated-grid:has(> :only-child) { grid-template-columns: 1fr; } .generated-dashboard .generated-card { break-inside: avoid; min-height: 0; } .generated-dashboard .generated-line-chart, .generated-dashboard .generated-line-chart * { print-color-adjust: exact !important; -webkit-print-color-adjust: exact !important; } }
+@media print { .generated-dashboard .dashboard-top > div:first-child { display: block !important; } .generated-dashboard .generated-grid:has(> :only-child) { grid-template-columns: 1fr; } .generated-dashboard .generated-card { break-inside: avoid; min-height: 0; } .generated-dashboard .generated-bar-chart { min-width: 0 !important; } .generated-dashboard .generated-line-chart, .generated-dashboard .generated-line-chart * { print-color-adjust: exact !important; -webkit-print-color-adjust: exact !important; } }
